@@ -27,6 +27,13 @@
 </section>
 {% endif %}
 
+{% if d.video_link %}
+<section class="sources">
+  <h2>What changed</h2>
+  <ul>{% for event in d.events %}<li>{{ event }}</li>{% endfor %}</ul>
+  <p><a href="{{ d.video_link }}" target="_blank" rel="noopener">Open the video</a></p>
+</section>
+{% else %}
 <section class="sources">
   <h2>Where to see each version</h2>
   <ul>
@@ -49,6 +56,7 @@
     <ul class="notes">{% for note in d.edit_notes %}<li>{{ note }}</li>{% endfor %}</ul>
   {% endif %}
 </section>
+{% endif %}
 
 {% if d.hunks %}
 <section class="hunks">

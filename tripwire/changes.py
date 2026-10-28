@@ -38,6 +38,9 @@ CATEGORIES = {
     "major": "Major change",
     "removal": "Large removal",
     "page_removed": "Page removed",
+    "video_retitled": "Video retitled",
+    "video_restricted": "Video restricted",
+    "video_gone": "Video unavailable",
 }
 
 

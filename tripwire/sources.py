@@ -5,6 +5,7 @@ Everything that touches the network lives here, so the rest of Tripwire can be
 tested without an internet connection.
 """
 
+import json
 import re
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
@@ -207,3 +208,141 @@ def archive_latest(url):
         return None
     closest = response.json().get("archived_snapshots", {}).get("closest")
     return closest["url"] if closest and closest.get("available") else None
+
+
+# ---------------------------------------------------------------------------
+# Videos: YouTube and TikTok
+# ---------------------------------------------------------------------------
+
+YOUTUBE_ID_RE = re.compile(
+    r"(?:youtube\.com/(?:watch\?(?:[^#]*&)?v=|shorts/|live/|embed/)|youtu\.be/)([\w-]{11})")
+
+
+def video_platform(url):
+    host = urlparse(url if "://" in url else "https://" + url).netloc.lower()
+    if YOUTUBE_ID_RE.search(url) and ("youtube.com" in host or "youtu.be" in host):
+        return "YouTube"
+    if host == "tiktok.com" or host.endswith(".tiktok.com"):
+        return "TikTok"
+    return None
+
+
+def video_status(url):
+    """What a video looks like publicly right now. Returns a dict:
+      platform, url, title, author,
+      available   True / False
+      reason      why it isn't available, in the platform's words if given
+      restricted  True if age-restricted or marked sensitive, False if not,
+                  None if the platform doesn't say
+      unlisted    True / False / None (YouTube only)
+    """
+    url = url.strip()
+    platform = video_platform(url)
+    if platform == "YouTube":
+        return _youtube_status(YOUTUBE_ID_RE.search(url).group(1))
+    if platform == "TikTok":
+        return _tiktok_status(url if "://" in url else "https://" + url)
+    raise SourceError("That isn't a YouTube or TikTok video link.")
+
+
+def _video_state(platform, url):
+    return {"platform": platform, "url": url, "title": None, "author": None,
+            "available": True, "reason": "", "restricted": None, "unlisted": None}
+
+
+def _youtube_status(video_id):
+    state = _video_state("YouTube", f"https://www.youtube.com/watch?v={video_id}")
+    response = _get("https://www.youtube.com/oembed", params={"url": state["url"], "format": "json"})
+    if response.status_code == 429 or response.status_code >= 500:
+        raise SourceError("YouTube is busy right now. Tripwire will try again on the next check.")
+    blocked = False
+    if response.status_code == 200:
+        data = response.json()
+        state["title"], state["author"] = data.get("title"), data.get("author_name")
+    elif response.status_code in (400, 404):
+        state["available"] = False
+        state["reason"] = "YouTube says this video doesn't exist any more."
+    else:
+        blocked = True  # private, or the owner turned off sharing; the page below can tell which
+
+    # The public video page says more: age restriction, private, unlisted, and why it was removed.
+    player = None
+    try:
+        page = _get(state["url"], headers={"Accept-Language": "en-US,en;q=0.9", "Cookie": "CONSENT=YES+1; SOCS=CAI"})
+        player = _embedded_json(page.text, "ytInitialPlayerResponse")
+    except SourceError:
+        pass
+    if player:
+        details = player.get("videoDetails") or {}
+        state["title"] = details.get("title") or state["title"]
+        state["author"] = details.get("author") or state["author"]
+        micro = (player.get("microformat") or {}).get("playerMicroformatRenderer") or {}
+        if "isFamilySafe" in micro:
+            state["restricted"] = not micro["isFamilySafe"]
+        if "isUnlisted" in micro:
+            state["unlisted"] = bool(micro["isUnlisted"])
+        playability = player.get("playabilityStatus") or {}
+        status, reason = playability.get("status"), _youtube_reason(playability)
+        if status == "OK":
+            state["available"], state["reason"] = True, ""
+        elif status == "CONTENT_CHECK_REQUIRED" or (status == "LOGIN_REQUIRED" and "age" in reason.lower()):
+            state["available"], state["restricted"] = True, True
+        elif status == "LOGIN_REQUIRED" and "bot" in reason.lower():
+            pass  # YouTube asked Tripwire to prove it's human; keep what oEmbed said
+        elif status:
+            state["available"], state["reason"] = False, reason or "YouTube says this video is unavailable."
+    elif blocked:
+        state["available"] = False
+        state["reason"] = "YouTube won't show this video publicly (it may have been made private)."
+    return state
+
+
+def _youtube_reason(playability):
+    if isinstance(playability.get("reason"), str):
+        return playability["reason"]
+    renderer = ((playability.get("errorScreen") or {}).get("playerErrorMessageRenderer") or {})
+    reason = renderer.get("reason") or {}
+    if "simpleText" in reason:
+        return reason["simpleText"]
+    return "".join(run.get("text", "") for run in reason.get("runs", []))
+
+
+def _embedded_json(html, name):
+    """Pull a JSON object like `var ytInitialPlayerResponse = {...};` out of a page."""
+    start = html.find(name + " = {")
+    if start == -1:
+        start = html.find(name + "={")
+    if start == -1:
+        return None
+    try:
+        return json.JSONDecoder().raw_decode(html[html.index("{", start):])[0]
+    except ValueError:
+        return None
+
+
+def _tiktok_status(url):
+    response = _get("https://www.tiktok.com/oembed", params={"url": url})
+    if response.status_code == 429 or response.status_code >= 500:
+        raise SourceError("TikTok is busy right now. Tripwire will try again on the next check.")
+    state = _video_state("TikTok", url)
+    if response.status_code == 200:
+        data = response.json()
+        state["title"], state["author"] = data.get("title"), data.get("author_name")
+    else:
+        state["available"] = False
+        state["reason"] = "TikTok says this video isn't available (it may have been removed or made private)."
+    return state
+
+
+def video_text(state):
+    """A plain-words description of a video's state, kept as the 'before' and
+    'after' text of a change."""
+    def yes_no(value):
+        return "unknown" if value is None else ("yes" if value else "no")
+    lines = [f"Title: {state['title'] or '(unknown)'}",
+             f"{'Channel' if state['platform'] == 'YouTube' else 'Account'}: {state['author'] or '(unknown)'}",
+             f"Available: {'yes' if state['available'] else 'no'}" + (f" ({state['reason']})" if state["reason"] else ""),
+             f"Age-restricted or marked sensitive: {yes_no(state['restricted'])}"]
+    if state["platform"] == "YouTube":
+        lines.append(f"Unlisted: {yes_no(state['unlisted'])}")
+    return "\n".join(lines)

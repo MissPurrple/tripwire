@@ -15,6 +15,7 @@ from . import books, changes, db, sources
 MAX_THEMES = 3
 MIN_PASSWORD = 8
 SINGLE_LINKS = "Single links"
+VIDEOS = "Videos"
 
 # Changes big enough that Tripwire offers to keep a public Internet Archive copy.
 # (Name spelling changes are only noted, never offered a copy.)
@@ -74,6 +75,33 @@ class Tripwire:
             return row["id"]
         return self.conn.insert("INSERT INTO themes (user_id, name, loose, created_at) VALUES (?, ?, 1, ?)",
                                 (user_id, SINGLE_LINKS, db.now()))
+
+    def videos_list(self, user_id):
+        """The person's list of watched videos (YouTube, TikTok). Like Single
+        links, it's made when first needed and isn't one of their themes."""
+        row = self.conn.execute("SELECT id FROM themes WHERE user_id = ? AND loose = 2", (user_id,)).fetchone()
+        if row:
+            return row["id"]
+        return self.conn.insert("INSERT INTO themes (user_id, name, loose, created_at) VALUES (?, ?, 2, ?)",
+                                (user_id, VIDEOS, db.now()))
+
+    def videos(self, user_id):
+        return self.conn.execute("""SELECT w.* FROM watches w JOIN themes t ON t.id = w.theme_id
+                                    WHERE t.user_id = ? AND w.kind = 'video' ORDER BY w.id DESC""",
+                                 (user_id,)).fetchall()
+
+    def add_video(self, user_id, url):
+        url = url.strip()
+        if not sources.video_platform(url):
+            raise ValueError("Paste a YouTube or TikTok video link.")
+        state = sources.video_status(url)
+        return self.conn.insert(
+            """INSERT INTO watches (theme_id, kind, label, lang, target, baseline_ref, baseline_text,
+                   baseline_at, last_status, created_at)
+               VALUES (?, 'video', ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (self.videos_list(user_id), state["title"] or state["url"], state["platform"], state["url"],
+             json.dumps(state), sources.video_text(state), db.now(),
+             "Watching" if state["available"] else "Unavailable", db.now()))
 
     def add_theme(self, user_id, name):
         name = name.strip()
@@ -161,6 +189,8 @@ class Tripwire:
         try:
             if watch["kind"] == "wikipedia":
                 return self._check_wikipedia(watch)
+            if watch["kind"] == "video":
+                return self._check_video(watch)
             return self._check_web(watch)
         except sources.SourceError as exc:
             self._set_status(watch["id"], f"Couldn't check: {exc}")
@@ -196,6 +226,53 @@ class Tripwire:
             return None
         return self._record_change(watch, page["text"], new_ref=None, new_at=db.now(),
                                    compare_url=None, extra={})
+
+    # How serious each kind of video change is, most serious first.
+    VIDEO_SEVERITY = ["video_gone", "video_restricted", "video_retitled", "edit"]
+
+    def _check_video(self, watch):
+        old = json.loads(watch["baseline_ref"])
+        new = sources.video_status(watch["target"])
+        events = []  # (category, what happened in words)
+        if old["available"] and not new["available"]:
+            events.append(("video_gone", f"No longer available: {new['reason']}"))
+        elif not old["available"] and new["available"]:
+            events.append(("edit", "Available again"))
+        if old["restricted"] is False and new["restricted"] is True:
+            events.append(("video_restricted", "Now age-restricted or marked sensitive"))
+        elif old["restricted"] is True and new["restricted"] is False:
+            events.append(("edit", "No longer age-restricted"))
+        if old["title"] and new["title"] and old["title"] != new["title"]:
+            events.append(("video_retitled", f"Title changed: “{old['title']}” → “{new['title']}”"))
+        if old["author"] and new["author"] and old["author"] != new["author"]:
+            events.append(("edit", f"Channel name changed: “{old['author']}” → “{new['author']}”"))
+        if old["unlisted"] is not None and new["unlisted"] is not None and old["unlisted"] != new["unlisted"]:
+            events.append(("edit", "Now unlisted (hidden from search)" if new["unlisted"] else "Now public in search"))
+
+        # Keep anything the platform didn't say this time (e.g. a busy page) from the last check.
+        for key in ("title", "author", "restricted", "unlisted"):
+            if new[key] is None:
+                new[key] = old[key]
+        status = "Watching" if new["available"] else "Unavailable"
+        entry_id = None
+        if events:
+            category = min((c for c, _ in events), key=self.VIDEO_SEVERITY.index)
+            details = {"events": [text for _, text in events], "video_link": watch["target"]}
+            entry_id = self.conn.insert(
+                """INSERT INTO entries (watch_id, detected_at, category, summary, before_text, after_text,
+                       before_at, after_at, details)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (watch["id"], db.now(), category, " · ".join(text for _, text in events),
+                 watch["baseline_text"], sources.video_text(new), watch["baseline_at"], db.now(),
+                 json.dumps(details)))
+            status = "Changed: see Changes" if new["available"] else "Unavailable"
+        self.conn.execute(
+            """UPDATE watches SET label = ?, baseline_ref = ?, baseline_text = ?, baseline_at = ?,
+                   last_checked_at = ?, last_status = ? WHERE id = ?""",
+            (new["title"] or watch["label"], json.dumps(new), sources.video_text(new),
+             db.now() if events else watch["baseline_at"], db.now(),
+             status if events else ("No changes" if new["available"] else "Unavailable"), watch["id"]))
+        return entry_id
 
     def _record_change(self, watch, new_text, new_ref, new_at, compare_url, extra):
         result = changes.compare(watch["baseline_text"], new_text)
@@ -258,7 +335,7 @@ class Tripwire:
                         {"label": f"{entry['label']}: version after the change ({(entry['after_at'] or '')[:10]})",
                          "url": d["after_link"]}]
             return [{"label": f"{entry['label']}: as it is right now", "url": entry["target"]}]
-        if watch["last_status"] == "Removed":
+        if watch["last_status"] == "Removed" or watch["kind"] == "video":
             return []
         if watch["kind"] == "wikipedia":
             wiki = sources.Wikipedia(watch["lang"] or "en")
@@ -349,7 +426,7 @@ class Tripwire:
         counts = Counter(r["category"] for r in rows)
         changed_items = len({r["watch_id"] for r in rows})
         names = [(r["label"], old, new) for r in rows for old, new in db.entry_details(r).get("name_changes", [])]
-        big = [r for r in rows if r["category"] in ("major", "removal", "page_removed")]
+        big = [r for r in rows if r["category"] in ("major", "removal", "page_removed", "video_gone", "video_restricted")]
 
         period = f"{start:%d %b} – {end:%d %b}"
         if not rows:

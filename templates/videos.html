@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Videos · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>Videos</h1>
+  <p>Paste a YouTube or TikTok link and Tripwire checks it once a day. You'll see it in
+     <a href="{{ url_for('change_list') }}">Changes</a> if the video is removed or made private, gets age-restricted
+     or marked sensitive, or is retitled.</p>
+  <form method="post" action="{{ url_for('add_video') }}" class="inline">
+    <input name="target" type="url" required placeholder="https://www.youtube.com/watch?v=… or https://www.tiktok.com/@…/video/…">
+    <button>Watch video</button>
+  </form>
+  <p class="meta">TikTok doesn't say publicly whether a video was marked sensitive, so for TikTok Tripwire can notice removals,
+     private videos and caption changes, but not sensitivity labels.</p>
+</section>
+
+{% for v in videos %}
+{% set st = state(v) %}
+<article class="entry video {{ 'cat-video_gone' if not st.available else ('cat-video_restricted' if st.restricted else '') }}">
+  <div class="entry-head">
+    <span class="badge">{{ st.platform }}</span>
+    {% if not st.available %}<span class="badge cat-video_gone">Unavailable</span>
+    {% elif st.restricted %}<span class="badge cat-video_restricted">Restricted</span>
+    {% else %}<span class="badge cat-ok">Available</span>{% endif %}
+    {% if st.unlisted %}<span class="badge">Unlisted</span>{% endif %}
+    <span class="when">{% if v.last_checked_at %}checked {{ v.last_checked_at[:10] }}{% else %}added {{ v.created_at[:10] }}{% endif %}</span>
+  </div>
+  <h3><a href="{{ v.target }}" target="_blank" rel="noopener">{{ v.label }}</a></h3>
+  <p class="meta">{{ st.author or '' }}{% if not st.available and st.reason %} · {{ st.reason }}{% endif %}</p>
+  <div class="actions">
+    <form method="post" action="{{ url_for('check_watch', watch_id=v.id) }}">
+      <input type="hidden" name="next" value="{{ url_for('videos') }}"><button class="link">Check now</button></form>
+    <form method="post" action="{{ url_for('remove_watch', watch_id=v.id) }}" onsubmit="return confirm('Stop watching this video? Its changes will be deleted too.')">
+      <input type="hidden" name="next" value="{{ url_for('videos') }}"><button class="link danger">Stop watching</button></form>
+  </div>
+</article>
+{% else %}
+<p class="empty">No videos yet. Paste a link above to start.</p>
+{% endfor %}
+{% endblock %}

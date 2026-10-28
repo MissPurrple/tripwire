@@ -131,7 +131,7 @@ def index():
     themes = conn.execute("SELECT * FROM themes WHERE user_id = ? ORDER BY loose, id", (g.user["id"],)).fetchall()
     watches = {t["id"]: conn.execute("SELECT * FROM watches WHERE theme_id = ? ORDER BY label",
                                      (t["id"],)).fetchall() for t in themes}
-    single = next((t for t in themes if t["loose"]), None)
+    single = next((t for t in themes if t["loose"] == 1), None)
     themes = [t for t in themes if not t["loose"]]
     new_count = conn.execute("""SELECT COUNT(*) AS n FROM entries e JOIN watches w ON w.id = e.watch_id
                                 JOIN themes t ON t.id = w.theme_id WHERE t.user_id = ? AND e.kept = 0""",
@@ -175,6 +175,8 @@ def add_watch(theme_id):
     if not tw().own_theme(g.user["id"], theme_id):
         abort(404)
     kind = request.form.get("kind") or None
+    if sources.video_platform(request.form.get("target", "")):
+        return add_video()  # a YouTube or TikTok link belongs on the Videos page
     try:
         tw().add_watch(theme_id, request.form.get("target", ""), kind=kind,
                        days_ago=int(request.form.get("days_ago") or 0))
@@ -190,7 +192,7 @@ def remove_watch(watch_id):
     if not tw().own_watch(g.user["id"], watch_id):
         abort(404)
     tw().remove_watch(watch_id)
-    return redirect(url_for("index"))
+    return redirect(back_to("index"))
 
 
 @app.post("/watches/<int:watch_id>/check")
@@ -200,8 +202,8 @@ def check_watch(watch_id):
     if not watch:
         abort(404)
     entry = tw().check_watch(watch)
-    flash("Change found and saved to your archive." if entry else "Checked. Nothing new.")
-    return redirect(url_for("index"))
+    flash("Change found: see Changes." if entry else "Checked. Nothing new.")
+    return redirect(back_to("index"))
 
 
 @app.post("/check")
@@ -211,6 +213,30 @@ def check_all():
     new = tw().check_all(g.user["id"], deadline=started + 25)
     flash(f"Checked. {len(new)} new archive entr{'y' if len(new) == 1 else 'ies'}.")
     return redirect(url_for("change_list") if new else url_for("index"))
+
+
+# -- videos -----------------------------------------------------------------
+
+@app.get("/videos")
+@login_required
+def videos():
+    return render_template("videos.html", videos=tw().videos(g.user["id"]), state=_video_state)
+
+
+def _video_state(watch):
+    import json
+    return json.loads(watch["baseline_ref"] or "{}")
+
+
+@app.post("/videos")
+@login_required
+def add_video():
+    try:
+        tw().add_video(g.user["id"], request.form.get("target", ""))
+        flash("Now watching that video. Find it on the Videos page.")
+    except (ValueError, sources.SourceError) as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("videos"))
 
 
 # -- changes ------------------------------------------------------------------

@@ -546,6 +546,142 @@ class BookPageTests(CheckerTests):
         self.assertNotIn("Secret comparison", self.client.get("/books").data.decode())
 
 
+def fake_video_site(oembed_status=200, title="Warli painting: a living tradition", author="Goa Stories",
+                    player=None, tiktok_status=200):
+    """Stands in for YouTube and TikTok. `player` is what YouTube puts in the video page."""
+    import json as _json
+
+    def fake_get(url, **kwargs):
+        response = mock.Mock()
+        if "oembed" in url and "tiktok" in url:
+            response.status_code = tiktok_status
+            response.json.return_value = {"title": title, "author_name": author}
+        elif "oembed" in url:
+            response.status_code = oembed_status
+            response.json.return_value = {"title": title, "author_name": author}
+        else:
+            response.status_code = 200
+            response.text = ("<html><script>var ytInitialPlayerResponse = " + _json.dumps(player) + ";var x = 1;</script></html>"
+                             if player is not None else "<html>no player here</html>")
+        return response
+    return fake_get
+
+
+def youtube_player(status="OK", reason=None, family_safe=True, unlisted=False, title="Warli painting: a living tradition"):
+    playability = {"status": status}
+    if reason:
+        playability["reason"] = reason
+    return {"playabilityStatus": playability, "videoDetails": {"title": title, "author": "Goa Stories"},
+            "microformat": {"playerMicroformatRenderer": {"isFamilySafe": family_safe, "isUnlisted": unlisted}}}
+
+
+YOUTUBE_LINK = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+
+class VideoSourceTests(unittest.TestCase):
+    def status(self, **site):
+        with mock.patch.object(sources, "_get", fake_video_site(**site)):
+            return sources.video_status(YOUTUBE_LINK)
+
+    def test_recognises_video_links(self):
+        for link in [YOUTUBE_LINK, "https://youtu.be/dQw4w9WgXcQ", "youtube.com/shorts/dQw4w9WgXcQ",
+                     "https://www.youtube.com/watch?feature=share&v=dQw4w9WgXcQ"]:
+            self.assertEqual(sources.video_platform(link), "YouTube", link)
+        self.assertEqual(sources.video_platform("https://www.tiktok.com/@goa/video/7300000000000000000"), "TikTok")
+        self.assertIsNone(sources.video_platform("https://example.org/watch?v=dQw4w9WgXcQ"))
+        self.assertIsNone(sources.video_platform("https://en.wikipedia.org/wiki/Warli"))
+
+    def test_normal_video(self):
+        st = self.status(player=youtube_player())
+        self.assertEqual((st["available"], st["restricted"], st["unlisted"]), (True, False, False))
+        self.assertEqual(st["author"], "Goa Stories")
+
+    def test_age_restricted(self):
+        st = self.status(player=youtube_player("LOGIN_REQUIRED", "Sign in to confirm your age", family_safe=False))
+        self.assertEqual((st["available"], st["restricted"]), (True, True))
+
+    def test_removed_with_reason(self):
+        st = self.status(oembed_status=404, player={"playabilityStatus": {"status": "ERROR", "errorScreen": {
+            "playerErrorMessageRenderer": {"reason": {"runs": [{"text": "This video has been removed "},
+                                                               {"text": "by the uploader"}]}}}}})
+        self.assertFalse(st["available"])
+        self.assertEqual(st["reason"], "This video has been removed by the uploader")
+
+    def test_private(self):
+        st = self.status(oembed_status=401, player=youtube_player("LOGIN_REQUIRED", "This video is private"))
+        self.assertEqual((st["available"], st["reason"]), (False, "This video is private"))
+
+    def test_human_check_is_not_mistaken_for_removal(self):
+        st = self.status(player=youtube_player("LOGIN_REQUIRED", "Sign in to confirm you’re not a bot"))
+        self.assertTrue(st["available"])
+
+    def test_page_unreadable_falls_back_to_oembed(self):
+        st = self.status(player=None)
+        self.assertEqual((st["available"], st["title"], st["restricted"]), (True, "Warli painting: a living tradition", None))
+        st = self.status(oembed_status=401, player=None)
+        self.assertFalse(st["available"])
+
+    def test_busy_site_is_not_a_change(self):
+        with self.assertRaises(sources.SourceError):
+            self.status(oembed_status=429)
+
+    def test_tiktok(self):
+        link = "https://www.tiktok.com/@goa/video/7300000000000000000"
+        with mock.patch.object(sources, "_get", fake_video_site(title="Konkani lullaby")):
+            st = sources.video_status(link)
+        self.assertEqual((st["available"], st["title"], st["restricted"]), (True, "Konkani lullaby", None))
+        with mock.patch.object(sources, "_get", fake_video_site(tiktok_status=400)):
+            self.assertFalse(sources.video_status(link)["available"])
+
+
+class VideoWatchTests(CheckerTests):
+    def check(self, watch, **site):
+        with mock.patch.object(sources, "_get", fake_video_site(**site)):
+            return self.tw.check_watch(watch)
+
+    def add(self, **site):
+        with mock.patch.object(sources, "_get", fake_video_site(**site)):
+            return self.tw.add_video(self.user, YOUTUBE_LINK)
+
+    def test_retitled_then_restricted_then_removed(self):
+        watch = self.add(player=youtube_player())
+        self.assertIsNone(self.check(watch, player=youtube_player()))
+        self.check(watch, player=youtube_player(title="Warli art (edited)"), title="Warli art (edited)")
+        self.check(watch, player=youtube_player("LOGIN_REQUIRED", "Sign in to confirm your age", family_safe=False,
+                                                title="Warli art (edited)"), title="Warli art (edited)")
+        self.check(watch, oembed_status=404, player={"playabilityStatus": {"status": "ERROR", "reason": "Video unavailable"}})
+        entries = self.entries()
+        self.assertEqual([e["category"] for e in entries], ["video_retitled", "video_restricted", "video_gone"])
+        self.assertIn("“Warli painting: a living tradition” → “Warli art (edited)”", entries[0]["summary"])
+        self.assertIn("Available: no (Video unavailable)", entries[2]["after_text"])
+        watch_row = self.tw.own_watch(self.user, watch)
+        self.assertEqual(watch_row["last_status"], "Unavailable")
+        self.assertEqual(self.tw.copy_options(watch=watch_row), [])
+        self.assertEqual(self.tw.copy_options(entry=self.tw.own_entry(self.user, entries[2]["id"])), [])
+        self.assertIsNone(self.check(watch, oembed_status=404, player=None))  # still gone: not reported twice
+
+    def test_unknown_details_dont_cause_false_alarms(self):
+        watch = self.add(player=youtube_player())
+        self.assertIsNone(self.check(watch, player=None))  # page unreadable this time
+        state = self.tw.own_watch(self.user, watch)["baseline_ref"]
+        self.assertIn('"restricted": false', state)  # remembered from before
+
+    def test_videos_dont_show_on_watching_page(self):
+        self.add(player=youtube_player())
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        client = webapp.app.test_client()
+        client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+        self.assertNotIn("Warli painting", client.get("/").data.decode())
+        page = client.get("/videos").data.decode()
+        self.assertIn("Warli painting: a living tradition", page)
+        self.assertIn("Available", page)
+        with mock.patch.object(sources, "_get", fake_video_site(player=youtube_player(title="Second video"), title="Second video")):
+            response = client.post("/single-links", data={"target": "https://youtu.be/aaaaaaaaaaa"}, follow_redirects=True)
+        self.assertIn("Now watching that video", response.data.decode())  # pasted in the wrong place, still works
+        self.assertIn("Second video", client.get("/videos").data.decode())
+
+
 class SetupTests(unittest.TestCase):
     """What happens when Tripwire's online settings are missing or named differently."""
 

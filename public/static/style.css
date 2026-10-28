@@ -149,3 +149,13 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; max-hei
 .swaps th, .swaps td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .swaps th { color: var(--muted); font-weight: 500; font-size: .85rem; }
 .swaps td:last-child, .swaps th:last-child { text-align: right; width: 4em; }
+
+/* Videos */
+.entry.cat-video_retitled, .badge.cat-video_retitled { border-left-color: var(--edit); }
+.badge.cat-video_retitled { background: var(--edit); }
+.entry.cat-video_restricted { border-left-color: var(--major); }
+.badge.cat-video_restricted { background: var(--major); }
+.entry.cat-video_gone { border-left-color: var(--removal); }
+.badge.cat-video_gone { background: var(--removal); }
+.badge.cat-ok { background: var(--ins-text); }
+.entry.video h3 { overflow-wrap: anywhere; }

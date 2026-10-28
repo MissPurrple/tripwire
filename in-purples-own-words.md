@@ -126,3 +126,48 @@ On hosting and accounts:
 > Automatic daily checking: would that be a cron job?
 >
 > let's do accounts.
+
+---
+
+## 7. Live testing, single links, books, and public copies (28 Oct 2026)
+
+On the first real test:
+> I won't lie, I actually can't believe this works. This is so cool, this is so very cool.
+>
+> I used a link for age verification across different countries or something like that, like the different laws. I did a check for the last, I think I said, 60 days or 90 days, and I can see the changes.
+
+On Internet Archive copies:
+> I don't want us to create Internet Archive copies for every single thing. That's just a waste. Some things are not necessary. This should only be done if something is super, super important, which means an Internet Archive copy should not be made immediately. One should be asked, "Do you want to make a copy of this with the Internet Archive?" That's what it should ask, which means it should show up on the weekly summary checks. It should only ask this if the changes are considered major enough to warrant this. Therefore, it needs to check with the person at least twice before it creates this archive copy, and there should be a link to this archive copy.
+
+On single links:
+> In as much as there are themes, I think I should also be able to just toss in a link, because sometimes I only care about, say, a specific article or webpage, but not necessarily the entire theme around the things. Sometimes I only just care about one particular F1 driver, but I don't necessarily care about all of Formula One.
+>
+> I should be able to just toss in a link and just have it be tracked to see the changes made, etc. I think that should suffice and give me more space to be a creative, expansive, vibrant, versatile human.
+
+On books (an idea to toy with, not built yet):
+> I would like us to also include books. For books, though, it should not be a regular check. It should be checked when you request it, so if somebody wants to check a more recent public copy of a book against an older copy of a book, they should be able to do so.
+>
+> That one is obviously tricky because it could likely only work with publicly available books, as in ones that are PDFs and such stuff. The printed copies are difficult for you to know. What could be helpful, perhaps, is finding:
+> * the number of pages in a book versus the number of pages it had, say, 5 or 10 years ago
+> * the authors' names
+> * how they were spelled
+> * the summary
+> * the character names
+>
+> I think with digital books, it would be fan-freaking-tastic if we can understand whether the book is exactly still the same book or if it was changed. I have been hearing that some books out there are changing some of the information and some of the names of the places to get to a certain goal. Sometimes it's propaganda-related, and other times it's quite simply because we're changing things from "killed" to, say, "unalive." Type vibe.
+>
+> Songs could also be great if it could listen to versions of songs from years ago to today, but that's not a priority, to be honest. Right now, our goal is that we're looking at web pages, articles, etc., and books.
+
+On the Archive tab:
+> we need to make it easy to go to the Internet Archive from our web app. This means there should be a tab, ideally, for Archive. When you click Archive, it opens a page that has the links to the archived copies that we have created (based off of the request, based off of the changes that were perhaps made and that we felt were important, as in that the user felt they were important enough for them to warrant keeping an Internet Archive copy of said web page/article).
+
+Answers to Claude's questions:
+> Major changes, large removals, remove pages: which are your suggestions? Should definitely count as changes and offer a copy.
+>
+> Name spelling changes: just make a note of it in Tripwire, but do not offer a copy to be made for something like that.
+>
+> On point number 2, yes: are you sure this is a public and permanent screen? Yes, that's what I meant. Make sure you ask people in two different stages, twice. They have to be asked twice if they want to definitely save that copy. Again, it's public and permanent and difficult to remove, so we don't want to just waste that entry. I don't know. I don't think I want to allow people to make a copy immediately at entry. Maybe you can prompt them a day after they've added the entry to say, "If this is important to you, suggest keeping a copy." Actually, yeah, you're right. I think there should be a note there that maybe says, "This is really important to you. Do you want to keep a public, permanent copy of this as it is right now?" I think that is very, very important because anything could happen. If you're watching for changes, anything can happen tomorrow, right? Then the thing is gone, and it's completely different from when you got on. Actually, yes, I agree. We should have some kind of prompt or other about saving current copy as is.
+
+On talking a lot:
+> Damn, this Wispr Flow makes me talk a whole lot. Do let me know if you think I should be saying less.
+(Claude's answer: no. Ending with a short "decisions:" list helps.)

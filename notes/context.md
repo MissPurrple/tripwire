@@ -11,7 +11,9 @@
 - **Joined:** Telemon's team, the "Edge Block Train Experience App". Telemon is on the Edge City team.
   - "Block Train" is a **pun**: everyone is heading to DevCon, which is about Ethereum, crypto, and blockchain. **It does NOT mean the project uses blockchain.**
   - The team's short description says the app is for "all things Edge Block Train programming" (roughly). Purple doesn't know what it involves yet and needs to talk to Telemon.
-- **Possibly:** Purple's own project on archiving and information preservation. No idea chosen yet; we're brainstorming.
+- **Purple's own project (chosen 28 Oct):** a platform that watches information for changes. Users pick what to track (for example up to 3 topics or themes, such as Indigenous communities) and get alerted when it changes on Wikipedia, or when pages are removed from the web / Internet Archive.
+- **For Telemon's train app (Purple's suggestion, not yet discussed with Telemon):** "the archive": people record short things in their mother tongue (lullabies, proverbs, recipes, sayings). Purple calls it "an archive of feeling". Related to the "Overheard at Edge" habit in the Edge City Telegram group (short quoted lines people overheard).
+- **Rejected ideas:** AI-vs-community comparison, printed archive, human time capsule as its own project.
 
 ## Things Purple has clarified (don't get these wrong again)
 - Purple does **not** want to use blockchain for their own project.
@@ -23,5 +25,5 @@
 
 ## Open questions
 - What exactly is Telemon's app? (Ask Telemon.)
-- Does Purple's own project happen, and what is it?
+- Purple's own project: name, and exactly how it alerts people.
 - Are there buildathon rules on using AI tools?

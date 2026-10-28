@@ -43,3 +43,31 @@ The whole chatbots taking over old chat rooms thing seems like something that co
 > A lot of that was different ideas, okay?
 
 > Let's just brainstorm together, and you can give opinions.
+
+---
+
+## 4. Purple's reaction to the brainstorm (28 Oct 2026)
+
+On watching for edits about Indigenous communities:
+> I am absolutely loving that first one to watch for edits about Indigenous communities! We can even expand it, and I can find a range of topics that I'm interested in. I can maybe cap it to, say, three topics or three themes that I am interested in, and I could build it such that one can customise what it can keep track of.
+>
+> Maybe it can be a platform where one can select what they want to keep track of. It will alert them when changes are made, specifically to information in spaces like, say, Wikipedia. Or it can let them know about things on, say, the internet or the Internet Archive if things are removed, etc., etc.
+
+On the mother-tongue collection:
+> "Something from their mother tongue." Ooh, that could be fun. We can call it the archive.
+>
+> Storing lullabies, proverbs, recipes, and stuff in the mother tongue could be a nice way to create an archive of feeling, an archive of movement, a nimble temporary community archive of just whatever, anything and everything possibly. That's nice. I kind of like it. It's very warm and easy.
+>
+> I think we should add it to whatever we end up doing with Telamon's train-up.
+
+On "Overheard at Edge" (Edge City Telegram group):
+> we have overheard at Edge, which is where people just post things that they heard somebody say somewhere within Edge or from anybody who's part of Edge. It can be random things.
+>
+> "Turn up the sexy psychedelic whale jazz"
+> "Takes one look at the people at the conspiracy theory meetup. Person says, 'Oh good, I'm in the right place.'"
+> "We don't have to win, but we do have to beat everybody else"
+>
+> These are just random things that people heard somebody else say, and either they're funny, juicy, gossipy, just super smart, or whatever. There's already a habit of recording just small lines.
+
+Rejected: "What does AI think it knows about us?" ("It just shows the disregarding. It doesn't really help with anything"), the printed archive ("I don't want to print anything"), and the human time capsule as a standalone idea.
+> so I'm going for 1 and 3.

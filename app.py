@@ -15,8 +15,8 @@ import time
 
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from tripwire import books, changes, db, sources
-from tripwire.checker import MAX_THEMES, SINGLE_LINKS, Tripwire
+from tripwire import books, changes, charts, db, sources
+from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
 
@@ -79,7 +79,9 @@ def login_required(view):
 
 @app.context_processor
 def helpers():
-    return {"CATEGORIES": changes.CATEGORIES, "details": db.entry_details}
+    return {"CATEGORIES": changes.CATEGORIES, "details": db.entry_details, "donut": charts.donut,
+            "CHANGE_KINDS": changes.CHANGE_KINDS, "kind_counts": changes.kind_counts,
+            "KIND_SERIES": {key: n for n, key in enumerate(changes.CHANGE_KINDS, start=1)}}
 
 
 def back_to(default="change_list"):
@@ -358,10 +360,8 @@ def _edition(which):
     upload = request.files.get(f"file_{which}")
     link = request.form.get(f"link_{which}", "").strip()
     if upload and upload.filename:
-        return upload.filename, upload.read()
-    if link:
-        return books.fetch_book(link)
-    raise books.BookError(f"Add edition {which.upper()}: upload a file or paste a link.")
+        return {"name": books.clean_name(upload.filename), "data": upload.read()}
+    return {"link": link}
 
 
 @app.route("/books", methods=["GET", "POST"])
@@ -369,14 +369,59 @@ def _edition(which):
 def book_list():
     if request.method == "POST":
         try:
-            comparison = tw().compare_books(g.user["id"], request.form.get("title", ""),
-                                            _edition("a"), _edition("b"))
-        except (books.BookError, sources.SourceError) as exc:
+            job = tw().start_book_job(g.user["id"], request.form.get("title", ""), _edition("a"), _edition("b"))
+        except books.BookError as exc:
             flash(str(exc), "error")
         else:
-            return redirect(url_for("book_comparison", comparison_id=comparison))
+            return redirect(url_for("book_job", job_id=job))
+    tw().delete_book_files(older_than_days=BOOK_FILE_DAYS)
     return render_template("books.html", comparisons=tw().book_comparisons(g.user["id"]),
-                           upload_limit_mb=UPLOAD_LIMIT_MB)
+                           jobs=tw().book_jobs_in_progress(g.user["id"]), upload_limit_mb=UPLOAD_LIMIT_MB)
+
+
+@app.get("/books/jobs/<int:job_id>")
+@login_required
+def book_job(job_id):
+    """The waiting page. It starts the comparison, then checks on it until it's done."""
+    job = tw().own_book_job(g.user["id"], job_id)
+    if not job:
+        abort(404)
+    if job["status"] == "done" and job["comparison_id"]:
+        return redirect(url_for("book_comparison", comparison_id=job["comparison_id"]))
+    return render_template("book_job.html", job=job)
+
+
+def _job_json(job):
+    return jsonify(status=job["status"], error=job["error"],
+                   url=url_for("book_comparison", comparison_id=job["comparison_id"]) if job["comparison_id"] else None)
+
+
+@app.post("/books/jobs/<int:job_id>/run")
+@login_required
+def run_book_job(job_id):
+    """Does the comparison. It keeps going on the server even if the page is closed."""
+    if not tw().own_book_job(g.user["id"], job_id):
+        abort(404)
+    return _job_json(tw().run_book_job(job_id))
+
+
+@app.get("/books/jobs/<int:job_id>/status")
+@login_required
+def book_job_status(job_id):
+    job = tw().own_book_job(g.user["id"], job_id)
+    if not job:
+        abort(404)
+    return _job_json(job)
+
+
+@app.post("/books/jobs/<int:job_id>/delete")
+@login_required
+def delete_book_job(job_id):
+    job = tw().own_book_job(g.user["id"], job_id)
+    if not job or job["status"] == "done":
+        abort(404)
+    tw().conn.execute("DELETE FROM book_jobs WHERE id = ?", (job_id,))
+    return redirect(url_for("book_list"))
 
 
 @app.get("/books/<int:comparison_id>")
@@ -385,7 +430,35 @@ def book_comparison(comparison_id):
     row = tw().own_book_comparison(g.user["id"], comparison_id)
     if not row:
         abort(404)
-    return render_template("book.html", c=row)
+    job = tw().book_job_for(comparison_id)
+    return render_template("book.html", c=row, job=job, file_days=BOOK_FILE_DAYS,
+                           kinds=changes.CHANGE_KINDS, interesting=_interesting_changes(row))
+
+
+@app.post("/books/<int:comparison_id>/files/delete")
+@login_required
+def delete_book_files(comparison_id):
+    if not tw().own_book_comparison(g.user["id"], comparison_id):
+        abort(404)
+    job = tw().book_job_for(comparison_id)
+    if job:
+        tw().delete_book_files(job_id=job["id"])
+    flash("The book files are deleted. The comparison stays.")
+    return redirect(url_for("book_comparison", comparison_id=comparison_id))
+
+
+def _interesting_changes(comparison, limit=6):
+    """A short list worth looking at first: renamed names, the most repeated
+    word swaps, and the biggest added or removed passages."""
+    d = db.entry_details(comparison)
+    picks = [{"kind": "Name", "removed": old, "added": new} for old, new in d.get("name_changes", [])[:2]]
+    picks += [{"kind": f"Swapped {n}×", "removed": old, "added": new}
+              for old, new, n in d.get("swaps", [])[:2] if (old, new) not in {(p["removed"], p["added"]) for p in picks}]
+    content = [h for h in d.get("hunks", []) if (h.get("kind") or changes.classify(h["removed"], h["added"])) == "content"]
+    content.sort(key=lambda h: len((h["removed"] + " " + h["added"]).split()), reverse=True)
+    picks += [{"kind": "Passage changed", "removed": h["removed"], "added": h["added"],
+               "before": h["before"], "after": h["after"]} for h in content[:limit - len(picks)]]
+    return picks[:limit]
 
 
 @app.post("/books/<int:comparison_id>/delete")
@@ -413,9 +486,17 @@ def cron():
     if not expected or not hmac.compare_digest(given, f"Bearer {expected}"):
         abort(403)
     started = time.monotonic()
-    # Internet Archive copies are no longer made automatically: people will choose.
-    new = tw().check_all(deadline=started + CRON_BUDGET)
-    return jsonify(new_entries=len(new),
+    # Internet Archive copies are never made automatically: people choose.
+    new = tw().check_all(deadline=started + CRON_BUDGET * 0.5)
+    # Finish any book comparison that was interrupted, then tidy up old book files.
+    finished = 0
+    for job in tw().unfinished_book_jobs():
+        if time.monotonic() > started + CRON_BUDGET:
+            break
+        tw().run_book_job(job["id"])
+        finished += 1
+    tw().delete_book_files(older_than_days=BOOK_FILE_DAYS)
+    return jsonify(new_entries=len(new), book_jobs_run=finished,
                    seconds=round(time.monotonic() - started, 1))
 
 

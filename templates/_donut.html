@@ -1,0 +1,26 @@
+{# A donut chart of parts of a whole. Needs `chart` = donut(...) and `chart_title`. #}
+<figure class="donut-figure">
+  <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="{{ chart_title }}">
+    <circle class="donut-track" cx="21" cy="21" r="15.9155" fill="none" stroke-width="6"></circle>
+    {% for sl in chart.slices if sl.count %}
+      <circle class="donut-slice" cx="21" cy="21" r="15.9155" fill="none" stroke-width="6"
+              stroke="var(--series-{{ sl.series }})" stroke-dasharray="{{ '%.3f'|format(sl.dash) }} {{ '%.3f'|format(100 - sl.dash) }}"
+              stroke-dashoffset="{{ '%.3f'|format(sl.offset) }}">
+        <title>{{ sl.label }}: {{ sl.count }} change{{ 's' if sl.count != 1 }} ({{ sl.percent_text }})</title>
+      </circle>
+    {% endfor %}
+    <text x="21" y="20.5" class="donut-total">{{ chart.total }}</text>
+    <text x="21" y="25" class="donut-caption">change{{ 's' if chart.total != 1 }}</text>
+  </svg>
+  <figcaption>
+    <table class="legend">
+      {% for sl in chart.slices %}
+      <tr class="{{ 'zero' if not sl.count }}">
+        <td><span class="swatch" style="background: var(--series-{{ sl.series }})"></span>{{ sl.label }}</td>
+        <td class="num">{{ sl.count }}</td>
+        <td class="num">{{ sl.percent_text if sl.count else '–' }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </figcaption>
+</figure>

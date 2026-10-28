@@ -29,9 +29,28 @@
        Uploads can be up to {{ upload_limit_mb }} MB in total; for bigger books, paste links instead.
        Copyrighted books are fine to compare here: the result stays private to you.</p>
     <button>Compare</button>
-    <p class="meta" id="book-wait" hidden>Comparing… a whole book can take a little while. Please keep this page open.</p>
+    <p class="meta" id="book-wait" hidden>Uploading…</p>
   </form>
 </section>
+
+{% if jobs %}
+<section>
+  <h2>In progress</h2>
+  {% for j in jobs %}
+  <article class="entry {{ 'cat-removal' if j.status == 'failed' else '' }}" {% if j.status != 'failed' %}data-unfinished="{{ url_for('run_book_job', job_id=j.id) }}"{% endif %}>
+    <div class="entry-head">
+      <span class="badge {{ 'cat-removal' if j.status == 'failed' }}">{{ {'waiting': 'Waiting', 'running': 'Reading…', 'failed': "Didn't work"}[j.status] }}</span>
+      <span class="when">{{ j.created_at[:10] }}</span>
+    </div>
+    <h3><a href="{{ url_for('book_job', job_id=j.id) }}">{{ j.title or 'Untitled comparison' }}</a></h3>
+    <p class="meta">{{ j.name_a or j.link_a }} vs {{ j.name_b or j.link_b }}</p>
+    {% if j.error %}<p>{{ j.error }}</p>{% endif %}
+    <form method="post" action="{{ url_for('delete_book_job', job_id=j.id) }}"><button class="link danger">Remove</button></form>
+  </article>
+  {% endfor %}
+  <p class="meta">Anything still waiting carries on in the background; refresh to see when it's done.</p>
+</section>
+{% endif %}
 
 {% if comparisons %}
 <section>
@@ -59,6 +78,10 @@
       return;
     }
     document.getElementById("book-wait").hidden = false;
+  });
+  // Pick up any comparison that was interrupted (for example, the page was closed early).
+  document.querySelectorAll("[data-unfinished]").forEach(function (el) {
+    fetch(el.dataset.unfinished, { method: "POST", keepalive: true, credentials: "same-origin" }).catch(function () {});
   });
 </script>
 {% endblock %}

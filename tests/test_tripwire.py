@@ -114,7 +114,7 @@ class CheckerTests(unittest.TestCase):
         if self.db_path.startswith("postgres"):
             import psycopg
             with psycopg.connect(self.db_path, autocommit=True) as conn:
-                conn.execute("DROP TABLE IF EXISTS book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
+                conn.execute("DROP TABLE IF EXISTS book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
         self.tw = Tripwire(self.db_path)
         self.user = self.tw.create_user("purple@example.org", "correct horse")
         FakeWikipedia.articles = {"Warli": [
@@ -481,6 +481,23 @@ class BookTests(unittest.TestCase):
         self.assertIn(("Loompaland", "Lumpaland"), result["name_changes"])
 
 
+GUTENBERG_HEADER = """The Project Gutenberg eBook of Alice's Adventures in Wonderland
+
+Title: Alice's Adventures in Wonderland
+Author: Lewis Carroll
+Release date: {released}
+Language: English
+Original publication: London: Macmillan, 1865
+
+*** START OF THE PROJECT GUTENBERG EBOOK ALICE'S ADVENTURES IN WONDERLAND ***
+"""
+GUTENBERG_FOOTER = """
+*** END OF THE PROJECT GUTENBERG EBOOK ALICE'S ADVENTURES IN WONDERLAND ***
+
+Updated editions will replace the previous one. Licence version {released}.
+"""
+
+
 class BookPageTests(CheckerTests):
     def setUp(self):
         super().setUp()
@@ -488,62 +505,183 @@ class BookPageTests(CheckerTests):
         webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
         self.client = webapp.app.test_client()
         self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+        facts = mock.patch.object(sources, "open_library_facts", lambda *a: {
+            "url": "https://openlibrary.org/works/OL1W", "first_published": 1964, "editions": 212,
+            "typical_pages": 176, "subjects": ["Chocolate", "Factories"]})
+        facts.start()
+        self.addCleanup(facts.stop)
+
+    def compare(self, data, run=True):
+        """Submit the form like the page does, then run the job like the waiting page does."""
+        response = self.client.post("/books", data=data, content_type="multipart/form-data")
+        if response.status_code != 302 or "/books/jobs/" not in response.headers["Location"]:
+            return None, response
+        job_page = response.headers["Location"]
+        if not run:
+            return job_page, response
+        result = self.client.post(job_page + "/run").json
+        return result, self.client.get(result["url"]) if result.get("url") else self.client.get(job_page)
 
     def test_compare_uploaded_editions(self):
         import io
         unchanged = " ".join(f"Chapter {i} tells of the river and the old stone house." for i in range(2000))
-        response = self.client.post("/books", data={
+        result, response = self.compare({
             "title": "Chocolate",
             "file_a": (io.BytesIO(make_epub([OLD_BOOK, unchanged])), "dahl-1998.epub"),  # read in reverse: unchanged first
             "file_b": (io.BytesIO((unchanged + " " + NEW_BOOK).encode()), "dahl-2023.txt"),
-        }, content_type="multipart/form-data", follow_redirects=True)
+        })
+        self.assertEqual(result["status"], "done")
         page = response.data.decode()
-        self.assertIn("Word swaps", page)
-        self.assertIn("unalived", page)
-        self.assertIn("Lumpaland", page)
-        self.assertIn("dahl-1998.epub (EPUB", page)
+        for expected in ["Word swaps", "unalived", "Lumpaland", "dahl-1998.epub (EPUB", "What kind of changes?",
+                         "Most interesting changes", "Book facts", "Editions recorded", "212"]:
+            self.assertIn(expected, page)
         self.assertIn("Chocolate", self.client.get("/books").data.decode())
         stored = self.tw.conn.execute("SELECT details FROM book_comparisons").fetchone()["details"]
         self.assertLess(len(stored), len(unchanged) / 10)  # only the changes are stored, not the books
         self.assertNotIn("Chapter 1999", stored)
+
+    def test_waiting_page_then_result(self):
+        import io
+        job_page, _ = self.compare({"file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt"),
+                                    "file_b": (io.BytesIO(NEW_BOOK.encode()), "b.txt")}, run=False)
+        page = self.client.get(job_page).data.decode()
+        self.assertIn("Reviewing books takes a while", page)
+        self.assertIn("you can close this page", page)
+        self.assertEqual(self.client.get(job_page + "/status").json["status"], "waiting")
+        self.assertIn("In progress", self.client.get("/books").data.decode())
+        self.client.post(job_page + "/run")
+        self.assertEqual(self.client.get(job_page).status_code, 302)  # done: goes straight to the result
 
     def test_compare_from_links(self):
         from tripwire import books
         files = {"https://example.org/a.txt": ("a.txt", OLD_BOOK.encode()),
                  "https://example.org/b.pdf": ("b.pdf", make_pdf([NEW_BOOK[:100], NEW_BOOK[100:200]]))}
         with mock.patch.object(books, "fetch_book", lambda url: files[url]):
-            response = self.client.post("/books", data={"link_a": "https://example.org/a.txt",
-                                                         "link_b": "https://example.org/b.pdf"},
-                                        follow_redirects=True)
+            result, response = self.compare({"link_a": "https://example.org/a.txt",
+                                             "link_b": "https://example.org/b.pdf"})
         self.assertIn("b.pdf (PDF, 2 pages", response.data.decode())
+
+    def test_gutenberg_licence_text_is_ignored(self):
+        import io
+        a = GUTENBERG_HEADER.format(released="June 25, 2008 [eBook #11]") + OLD_BOOK + GUTENBERG_FOOTER.format(released="2008")
+        b = GUTENBERG_HEADER.format(released="October 1, 2024 [eBook #11]") + OLD_BOOK + GUTENBERG_FOOTER.format(released="2024")
+        result, response = self.compare({"file_a": (io.BytesIO(a.encode()), "pg11-2008.txt"),
+                                         "file_b": (io.BytesIO(b.encode()), "pg11-2024.txt")})
+        page = response.data.decode()
+        self.assertIn("No differences", page)  # only the licence text differed
+        for fact in ["Lewis Carroll", "1865", "London: Macmillan", "Project Gutenberg", "October 1, 2024"]:
+            self.assertIn(fact, page)
 
     def test_missing_edition_is_explained(self):
         import io
-        response = self.client.post("/books", data={"file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt")},
-                                    content_type="multipart/form-data", follow_redirects=True)
+        _, response = self.compare({"file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt")})
         self.assertIn("Add edition B", response.data.decode())
 
     def test_unreachable_link_is_explained_plainly(self):
-        from tripwire import books
         with mock.patch.object(sources.requests, "get", side_effect=sources.requests.ConnectionError("proxy 403 gibberish")):
-            response = self.client.post("/books", data={"link_a": "https://example.org/a.txt",
-                                                        "link_b": "https://example.org/b.txt"}, follow_redirects=True)
+            result, response = self.compare({"link_a": "https://example.org/a.txt", "link_b": "https://example.org/b.txt"})
+        self.assertEqual(result["status"], "failed")
         page = response.data.decode()
         self.assertIn("Couldn&#39;t reach example.org. Check the link", page)
         self.assertNotIn("gibberish", page)
 
+    def test_job_runs_only_once_and_survives_closing_the_page(self):
+        import io
+        job_page, _ = self.compare({"file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt"),
+                                    "file_b": (io.BytesIO(NEW_BOOK.encode()), "b.txt")}, run=False)
+        job_id = int(job_page.rsplit("/", 1)[1])
+        # The page was closed before it started the job: the daily run picks it up.
+        with mock.patch.dict(os.environ, {"CRON_SECRET": "s3cret"}):
+            self.assertEqual(self.client.get("/cron", headers={"Authorization": "Bearer s3cret"}).json["book_jobs_run"], 1)
+        self.assertEqual(self.tw.run_book_job(job_id)["status"], "done")  # running again does nothing new
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM book_comparisons").fetchone()["n"], 1)
+
+    def test_interrupted_job_is_retried(self):
+        import io
+        job_page, _ = self.compare({"file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt"),
+                                    "file_b": (io.BytesIO(NEW_BOOK.encode()), "b.txt")}, run=False)
+        job_id = int(job_page.rsplit("/", 1)[1])
+        self.tw.conn.execute("UPDATE book_jobs SET status = 'running', started_at = '2026-01-01T00:00:00Z'")
+        self.assertEqual([j["id"] for j in self.tw.unfinished_book_jobs()], [job_id])
+        self.assertEqual(self.tw.run_book_job(job_id)["status"], "done")
+
+    def test_book_files_deleted_after_seven_days(self):
+        import io
+        result, _ = self.compare({"file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt"),
+                                  "file_b": (io.BytesIO(NEW_BOOK.encode()), "b.txt")})
+        self.tw.delete_book_files(older_than_days=7)
+        self.assertIsNotNone(self.tw.conn.execute("SELECT file_a FROM book_jobs").fetchone()["file_a"])  # still new
+        self.tw.conn.execute("UPDATE book_jobs SET created_at = '2026-01-01T00:00:00Z'")
+        self.client.get("/books")  # visiting Books tidies up
+        job = self.tw.conn.execute("SELECT file_a, file_b, files_deleted_at FROM book_jobs").fetchone()
+        self.assertEqual((job["file_a"], job["file_b"]), (None, None))
+        page = self.client.get(result["url"]).data.decode()
+        self.assertIn("Word swaps", page)  # the comparison stays
+        self.assertIn("Deleted on", page)
+
+    def test_delete_files_now(self):
+        import io
+        result, response = self.compare({"file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt"),
+                                         "file_b": (io.BytesIO(NEW_BOOK.encode()), "b.txt")})
+        self.assertIn("Delete the files now", response.data.decode())
+        comparison_id = int(result["url"].rsplit("/", 1)[1])
+        self.client.post(f"/books/{comparison_id}/files/delete")
+        self.assertIsNone(self.tw.conn.execute("SELECT file_a FROM book_jobs").fetchone()["file_a"])
+
     def test_comparisons_are_private(self):
         import io
-        self.client.post("/books", data={"title": "Secret comparison",
-                                         "file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt"),
-                                         "file_b": (io.BytesIO(NEW_BOOK.encode()), "b.txt")},
-                         content_type="multipart/form-data")
+        result, _ = self.compare({"title": "Secret comparison",
+                                  "file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt"),
+                                  "file_b": (io.BytesIO(NEW_BOOK.encode()), "b.txt")})
+        comparison_url = result["url"]
         self.tw.create_user("stranger@example.org", "stranger danger")
         self.client.post("/logout")
         self.client.post("/login", data={"email": "stranger@example.org", "password": "stranger danger"})
-        self.assertEqual(self.client.get("/books/1").status_code, 404)
-        self.assertEqual(self.client.post("/books/1/delete").status_code, 404)
+        self.assertEqual(self.client.get(comparison_url).status_code, 404)
+        self.assertEqual(self.client.post(comparison_url + "/delete").status_code, 404)
+        self.assertEqual(self.client.post(comparison_url + "/files/delete").status_code, 404)
+        for path in ["/books/jobs/1", "/books/jobs/1/status"]:
+            self.assertEqual(self.client.get(path).status_code, 404)
+        self.assertEqual(self.client.post("/books/jobs/1/run").status_code, 404)
         self.assertNotIn("Secret comparison", self.client.get("/books").data.decode())
+
+
+class ChangeKindTests(unittest.TestCase):
+    def test_kinds(self):
+        cases = {("“Hello”", '"hello"'): "formatting", ("Hello,", "Hello;"): "grammar", ("colour", "color"): "spelling",
+                 ("Loompaland", "Lumpaland"): "names", ("the", "a"): "grammar", ("killed", "unalived"): "swap",
+                 ("He walked home in the rain that night.", ""): "content", ("", "A brand new paragraph here."): "content"}
+        for (old, new), kind in cases.items():
+            self.assertEqual(changes.classify(old, new), kind, (old, new))
+
+    def test_donut_adds_up(self):
+        from tripwire import charts
+        chart = charts.donut({"spelling": 3, "names": 1, "grammar": 0, "formatting": 0, "swap": 4, "content": 2},
+                             changes.CHANGE_KINDS)
+        self.assertEqual(chart["total"], 10)
+        self.assertAlmostEqual(sum(s["percent"] for s in chart["slices"]), 100)
+        self.assertEqual([s["percent_text"] for s in chart["slices"]], ["30%", "10%", "0%", "0%", "40%", "20%"])
+        self.assertEqual(charts.donut(dict.fromkeys(changes.CHANGE_KINDS, 0), changes.CHANGE_KINDS)["total"], 0)
+
+    def test_epub_details_are_read(self):
+        import io
+        import zipfile
+        from tripwire import books
+        data = make_epub([OLD_BOOK])
+        buf = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(data)) as src, zipfile.ZipFile(buf, "w") as dst:
+            for item in src.infolist():
+                body = src.read(item.filename)
+                if item.filename.endswith(".opf"):
+                    body = body.replace(b"<manifest>", b'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">'
+                                        b"<dc:title>Charlie</dc:title><dc:creator>Roald Dahl</dc:creator>"
+                                        b"<dc:publisher>Puffin</dc:publisher><dc:date>2023-02-01</dc:date>"
+                                        b"<dc:identifier>urn:isbn:978-0-14-137100-0</dc:identifier></metadata><manifest>")
+                dst.writestr(item, body)
+        _, info = books.read_book("charlie.epub", buf.getvalue())
+        self.assertEqual((info["title"], info["authors"], info["publisher"], info["year"], info["isbn"]),
+                         ("Charlie", "Roald Dahl", "Puffin", "2023", "9780141371000"))
+        self.assertEqual(info["pages_estimate"], 1)
 
 
 def fake_video_site(oembed_status=200, title="Warli painting: a living tradition", author="Goa Stories",

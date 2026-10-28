@@ -44,6 +44,52 @@ CATEGORIES = {
 }
 
 
+# The kinds of change shown in the "what kind of changes" chart, in a fixed order.
+CHANGE_KINDS = {
+    "spelling": "Spelling",
+    "names": "Names",
+    "grammar": "Grammar & punctuation",
+    "formatting": "Formatting",
+    "swap": "Word swaps",
+    "content": "Content added, removed or rewritten",
+}
+
+# Small words whose swapping is usually grammar, not meaning.
+FUNCTION_WORDS = set("""a an the of to in on at by for with from into onto upon and or but nor so yet
+is are was were be been being am has have had do does did will would shall should can could may might
+must this that these those which who whom whose it its it's he she they them his her their there here
+not no as than then""".split())
+
+# Different ways of writing the same punctuation (curly vs straight quotes, dashes).
+_SAME_PUNCTUATION = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "—": "-", "–": "-", "…": "..."})
+
+
+def classify(removed, added):
+    """Which kind of change (a CHANGE_KINDS key) turns `removed` text into `added` text."""
+    if removed.translate(_SAME_PUNCTUATION).lower().split() == added.translate(_SAME_PUNCTUATION).lower().split():
+        return "formatting"  # only capital letters, quote styles or dashes differ
+    old_words = [t for t in tokenize(removed) if is_word(t)]
+    new_words = [t for t in tokenize(added) if is_word(t)]
+    if [w.lower() for w in old_words] == [w.lower() for w in new_words]:
+        return "grammar"  # same words, different punctuation
+    if len(old_words) == 1 and len(new_words) == 1 and similar(old_words[0], new_words[0]) >= SPELLING_SIMILARITY:
+        return "names" if looks_like_name(old_words[0]) else "spelling"
+    changed = [w.lower() for w in old_words + new_words]
+    if len(changed) <= 3 and all(w in FUNCTION_WORDS for w in changed):
+        return "grammar"
+    if 0 < len(old_words) <= SWAP_MAX_WORDS and 0 < len(new_words) <= SWAP_MAX_WORDS:
+        return "swap"
+    return "content"
+
+
+def kind_counts(hunks):
+    """How many changes of each kind, in CHANGE_KINDS order (zeros included)."""
+    counts = dict.fromkeys(CHANGE_KINDS, 0)
+    for h in hunks:
+        counts[h.get("kind") or classify(h["removed"], h["added"])] += 1
+    return counts
+
+
 def tokenize(text):
     return TOKEN_RE.findall(text or "")
 
@@ -116,6 +162,7 @@ def compare(before, after):
             "removed": join_tokens(removed),
             "added": join_tokens(added),
             "after": join_tokens(old[i2:i2 + CONTEXT_WORDS]),
+            "kind": classify(join_tokens(removed), join_tokens(added)),
         })
 
     changed = words_added + words_removed
@@ -183,7 +230,8 @@ def compare_long(before, after):
             total["hunks"].append({"before": " ".join(old[i1 - 1].split()[-CONTEXT_WORDS:]) if i1 else "",
                                    "removed": f"[{removed} words]" if removed else "",
                                    "added": f"[{added} words]" if added else "",
-                                   "after": " ".join(old[i2].split()[:CONTEXT_WORDS]) if i2 < len(old) else ""})
+                                   "after": " ".join(old[i2].split()[:CONTEXT_WORDS]) if i2 < len(old) else "",
+                                   "kind": "content"})
             continue
         part = compare(old_block, new_block)
         for key in ("words_added", "words_removed"):

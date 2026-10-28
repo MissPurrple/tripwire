@@ -346,3 +346,44 @@ def video_text(state):
     if state["platform"] == "YouTube":
         lines.append(f"Unlisted: {yes_no(state['unlisted'])}")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Open Library: free facts about books (the Internet Archive's book catalogue)
+# ---------------------------------------------------------------------------
+
+OPEN_LIBRARY = "https://openlibrary.org"
+
+
+def open_library_facts(title=None, authors=None, isbn=None):
+    """Quick facts about a book from Open Library, or None if it can't be found.
+    Never raises: facts are a bonus, not something a comparison depends on."""
+    try:
+        facts = {}
+        if isbn:
+            response = _get(f"{OPEN_LIBRARY}/isbn/{isbn}.json", timeout=15)
+            if response.status_code == 200:
+                edition = response.json()
+                facts.update(edition_publisher=", ".join(edition.get("publishers", [])[:2]) or None,
+                              edition_date=edition.get("publish_date"),
+                              edition_pages=edition.get("number_of_pages"))
+        if title:
+            params = {"title": title, "limit": 1,
+                      "fields": "key,title,author_name,first_publish_year,edition_count,publisher,"
+                                "subject,number_of_pages_median"}
+            if authors:
+                params["author"] = authors.split(",")[0].split(";")[0].strip()
+            response = _get(f"{OPEN_LIBRARY}/search.json", params=params, timeout=15)
+            docs = response.json().get("docs", []) if response.status_code == 200 else []
+            if docs:
+                doc = docs[0]
+                facts.update(url=OPEN_LIBRARY + doc["key"], title=doc.get("title"),
+                              authors=", ".join(doc.get("author_name", [])[:3]) or None,
+                              first_published=doc.get("first_publish_year"),
+                              editions=doc.get("edition_count"),
+                              typical_pages=doc.get("number_of_pages_median"),
+                              publishers=", ".join(doc.get("publisher", [])[:3]) or None,
+                              subjects=doc.get("subject", [])[:5])
+        return {k: v for k, v in facts.items() if v} or None
+    except (SourceError, ValueError, KeyError, TypeError):
+        return None

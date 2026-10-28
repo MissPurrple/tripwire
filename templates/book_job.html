@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Comparing books… · Tripwire{% endblock %}
+{% block content %}
+<section class="theme waiting" id="waiting" data-run="{{ url_for('run_book_job', job_id=job.id) }}"
+         data-status="{{ url_for('book_job_status', job_id=job.id) }}" data-status-now="{{ job.status }}">
+  {% if job.status == 'failed' %}
+    <h1>That didn't work</h1>
+    <p>{{ job.error }}</p>
+    <p><a href="{{ url_for('book_list') }}">← Back to books</a> and try again, maybe with different files or links.</p>
+  {% else %}
+    <h1>Reading two books at once…</h1>
+    <div class="spinner" aria-hidden="true"><span></span><span></span><span></span></div>
+    <p><strong>Reviewing books takes a while.</strong> You don't have to wait here: you can close this page,
+       and Tripwire keeps going. The result will be waiting for you in <a href="{{ url_for('book_list') }}">Books</a>.</p>
+    <p class="joke" id="joke" aria-live="polite">Meanwhile: go read a different book. Tripwire's got this one.</p>
+    <p class="meta">{{ job.title or 'Untitled comparison' }} · {{ job.name_a or job.link_a }} vs {{ job.name_b or job.link_b }}</p>
+  {% endif %}
+</section>
+
+{% if job.status != 'failed' %}
+<script>
+(function () {
+  var box = document.getElementById("waiting");
+  var jokes = [
+    "Meanwhile: go read a different book. Tripwire's got this one.",
+    "Why did the librarian get kicked off the plane? Because it was overbooked.",
+    "There are 10 kinds of people: those who understand binary, and those who don't.",
+    "A SQL query walks into a bar, walks up to two tables and asks: “Mind if I join you?”",
+    "Why do programmers prefer dark mode? Because light attracts bugs.",
+    "Perfect moment to stretch, refill your chai, or look out of the train window.",
+    "I'd tell you a joke about UDP, but you might not get it.",
+    "Why was the ebook so calm? It had no hard copies of its problems.",
+    "Fun fact: the longest sentence in Les Misérables is over 800 words long. Tripwire is reading it twice.",
+    "Go watch a video, call a friend, touch some grass. We'll keep reading.",
+    "Debugging: being the detective in a crime novel where you're also the murderer."
+  ];
+  var i = 0;
+  setInterval(function () {
+    i = (i + 1) % jokes.length;
+    document.getElementById("joke").textContent = jokes[i];
+  }, 7000);
+
+  function finish(data) {
+    if (data.status === "done" && data.url) { window.location = data.url; return true; }
+    if (data.status === "failed") { window.location.reload(); return true; }
+    return false;
+  }
+  // Start the comparison. "keepalive" lets the request carry on even if this page is closed.
+  if (box.dataset.statusNow === "waiting") {
+    fetch(box.dataset.run, { method: "POST", keepalive: true, credentials: "same-origin" })
+      .then(function (r) { return r.json(); }).then(finish).catch(function () {});
+  }
+  // Check every few seconds, in case it finishes while this page is open.
+  setInterval(function () {
+    fetch(box.dataset.status, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); }).then(finish).catch(function () {});
+  }, 4000);
+})();
+</script>
+{% endif %}
+{% endblock %}

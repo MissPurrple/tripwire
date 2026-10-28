@@ -94,6 +94,25 @@ CREATE TABLE IF NOT EXISTS book_comparisons (
     summary     TEXT NOT NULL,
     details     TEXT NOT NULL DEFAULT '{{}}',    -- JSON: word swaps, changes with a little context
     created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS book_jobs (
+    id               {id},
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title            TEXT NOT NULL DEFAULT '',
+    status           TEXT NOT NULL,              -- 'waiting', 'running', 'done' or 'failed'
+    error            TEXT,
+    name_a           TEXT,                       -- file name of edition A
+    file_a           {blob},                     -- the book file itself: deleted after 7 days
+    link_a           TEXT,                       -- or the link it comes from
+    name_b           TEXT,
+    file_b           {blob},
+    link_b           TEXT,
+    comparison_id    INTEGER REFERENCES book_comparisons(id) ON DELETE SET NULL,
+    created_at       TEXT NOT NULL,
+    started_at       TEXT,
+    finished_at      TEXT,
+    files_deleted_at TEXT
 )
 """
 
@@ -155,12 +174,12 @@ class Connection:
                     "Tripwire found a database address but couldn't connect to it. Check the database is "
                     "running in your database provider's dashboard, and that the address in Vercel's "
                     "Environment Variables is complete and current.") from exc
-            schema = SCHEMA.format(id="SERIAL PRIMARY KEY")
+            schema = SCHEMA.format(id="SERIAL PRIMARY KEY", blob="BYTEA")
         else:
             self.raw = sqlite3.connect(url, timeout=30)
             self.raw.row_factory = sqlite3.Row
             self.raw.execute("PRAGMA foreign_keys = ON")
-            schema = SCHEMA.format(id="INTEGER PRIMARY KEY")
+            schema = SCHEMA.format(id="INTEGER PRIMARY KEY", blob="BLOB")
         for statement in schema.split(";"):
             self.raw.execute(statement)
         for table, column, definition in ADDED_COLUMNS:

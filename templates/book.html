@@ -1,54 +1,137 @@
 {% extends "base.html" %}
 {% block title %}{{ c.title }} · Books · Tripwire{% endblock %}
+
+{% macro fact(info, key, fallback_key=None) -%}
+  {%- set ol = info.open_library or {} -%}
+  {{ info[key] or (ol[fallback_key] if fallback_key else none) or '—' }}
+{%- endmacro %}
+
+{% macro pages(info) -%}
+  {%- if info.pages %}{{ info.pages }}
+  {%- elif (info.open_library or {}).edition_pages %}{{ info.open_library.edition_pages }}
+  {%- elif info.pages_estimate %}≈ {{ info.pages_estimate }} <span class="meta">(estimated)</span>
+  {%- else %}—{% endif -%}
+{%- endmacro %}
+
 {% block content %}
 {% set d = details(c) %}
+{% set a = d.info_a or {} %}
+{% set b = d.info_b or {} %}
 <p><a href="{{ url_for('book_list') }}">← Back to books</a></p>
-<article class="entry cat-{{ c.category }}">
-  <div class="entry-head">
-    <span class="badge cat-{{ c.category }}">{{ CATEGORIES[c.category] }}</span>
-    {% if d.name_changes %}<span class="badge names">Name spelling changed</span>{% endif %}
-    <span class="when">{{ c.created_at[:10] }}</span>
-  </div>
-  <h1 class="book-title">{{ c.title }}</h1>
-  <p class="summary">{{ c.summary }}</p>
-  <ul class="editions">
-    <li><strong>A (older):</strong> {{ c.edition_a }}</li>
-    <li><strong>B (newer):</strong> {{ c.edition_b }}</li>
-  </ul>
-  {% if d.info_a.pages and d.info_b.pages and d.info_a.pages != d.info_b.pages %}
-    <p class="meta">Page count changed: {{ d.info_a.pages }} → {{ d.info_b.pages }} pages.</p>
+
+<div class="book-layout">
+<div class="book-main">
+  <article class="entry cat-{{ c.category }}">
+    <div class="entry-head">
+      <span class="badge cat-{{ c.category }}">{{ CATEGORIES[c.category] }}</span>
+      {% if d.name_changes %}<span class="badge names">Name spelling changed</span>{% endif %}
+      <span class="when">{{ c.created_at[:10] }}</span>
+    </div>
+    <h1 class="book-title">{{ c.title }}</h1>
+    <p class="summary">{{ c.summary }}</p>
+    <ul class="editions">
+      <li><strong>A (older):</strong> {{ c.edition_a }}</li>
+      <li><strong>B (newer):</strong> {{ c.edition_b }}</li>
+    </ul>
+    <form method="post" action="{{ url_for('delete_book_comparison', comparison_id=c.id) }}"
+          onsubmit="return confirm('Delete this comparison?')"><button class="disregard">Delete comparison</button></form>
+  </article>
+
+  {% if d.hunks %}
+  <section class="sources">
+    <h2>What kind of changes?</h2>
+    {% set chart = donut(d.kinds or kind_counts(d.hunks), CHANGE_KINDS) %}
+    {% set chart_title = "Share of changes by kind" %}
+    {% include "_donut.html" %}
+    {% if d.hunk_count > d.hunks|length %}<p class="meta">Based on the first {{ d.hunks|length }} of {{ d.hunk_count }} changes.</p>{% endif %}
+  </section>
   {% endif %}
-  <form method="post" action="{{ url_for('delete_book_comparison', comparison_id=c.id) }}"
-        onsubmit="return confirm('Delete this comparison?')"><button class="disregard">Delete comparison</button></form>
-</article>
 
-{% if d.name_changes %}
-<section class="sources">
-  <h2>Names spelled differently</h2>
-  <p class="names-list">{% for old, new in d.name_changes %}<span><del>{{ old }}</del> → <ins>{{ new }}</ins></span>{% endfor %}</p>
-</section>
-{% endif %}
+  {% if interesting %}
+  <section class="sources">
+    <h2>Most interesting changes</h2>
+    <ul class="interesting">
+      {% for i in interesting %}
+      <li><span class="badge">{{ i.kind }}</span>
+        {% if i.before %}<span class="meta">… {{ i.before }}</span>{% endif %}
+        {% if i.removed %}<del>{{ i.removed|truncate(400) }}</del>{% endif %}
+        {% if i.added %}<ins>{{ i.added|truncate(400) }}</ins>{% endif %}
+        {% if i.after %}<span class="meta">{{ i.after }} …</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
 
-{% if d.swaps %}
-<section class="sources">
-  <h2>Word swaps</h2>
-  <p class="meta">Short words or phrases replaced by others, most frequent first.</p>
-  <table class="swaps">
-    <thead><tr><th>Edition A said</th><th>Edition B says</th><th>Times</th></tr></thead>
-    <tbody>{% for old, new, n in d.swaps %}<tr><td><del>{{ old }}</del></td><td><ins>{{ new }}</ins></td><td>{{ n }}</td></tr>{% endfor %}</tbody>
-  </table>
-</section>
-{% endif %}
+  {% if d.swaps %}
+  <section class="sources">
+    <h2>Word swaps</h2>
+    <p class="meta">Short words or phrases replaced by others, most frequent first.</p>
+    <table class="swaps">
+      <thead><tr><th>Edition A said</th><th>Edition B says</th><th>Times</th></tr></thead>
+      <tbody>{% for old, new, n in d.swaps %}<tr><td><del>{{ old }}</del></td><td><ins>{{ new }}</ins></td><td>{{ n }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+  {% endif %}
 
-{% if d.hunks %}
-<section class="hunks">
-  <h2>Every change, in order</h2>
-  <p class="meta">Red was in edition A, green is in edition B. Grey is the surrounding text.
-    {% if d.hunk_count > d.hunks|length %}Showing the first {{ d.hunks|length }} of {{ d.hunk_count }} changes.{% endif %}
-    {% if d.rewritten_blocks %}Some long stretches were too different to compare word by word, so they show as a word count.{% endif %}</p>
-  {% for h in d.hunks %}
-    <p class="hunk">… {{ h.before }} {% if h.removed %}<del>{{ h.removed }}</del>{% endif %} {% if h.added %}<ins>{{ h.added }}</ins>{% endif %} {{ h.after }} …</p>
-  {% endfor %}
-</section>
-{% endif %}
+  {% if d.hunks %}
+  <section class="hunks">
+    <h2>Every change, in order</h2>
+    <p class="meta">Red was in edition A, green is in edition B. Grey is the surrounding text.
+      {% if d.hunk_count > d.hunks|length %}Showing the first {{ d.hunks|length }} of {{ d.hunk_count }} changes.{% endif %}
+      {% if d.rewritten_blocks %}Some long stretches were too different to compare word by word, so they show as a word count.{% endif %}</p>
+    {% for h in d.hunks %}
+      <p class="hunk">{% set k = h.kind or 'content' %}<span class="kind-dot" style="background: var(--series-{{ KIND_SERIES[k] }})" title="{{ CHANGE_KINDS[k] }}"></span>
+        … {{ h.before }} {% if h.removed %}<del>{{ h.removed }}</del>{% endif %} {% if h.added %}<ins>{{ h.added }}</ins>{% endif %} {{ h.after }} …</p>
+    {% endfor %}
+  </section>
+  {% elif not d.hunks %}
+  <section class="sources"><h2>No differences</h2><p>The two editions read exactly the same, word for word.</p></section>
+  {% endif %}
+</div>
+
+<aside class="book-side">
+  <section class="sources facts">
+    <h2>Book facts</h2>
+    <table class="facts-table">
+      <thead><tr><th></th><th>A (older)</th><th>B (newer)</th></tr></thead>
+      <tbody>
+        <tr><th>Title</th><td>{{ fact(a, 'title', 'title') }}</td><td>{{ fact(b, 'title', 'title') }}</td></tr>
+        <tr><th>Author</th><td>{{ fact(a, 'authors', 'authors') }}</td><td>{{ fact(b, 'authors', 'authors') }}</td></tr>
+        <tr><th>Year</th><td>{{ fact(a, 'year', 'edition_date') }}</td><td>{{ fact(b, 'year', 'edition_date') }}</td></tr>
+        <tr><th>Publisher</th><td>{{ fact(a, 'publisher', 'edition_publisher') }}</td><td>{{ fact(b, 'publisher', 'edition_publisher') }}</td></tr>
+        <tr><th>Pages</th><td>{{ pages(a) }}</td><td>{{ pages(b) }}</td></tr>
+        <tr><th>Words</th><td>{{ '{:,}'.format(a.words) if a.words else '—' }}</td><td>{{ '{:,}'.format(b.words) if b.words else '—' }}</td></tr>
+        <tr><th>Language</th><td>{{ fact(a, 'language') }}</td><td>{{ fact(b, 'language') }}</td></tr>
+        <tr><th>Format</th><td>{{ a.format or '—' }}{% if a.source %}, {{ a.source }}{% endif %}</td><td>{{ b.format or '—' }}{% if b.source %}, {{ b.source }}{% endif %}</td></tr>
+        {% if a.released or b.released %}<tr><th>Released online</th><td>{{ a.released or '—' }}</td><td>{{ b.released or '—' }}</td></tr>{% endif %}
+      </tbody>
+    </table>
+    {% set ol = a.open_library or b.open_library %}
+    {% if ol %}
+    <h3>Quick facts</h3>
+    <dl class="quick-facts">
+      {% if ol.first_published %}<dt>First published</dt><dd>{{ ol.first_published }}</dd>{% endif %}
+      {% if ol.editions %}<dt>Editions recorded</dt><dd>{{ ol.editions }}</dd>{% endif %}
+      {% if ol.typical_pages %}<dt>Typical length</dt><dd>{{ ol.typical_pages }} pages</dd>{% endif %}
+      {% if ol.publishers %}<dt>Publishers include</dt><dd>{{ ol.publishers }}</dd>{% endif %}
+      {% if ol.subjects %}<dt>Subjects</dt><dd>{{ ol.subjects|join(', ') }}</dd>{% endif %}
+    </dl>
+    {% if ol.url %}<p class="meta">From <a href="{{ ol.url }}" target="_blank" rel="noopener">Open Library</a>, the Internet Archive's free book catalogue.</p>{% endif %}
+    {% else %}
+    <p class="meta">Open Library didn't find this book, so these facts come from the files themselves.</p>
+    {% endif %}
+  </section>
+
+  <section class="sources files">
+    <h2>The book files</h2>
+    {% if job and not job.files_deleted_at %}
+      <p>Kept for {{ file_days }} days in case you need them, then deleted automatically. The comparison stays.</p>
+      <form method="post" action="{{ url_for('delete_book_files', comparison_id=c.id) }}"
+            onsubmit="return confirm('Delete the book files now? This comparison stays.')"><button class="disregard">Delete the files now</button></form>
+    {% else %}
+      <p>Deleted{% if job and job.files_deleted_at %} on {{ job.files_deleted_at[:10] }}{% endif %}. Only this comparison is kept.</p>
+    {% endif %}
+  </section>
+</aside>
+</div>
 {% endblock %}

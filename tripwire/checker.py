@@ -2,6 +2,7 @@
 save each change into the archive, and write the weekly summary."""
 
 import json
+import logging
 import re
 import time
 from collections import Counter
@@ -11,6 +12,9 @@ from urllib.parse import urlparse
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import books, changes, db, sources
+
+BOOK_FILE_DAYS = 7          # book files are deleted after this many days; results stay
+BOOK_JOB_STUCK_MINUTES = 6  # a comparison "running" longer than this was interrupted: try again
 
 MAX_THEMES = 3
 MIN_PASSWORD = 8
@@ -382,7 +386,12 @@ class Tripwire:
             summary = changes.describe(result)
             if swaps:
                 summary += f" · {len(result['replacements'])} word swaps"
+        for info in (info_a, info_b):
+            facts = sources.open_library_facts(info.get("title"), info.get("authors"), info.get("isbn"))
+            if facts:
+                info["open_library"] = facts
         details = {"swaps": swaps, "hunks": result["hunks"][:300], "hunk_count": len(result["hunks"]),
+                   "kinds": changes.kind_counts(result["hunks"]),
                    "name_changes": result["name_changes"], "info_a": info_a, "info_b": info_b,
                    "rewritten_blocks": result["rewritten_blocks"]}
         title = title.strip() or books.clean_name(edition_b[0])
@@ -390,6 +399,90 @@ class Tripwire:
             """INSERT INTO book_comparisons (user_id, title, edition_a, edition_b, category, summary, details, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (user_id, title[:200], label_a, label_b, result["category"], summary, json.dumps(details), db.now()))
+
+    def start_book_job(self, user_id, title, edition_a, edition_b):
+        """Queue a comparison. Each edition is {"name": ..., "data": bytes} for an
+        upload, or {"link": ...}. Returns the job id; run_book_job() does the work."""
+        for which, edition in (("A", edition_a), ("B", edition_b)):
+            if not (edition.get("data") or edition.get("link")):
+                raise books.BookError(f"Add edition {which}: upload a file or paste a link.")
+        return self.conn.insert(
+            """INSERT INTO book_jobs (user_id, title, status, name_a, file_a, link_a, name_b, file_b, link_b, created_at)
+               VALUES (?, ?, 'waiting', ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, title.strip(), edition_a.get("name"), edition_a.get("data"), edition_a.get("link"),
+             edition_b.get("name"), edition_b.get("data"), edition_b.get("link"), db.now()))
+
+    def own_book_job(self, user_id, job_id):
+        return self.conn.execute("SELECT * FROM book_jobs WHERE id = ? AND user_id = ?", (job_id, user_id)).fetchone()
+
+    def run_book_job(self, job_id):
+        """Do a queued comparison. Safe to call more than once at the same time:
+        only one call does the work. Returns the job as it ends up."""
+        stuck = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - BOOK_JOB_STUCK_MINUTES * 60))
+        claimed = self.conn.execute(
+            """UPDATE book_jobs SET status = 'running', started_at = ?
+               WHERE id = ? AND (status = 'waiting' OR (status = 'running' AND started_at < ?)) RETURNING id""",
+            (db.now(), job_id, stuck)).fetchone()
+        if claimed:
+            job = self.conn.execute("SELECT * FROM book_jobs WHERE id = ?", (job_id,)).fetchone()
+            try:
+                editions = []
+                for which in ("a", "b"):
+                    data, name = job[f"file_{which}"], job[f"name_{which}"]
+                    if data is None and job[f"files_deleted_at"]:
+                        raise books.BookError("The book files were deleted, so this can't be compared again.")
+                    if data is None:
+                        name, data = books.fetch_book(job[f"link_{which}"])
+                        self.conn.execute(f"UPDATE book_jobs SET name_{which} = ?, file_{which} = ? WHERE id = ?",
+                                          (name, data, job_id))
+                    editions.append((name, bytes(data)))
+                comparison = self.compare_books(job["user_id"], job["title"], editions[0], editions[1])
+                self.conn.execute("""UPDATE book_jobs SET status = 'done', comparison_id = ?, finished_at = ?
+                                     WHERE id = ?""", (comparison, db.now(), job_id))
+            except (books.BookError, sources.SourceError) as exc:
+                self.conn.execute("UPDATE book_jobs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?",
+                                  (str(exc), db.now(), job_id))
+            except Exception:
+                logging.exception("Book comparison %s failed", job_id)
+                self.conn.execute("UPDATE book_jobs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?",
+                                  ("Something unexpected went wrong reading these books. Try again, or try "
+                                   "different files.", db.now(), job_id))
+        return self.conn.execute("SELECT id, user_id, status, error, comparison_id FROM book_jobs WHERE id = ?",
+                                 (job_id,)).fetchone()
+
+    def unfinished_book_jobs(self, user_id=None):
+        stuck = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - BOOK_JOB_STUCK_MINUTES * 60))
+        query = """SELECT id, user_id, title, status, error, name_a, link_a, name_b, link_b, created_at
+                   FROM book_jobs WHERE (status = 'waiting' OR (status = 'running' AND started_at < ?))"""
+        params = [stuck]
+        if user_id is not None:
+            query += " AND user_id = ?"
+            params.append(user_id)
+        return self.conn.execute(query + " ORDER BY id", params).fetchall()
+
+    def book_jobs_in_progress(self, user_id):
+        """Comparisons that are waiting, running or failed, to show on the Books page."""
+        return self.conn.execute("""SELECT id, title, status, error, name_a, link_a, name_b, link_b, created_at
+                                    FROM book_jobs WHERE user_id = ? AND status != 'done' ORDER BY id DESC""",
+                                 (user_id,)).fetchall()
+
+    def book_job_for(self, comparison_id):
+        return self.conn.execute("""SELECT id, created_at, files_deleted_at FROM book_jobs
+                                    WHERE comparison_id = ?""", (comparison_id,)).fetchone()
+
+    def delete_book_files(self, job_id=None, older_than_days=None):
+        """Delete stored book files: one job's now, or every job's older than N days.
+        The comparison results are kept."""
+        query = "UPDATE book_jobs SET file_a = NULL, file_b = NULL, files_deleted_at = ? WHERE files_deleted_at IS NULL"
+        params = [db.now()]
+        if job_id is not None:
+            query += " AND id = ?"
+            params.append(job_id)
+        if older_than_days is not None:
+            cutoff = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - older_than_days * 86400))
+            query += " AND created_at < ?"
+            params.append(cutoff)
+        self.conn.execute(query, params)
 
     def book_comparisons(self, user_id):
         return self.conn.execute("SELECT * FROM book_comparisons WHERE user_id = ? ORDER BY id DESC",
@@ -400,6 +493,7 @@ class Tripwire:
                                  (comparison_id, user_id)).fetchone()
 
     def delete_book_comparison(self, comparison_id):
+        self.conn.execute("DELETE FROM book_jobs WHERE comparison_id = ?", (comparison_id,))
         self.conn.execute("DELETE FROM book_comparisons WHERE id = ?", (comparison_id,))
 
     # -- the archive --------------------------------------------------------

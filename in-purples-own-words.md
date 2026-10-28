@@ -217,3 +217,17 @@ Purple's answers to Claude's questions: humans vs bots = **live from Cloudflare*
 > I would like you to please find this paper or that report that Google did in 2010 ... I do not want to get this information strictly just from Open Library because it would be very biassed, and that would mean you'll get stuck with just Western books for the most part ... in Lesotho, a lot of people don't quite go through the entire process of ISBN and whatnot. Sometimes you just go through the process of just printing it
 >
 > I've also attached the rubric for the Buildathon. Make suggestions ... I do not necessarily want to completely change everything of mine just to fit the rubric, but I do kind of want to be able to get a pretty high score. Maybe I might even win.
+
+---
+
+## 11. Typing screens, human check, rabbit (29 Oct 2026)
+
+> When one opens the tripwire page, I would like for the text to be animated in that format, where it appears with one letter each.
+>
+> I would like to run an embedded bot gate. By embedded, I mean I don't necessarily want to use an external tool or an external service provider for this. ... If one passes that test, it says "Done," and then you click "Completed" ... after it does that, I would like for it to say "Human after all." It should only do that one time when you get on and create your account
+>
+> I would like for my stamp, like my signature, to be that little white rabbit. Just make that white rabbit super tiny ... keep it right at the bottom right of the screen.
+>
+> I would like it to say, "You are now entering unrestricted knowledge preservation." ... when you click on books ... locked in for a minimum of 2 seconds to force a bit of a pause.
+>
+> every single piece of text that comes on like that should have the animated typing thing to it. The idea is to force people to slow down just a little bit. Don't try to speed everything up all the time. You're going to get there anyway. Just give it a few extra seconds. Calm down. ... Don't forget my bunny.

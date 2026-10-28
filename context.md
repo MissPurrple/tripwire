@@ -88,3 +88,7 @@
 - Styled error pages (404 etc.) and loading states.
 - Stats: world book estimate (Google 2010 count + 2.2M-4M new titles/yr) in its own chart; Open Library chart separate; note about unrecorded books (e.g. Lesotho). Open Library fetching is gentler and shows progress/problems.
 - Rubric suggestions: see rubric-suggestions.md (Purple to decide which to act on).
+
+## Built 29 Oct (morning)
+- Typewriter text on all green screens; human check at sign-up (own, no external service); "HUMAN AFTER ALL" once after sign-up; Books intro "YOU ARE NOW ENTERING UNRESTRICTED KNOWLEDGE PRESERVATION" (min 2 s); Purple's white rabbit signature fixed bottom-right on every page (public/static/rabbit.png, made from Purple's own drawing).
+- Purple's design references: green-on-black CRT text (Daft Punk "Human After All", "restricted data files", a terminal with a blinking cursor).

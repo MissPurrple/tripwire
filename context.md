@@ -65,6 +65,8 @@
 - **Songs:** later, not a priority.
 
 ## Priority set 28 Oct (evening)
-1. Books, idea 2: compare two digital editions word by word (on request only). BUILDING.
-2. Videos page: YouTube and TikTok links (removed, private, restricted, retitled). BUILDING after books.
+1. Books, idea 2: compare two digital editions word by word (on request only). BUILT (Books tab).
+2. Videos page: YouTube and TikTok links (removed, private, restricted, retitled). BUILT (Videos tab). TikTok can't show 'sensitive' labels publicly.
 3. Books, idea 1 (edition facts over time via Open Library) only if there's time.
+
+- Not yet tested against the real YouTube/TikTok (blocked from Claude's cloud computer); first real test is on the live site.

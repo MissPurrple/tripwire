@@ -123,3 +123,17 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; max-hei
 .stats > div { margin: 0; display: flex; flex-direction: column; }
 .stats strong { font-size: 1.8rem; font-family: Georgia, serif; }
 .stats span { color: var(--muted); font-size: .85rem; }
+
+/* Public copies */
+.link-button { color: var(--muted); font-size: .9rem; padding: 2px 6px; }
+.offer { border-left: 5px solid var(--major); }
+.inline-button { display: inline-block; }
+.confirm { max-width: 640px; }
+.warning { padding-left: 20px; }
+.warning li { margin: 6px 0; }
+.confirm-form { display: grid; gap: 10px; margin-top: 16px; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 1rem; color: var(--text); }
+.check input { width: auto; margin-top: 4px; }
+.understood { padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+.entry.copy { border-left-color: var(--edit); }
+.single { border-style: dashed; }

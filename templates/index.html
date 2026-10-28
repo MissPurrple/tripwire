@@ -1,50 +1,31 @@
 {% extends "base.html" %}
-{% block content %}
-<section class="intro">
-  <h1>What you're watching</h1>
-  <p>Tripwire checks these for changes. When something changes, it saves the before and after into
-     <a href="{{ url_for('archive') }}">your archive</a>{% if new_count %} (<strong>{{ new_count }}</strong> waiting for you to look at){% endif %},
-     Tripwire checks once a day by itself. No pings. Just a <a href="{{ url_for('summary') }}">weekly summary</a>.</p>
-  {% if themes %}
-    <form method="post" action="{{ url_for('check_all') }}"><button>Check everything now</button></form>
-  {% endif %}
-</section>
 
-{% for t in themes %}
-<section class="theme">
-  <div class="theme-head">
-    <h2>{{ t.name }}</h2>
-    <form method="post" action="{{ url_for('remove_theme', theme_id=t.id) }}"
-          onsubmit="return confirm('Remove the theme “{{ t.name }}” and everything in it, including its archive entries?')">
-      <button class="link danger">Remove theme</button>
-    </form>
-  </div>
-
-  {% if watches[t.id] %}
+{% macro watch_list(theme_id) %}
+  {% if watches[theme_id] %}
   <ul class="watches">
-    {% for w in watches[t.id] %}
+    {% for w in watches[theme_id] %}
     <li>
       <div>
         <span class="kind">{{ 'Wikipedia' if w.kind == 'wikipedia' else 'Web page' }}</span>
         <a href="{{ w.target if w.kind == 'web' else 'https://' ~ (w.lang or 'en') ~ '.wikipedia.org/wiki/' ~ w.target|replace(' ', '_') }}" target="_blank" rel="noopener">{{ w.label }}</a>
         <span class="status">{{ w.last_status or '' }}{% if w.last_checked_at %} · checked {{ w.last_checked_at[:10] }}{% endif %}</span>
-        {% if w.baseline_archive_url %}<a class="small" href="{{ w.baseline_archive_url }}" target="_blank" rel="noopener">Internet Archive copy</a>{% endif %}
       </div>
       <div class="row-actions">
         <form method="post" action="{{ url_for('check_watch', watch_id=w.id) }}"><button class="link">Check</button></form>
+        {% if w.last_status != 'Removed' %}<a class="link-button" href="{{ url_for('public_copy', kind='watch', item_id=w.id) }}">Keep a public copy…</a>{% endif %}
         <form method="post" action="{{ url_for('remove_watch', watch_id=w.id) }}"
-              onsubmit="return confirm('Stop watching this? Its archive entries will be deleted too.')"><button class="link danger">Stop watching</button></form>
+              onsubmit="return confirm('Stop watching this? Its changes will be deleted too. Public copies you made stay in your Archive.')"><button class="link danger">Stop watching</button></form>
       </div>
     </li>
     {% endfor %}
   </ul>
-  {% else %}
-  <p class="empty">Nothing here yet. Add a Wikipedia article or a web page below.</p>
   {% endif %}
+{% endmacro %}
 
-  <form class="add-watch" method="post" action="{{ url_for('add_watch', theme_id=t.id) }}">
+{% macro add_form(action, placeholder) %}
+  <form class="add-watch" method="post" action="{{ action }}">
     <label>Watch
-      <input name="target" required placeholder="A Wikipedia article name, or paste any link">
+      <input name="target" required placeholder="{{ placeholder }}">
     </label>
     <label>Type
       <select name="kind">
@@ -60,13 +41,44 @@
     </label>
     <button>Add</button>
   </form>
+{% endmacro %}
+
+{% block content %}
+<section class="intro">
+  <h1>What you're watching</h1>
+  <p>Tripwire checks these once a day by itself. When something changes, it saves the before and after
+     in <a href="{{ url_for('change_list') }}">Changes</a>{% if new_count %} (<strong>{{ new_count }}</strong> waiting for you to look at){% endif %}.
+     No pings. Just a <a href="{{ url_for('summary') }}">weekly summary</a>.</p>
+  {% if themes or (single and watches[single.id]) %}
+    <form method="post" action="{{ url_for('check_all') }}"><button>Check everything now</button></form>
+  {% endif %}
+</section>
+
+<section class="theme single">
+  <div class="theme-head"><h2>{{ single_name }}</h2></div>
+  <p class="meta">One article or page you care about on its own, no theme needed. These don't count towards your {{ max_themes }} themes.</p>
+  {% if single %}{{ watch_list(single.id) }}{% endif %}
+  {{ add_form(url_for('add_single_link'), "Paste any link, or a Wikipedia article name") }}
+</section>
+
+{% for t in themes %}
+<section class="theme">
+  <div class="theme-head">
+    <h2>{{ t.name }}</h2>
+    <form method="post" action="{{ url_for('remove_theme', theme_id=t.id) }}"
+          onsubmit="return confirm('Remove the theme “{{ t.name }}” and everything in it, including its changes? Public copies you made stay in your Archive.')">
+      <button class="link danger">Remove theme</button>
+    </form>
+  </div>
+  {% if watches[t.id] %}{{ watch_list(t.id) }}{% else %}<p class="empty">Nothing here yet. Add a Wikipedia article or a web page below.</p>{% endif %}
+  {{ add_form(url_for('add_watch', theme_id=t.id), "A Wikipedia article name, or paste any link") }}
 </section>
 {% endfor %}
 
 {% if themes|length < max_themes %}
 <section class="theme new-theme">
   <h2>{{ 'Add a theme' if themes else 'Start with a theme' }}</h2>
-  <p>A theme is something you care about, like “Indigenous communities”. You can have up to {{ max_themes }}.</p>
+  <p>A theme groups the things you care about, like “Indigenous communities”. You can have up to {{ max_themes }}.</p>
   <form method="post" action="{{ url_for('add_theme') }}" class="inline">
     <input name="name" required placeholder="e.g. Indigenous communities" value="{{ '' if themes else 'Indigenous communities' }}">
     <button>Add theme</button>

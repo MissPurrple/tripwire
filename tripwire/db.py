@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS themes (
     id          {id},
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
+    loose       INTEGER NOT NULL DEFAULT 0,      -- 1 = the "Single links" list, not a real theme
     created_at  TEXT NOT NULL
 );
 
@@ -70,8 +71,25 @@ CREATE TABLE IF NOT EXISTS entries (
     compare_url         TEXT,                    -- e.g. Wikipedia's own diff page
     details             TEXT NOT NULL DEFAULT '{{}}',  -- JSON: hunks, names, editors
     kept                INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS archive_copies (
+    id           {id},
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    watch_id     INTEGER REFERENCES watches(id) ON DELETE SET NULL,
+    entry_id     INTEGER REFERENCES entries(id) ON DELETE SET NULL,
+    label        TEXT NOT NULL,                  -- what was saved, in words
+    page_url     TEXT NOT NULL,                  -- the page that was saved
+    archive_url  TEXT NOT NULL,                  -- where the Internet Archive keeps it
+    created_at   TEXT NOT NULL
 )
 """
+
+# Columns added after Tripwire first went online. Older databases get them
+# added automatically; nothing to do by hand.
+ADDED_COLUMNS = [
+    ("themes", "loose", "INTEGER NOT NULL DEFAULT 0"),
+]
 
 
 class SetupError(RuntimeError):
@@ -133,7 +151,18 @@ class Connection:
             schema = SCHEMA.format(id="INTEGER PRIMARY KEY")
         for statement in schema.split(";"):
             self.raw.execute(statement)
+        for table, column, definition in ADDED_COLUMNS:
+            if column not in self._columns(table):
+                self.raw.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
         self.raw.commit()
+
+    def _columns(self, table):
+        if self.postgres:
+            rows = self.raw.execute("SELECT column_name AS name FROM information_schema.columns "
+                                    "WHERE table_name = %s", (table,)).fetchall()
+        else:
+            rows = self.raw.execute(f"PRAGMA table_info({table})").fetchall()
+        return {row["name"] for row in rows}
 
     def execute(self, sql, params=()):
         """Run one SQL statement and save it. Use .fetchone() / .fetchall() on

@@ -13,9 +13,16 @@
   <div><strong>{{ s.big|length }}</strong><span>big changes</span></div>
   <div><strong>{{ s.names|length }}</strong><span>name spelling changes</span></div>
 </section>
+{% if s.offer_copy %}
+<section class="theme offer">
+  <h2>Important changes this week</h2>
+  <p>These look like big changes. If any of them matter to you, consider keeping a public, permanent copy with the Internet Archive.</p>
+  <ul>{% for e in s.offer_copy %}<li><a href="{{ url_for('entry', entry_id=e.id) }}">{{ e.label }}</a>: {{ CATEGORIES[e.category] }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
 <section>
   <h2>By size</h2>
-  <ul>{% for cat, n in s.counts.most_common() %}<li><a href="{{ url_for('archive', category=cat) }}">{{ CATEGORIES[cat] }}</a>: {{ n }}</li>{% endfor %}</ul>
+  <ul>{% for cat, n in s.counts.most_common() %}<li><a href="{{ url_for('change_list', category=cat) }}">{{ CATEGORIES[cat] }}</a>: {{ n }}</li>{% endfor %}</ul>
 </section>
 {% endif %}
 {% endblock %}

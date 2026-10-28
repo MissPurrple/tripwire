@@ -16,7 +16,7 @@ import time
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
 from tripwire import changes, db, sources
-from tripwire.checker import MAX_THEMES, Tripwire
+from tripwire.checker import MAX_THEMES, SINGLE_LINKS, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
 
@@ -39,7 +39,7 @@ CRON_BUDGET = int(os.environ.get("CRON_BUDGET_SECONDS", "50"))
 
 def tw():
     if "tw" not in g:
-        g.tw = Tripwire(app.config.get("DB_URL"), archive=app.config.get("ARCHIVE", True))
+        g.tw = Tripwire(app.config.get("DB_URL"))
     return g.tw
 
 
@@ -82,7 +82,7 @@ def helpers():
     return {"CATEGORIES": changes.CATEGORIES, "details": db.entry_details}
 
 
-def back_to(default="archive"):
+def back_to(default="change_list"):
     """Where to go after Keep/Disregard. Only ever a page on this site."""
     target = request.form.get("next", "")
     return target if target.startswith("/") and not target.startswith("//") else url_for(default)
@@ -128,13 +128,16 @@ def logout():
 @login_required
 def index():
     conn = tw().conn
-    themes = conn.execute("SELECT * FROM themes WHERE user_id = ? ORDER BY id", (g.user["id"],)).fetchall()
+    themes = conn.execute("SELECT * FROM themes WHERE user_id = ? ORDER BY loose, id", (g.user["id"],)).fetchall()
     watches = {t["id"]: conn.execute("SELECT * FROM watches WHERE theme_id = ? ORDER BY label",
                                      (t["id"],)).fetchall() for t in themes}
+    single = next((t for t in themes if t["loose"]), None)
+    themes = [t for t in themes if not t["loose"]]
     new_count = conn.execute("""SELECT COUNT(*) AS n FROM entries e JOIN watches w ON w.id = e.watch_id
                                 JOIN themes t ON t.id = w.theme_id WHERE t.user_id = ? AND e.kept = 0""",
                              (g.user["id"],)).fetchone()["n"]
-    return render_template("index.html", themes=themes, watches=watches, new_count=new_count,
+    return render_template("index.html", themes=themes, watches=watches, single=single,
+                           single_name=SINGLE_LINKS, new_count=new_count,
                            max_themes=MAX_THEMES, lookback=LOOKBACK_CHOICES)
 
 
@@ -151,11 +154,19 @@ def add_theme():
 @app.post("/themes/<int:theme_id>/delete")
 @login_required
 def remove_theme(theme_id):
-    if not tw().own_theme(g.user["id"], theme_id):
+    theme = tw().own_theme(g.user["id"], theme_id)
+    if not theme or theme["loose"]:
         abort(404)
     tw().remove_theme(theme_id)
     flash("Theme removed.")
     return redirect(url_for("index"))
+
+
+@app.post("/single-links")
+@login_required
+def add_single_link():
+    """Watch one link on its own, outside any theme."""
+    return add_watch(tw().single_links(g.user["id"]))
 
 
 @app.post("/themes/<int:theme_id>/watches")
@@ -199,14 +210,14 @@ def check_all():
     started = time.monotonic()
     new = tw().check_all(g.user["id"], deadline=started + 25)
     flash(f"Checked. {len(new)} new archive entr{'y' if len(new) == 1 else 'ies'}.")
-    return redirect(url_for("archive") if new else url_for("index"))
+    return redirect(url_for("change_list") if new else url_for("index"))
 
 
-# -- the archive --------------------------------------------------------------
+# -- changes ------------------------------------------------------------------
 
-@app.get("/archive")
+@app.get("/changes")
 @login_required
-def archive():
+def change_list():
     category = request.args.get("category", "")
     query = """SELECT e.*, w.label, w.kind, w.target FROM entries e
                JOIN watches w ON w.id = e.watch_id JOIN themes t ON t.id = w.theme_id
@@ -216,7 +227,7 @@ def archive():
         query += " AND e.category = ?"
         params.append(category)
     entries = tw().conn.execute(query + " ORDER BY e.detected_at DESC, e.id DESC", params).fetchall()
-    return render_template("archive.html", entries=entries, category=category)
+    return render_template("changes.html", entries=entries, category=category)
 
 
 @app.get("/entries/<int:entry_id>")
@@ -224,9 +235,10 @@ def archive():
 def entry(entry_id):
     row = tw().own_entry(g.user["id"], entry_id)
     if row is None:
-        flash("That archive entry no longer exists.", "error")
-        return redirect(url_for("archive"))
-    return render_template("entry.html", e=row)
+        flash("That change is no longer in your list.", "error")
+        return redirect(url_for("change_list"))
+    return render_template("entry.html", e=row, copy_options=tw().copy_options(entry=row),
+                           copies=tw().copies(g.user["id"], entry_id=entry_id))
 
 
 @app.post("/entries/<int:entry_id>/keep")
@@ -246,6 +258,67 @@ def disregard(entry_id):
     tw().disregard(entry_id)
     flash("Disregarded: that entry has been deleted.")
     return redirect(back_to())
+
+
+# -- public Internet Archive copies: asked twice, never automatic ----------
+
+def _copy_target(kind, item_id):
+    """The entry or watched item a copy is for, and what could be saved."""
+    if kind == "entry":
+        item = tw().own_entry(g.user["id"], item_id)
+        options = tw().copy_options(entry=item) if item else []
+    else:
+        item = tw().own_watch(g.user["id"], item_id)
+        options = tw().copy_options(watch=item) if item else []
+    if not item:
+        abort(404)
+    return item, options
+
+
+@app.route("/copy/<kind>/<int:item_id>", methods=["GET", "POST"])
+@login_required
+def public_copy(kind, item_id):
+    """First ask: the button on a change or watched item brings people here.
+    Second ask: this page says plainly what a public copy means, and only
+    'Yes, save it' (with the box ticked) actually saves anything."""
+    if kind not in ("entry", "watch"):
+        abort(404)
+    item, options = _copy_target(kind, item_id)
+    if not options:
+        flash("There's nothing that can be saved for this one.", "error")
+        return redirect(url_for("index"))
+    back = url_for("entry", entry_id=item_id) if kind == "entry" else url_for("index")
+
+    if request.method == "POST":
+        if request.form.get("understood") != "yes":
+            flash("Tick the box to confirm you understand the copy will be public and permanent.", "error")
+            return redirect(request.path)
+        chosen = [o for i, o in enumerate(options) if request.form.get(f"option{i}")]
+        if not chosen:
+            flash("Choose at least one version to save.", "error")
+            return redirect(request.path)
+        saved = 0
+        for option in chosen:
+            try:
+                tw().save_public_copy(g.user["id"], option,
+                                      watch_id=item["watch_id"] if kind == "entry" else item_id,
+                                      entry_id=item_id if kind == "entry" else None)
+                saved += 1
+            except sources.SourceError as exc:
+                flash(f"Couldn't save “{option['label']}”: {exc}", "error")
+        if saved:
+            flash(f"Saved {saved} public cop{'y' if saved == 1 else 'ies'} with the Internet Archive. "
+                  "You'll find them in the Archive tab.")
+        return redirect(back)
+
+    return render_template("copy_confirm.html", item=item, kind=kind, options=options, back=back)
+
+
+@app.get("/archive")
+@login_required
+def archive():
+    """Every public Internet Archive copy this person chose to make."""
+    return render_template("archive.html", copies=tw().copies(g.user["id"]))
 
 
 @app.get("/summary")

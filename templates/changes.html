@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Changes · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>Changes</h1>
+  <p>Every change Tripwire noticed, with the before and after kept safe. <strong>Keep</strong> the ones that matter.
+     <strong>Disregard</strong> the ones that don't (like a typo fix), and they're deleted.</p>
+  <nav class="filters">
+    <a href="{{ url_for('change_list') }}" class="{{ 'on' if not category }}">All</a>
+    {% for key, label in CATEGORIES.items() %}
+      <a href="{{ url_for('change_list', category=key) }}" class="{{ 'on' if category == key }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+</section>
+{% for e in entries %}
+  {% include "_entry_card.html" %}
+{% else %}
+  <p class="empty">No changes{{ ' of this kind' if category }} yet. When something you're watching changes, it will show up here.</p>
+{% endfor %}
+{% endblock %}

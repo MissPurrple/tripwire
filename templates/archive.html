@@ -2,19 +2,22 @@
 {% block title %}Archive · Tripwire{% endblock %}
 {% block content %}
 <section class="intro">
-  <h1>Your archive</h1>
-  <p>Every change Tripwire noticed, with the before and after kept safe. <strong>Keep</strong> the ones that matter.
-     <strong>Disregard</strong> the ones that don't (like a typo fix), and they're deleted.</p>
-  <nav class="filters">
-    <a href="{{ url_for('archive') }}" class="{{ 'on' if not category }}">All</a>
-    {% for key, label in CATEGORIES.items() %}
-      <a href="{{ url_for('archive', category=key) }}" class="{{ 'on' if category == key }}">{{ label }}</a>
-    {% endfor %}
-  </nav>
+  <h1>Archive</h1>
+  <p>The public, permanent copies you chose to keep with the <a href="https://web.archive.org" target="_blank" rel="noopener">Internet Archive</a>.
+     Each link opens the copy on the Internet Archive's website.</p>
 </section>
-{% for e in entries %}
-  {% include "_entry_card.html" %}
+{% for c in copies %}
+<article class="entry copy">
+  <div class="entry-head"><span class="badge">Internet Archive</span><span class="when">saved {{ c.created_at[:10] }}</span></div>
+  <h3><a href="{{ c.archive_url }}" target="_blank" rel="noopener">{{ c.label }}</a></h3>
+  <p class="meta">Original: <a href="{{ c.page_url }}" target="_blank" rel="noopener">{{ c.page_url }}</a></p>
+  <div class="actions">
+    <a href="{{ c.archive_url }}" target="_blank" rel="noopener">Open the copy</a>
+    {% if c.entry_id %}<a href="{{ url_for('entry', entry_id=c.entry_id) }}">See the change</a>{% endif %}
+  </div>
+</article>
 {% else %}
-  <p class="empty">Nothing in the archive{{ ' of this kind' if category }} yet. When something you're watching changes, it will show up here.</p>
+<p class="empty">No public copies yet. When a big change happens, Tripwire will ask if you want to keep one.
+  You can also choose “Keep a public copy…” next to anything you're watching.</p>
 {% endfor %}
 {% endblock %}

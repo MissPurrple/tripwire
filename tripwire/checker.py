@@ -14,13 +14,16 @@ from . import changes, db, sources
 
 MAX_THEMES = 3
 MIN_PASSWORD = 8
+SINGLE_LINKS = "Single links"
+
+# Changes big enough that Tripwire offers to keep a public Internet Archive copy.
+# (Name spelling changes are only noted, never offered a copy.)
+COPY_WORTHY = {"major", "removal", "page_removed"}
 
 
 class Tripwire:
-    def __init__(self, db_url=None, archive=True):
-        """db_url: a SQLite file path or a Postgres address (see db.py).
-        archive=False turns off Internet Archive copies (used by the tests)."""
-        self.archive = archive
+    def __init__(self, db_url=None):
+        """db_url: a SQLite file path or a Postgres address (see db.py)."""
         self.conn = db.connect(db_url)
 
     # -- accounts -----------------------------------------------------------
@@ -63,11 +66,21 @@ class Tripwire:
 
     # -- themes -------------------------------------------------------------
 
+    def single_links(self, user_id):
+        """The person's list of links watched on their own, outside any theme.
+        Made the first time it's needed; it doesn't count towards MAX_THEMES."""
+        row = self.conn.execute("SELECT id FROM themes WHERE user_id = ? AND loose = 1", (user_id,)).fetchone()
+        if row:
+            return row["id"]
+        return self.conn.insert("INSERT INTO themes (user_id, name, loose, created_at) VALUES (?, ?, 1, ?)",
+                                (user_id, SINGLE_LINKS, db.now()))
+
     def add_theme(self, user_id, name):
         name = name.strip()
         if not name:
             raise ValueError("Give the theme a name.")
-        count = self.conn.execute("SELECT COUNT(*) AS n FROM themes WHERE user_id = ?", (user_id,)).fetchone()["n"]
+        count = self.conn.execute("SELECT COUNT(*) AS n FROM themes WHERE user_id = ? AND loose = 0",
+                                  (user_id,)).fetchone()["n"]
         if count >= MAX_THEMES:
             raise ValueError(f"You can have up to {MAX_THEMES} themes. Remove one to add another.")
         return self.conn.insert("INSERT INTO themes (user_id, name, created_at) VALUES (?, ?, ?)",
@@ -110,7 +123,6 @@ class Tripwire:
                        label=(parsed.netloc + parsed.path).rstrip("/"),
                        baseline_ref=None, baseline_text=page["text"], baseline_at=db.now())
 
-        # The Internet Archive copy of this first version is saved later, by save_archive_copies().
         return self.conn.insert(
             """INSERT INTO watches (theme_id, kind, label, lang, target, baseline_ref,
                    baseline_text, baseline_at, last_status, created_at)
@@ -202,14 +214,13 @@ class Tripwire:
                  new_text, watch["baseline_at"], new_at, watch["baseline_archive_url"],
                  compare_url, json.dumps(details)))
 
-        # What we just saw becomes the new baseline for next time. Its Internet
-        # Archive copy is saved later, by save_archive_copies().
+        # What we just saw becomes the new baseline for next time.
         self.conn.execute(
             """UPDATE watches SET baseline_ref = ?, baseline_text = ?, baseline_at = ?,
                    baseline_archive_url = NULL, last_checked_at = ?, last_status = ?
                WHERE id = ?""",
             (new_ref, new_text, new_at, db.now(),
-             "Changed: saved to archive" if entry_id else "No changes to the text", watch["id"]))
+             "Changed: see Changes" if entry_id else "No changes to the text", watch["id"]))
         return entry_id
 
     def _record_removal(self, watch, summary, before_link=None):
@@ -217,11 +228,6 @@ class Tripwire:
             self._set_status(watch["id"], "Removed")
             return None  # already recorded last time
         before_archive = watch["baseline_archive_url"]
-        if not before_archive and self.archive and watch["kind"] == "web":
-            try:
-                before_archive = sources.archive_latest(watch["target"])
-            except sources.SourceError:
-                pass  # still record the removal, just without the link
         details = {"before_link": before_link} if before_link else {}
         entry_id = self.conn.insert(
             """INSERT INTO entries (watch_id, detected_at, category, summary, words_removed,
@@ -236,40 +242,51 @@ class Tripwire:
         self.conn.execute("UPDATE watches SET last_checked_at = ?, last_status = ? WHERE id = ?",
                           (db.now(), status, watch_id))
 
-    # -- Internet Archive copies -------------------------------------------
+    # -- public Internet Archive copies (only ever made when a person asks, twice) --
 
-    def save_archive_copies(self, deadline=None):
-        """Ask the Internet Archive to save every version Tripwire is holding as a
-        baseline but hasn't got a public copy of yet. Each save can take up to a
-        minute, so this stops once `deadline` (a time.monotonic() value) passes;
-        the rest are picked up next time. Returns how many copies were saved."""
-        if not self.archive:
-            return 0
-        saved = 0
-        pending = self.conn.execute("""SELECT * FROM watches WHERE baseline_archive_url IS NULL
-                                       AND last_status != 'Removed' ORDER BY id""").fetchall()
-        for watch in pending:
-            if deadline and time.monotonic() > deadline:
-                break
-            if watch["kind"] == "wikipedia":
-                url = sources.Wikipedia(watch["lang"] or "en").revision_url(watch["baseline_ref"])
-            else:
-                url = watch["target"]
-            timeout = 120 if deadline is None else max(5, deadline - time.monotonic())
-            try:
-                link = sources.archive_save(url, timeout=timeout)
-            except sources.SourceError:
-                continue  # try again next time
-            if not link:
-                continue
-            self.conn.execute("UPDATE watches SET baseline_archive_url = ? WHERE id = ? AND baseline_at = ?",
-                              (link, watch["id"], watch["baseline_at"]))
-            # The same version is the "after" of the change that produced it.
-            self.conn.execute("""UPDATE entries SET after_archive_url = ?
-                                 WHERE watch_id = ? AND after_at = ? AND after_archive_url IS NULL""",
-                              (link, watch["id"], watch["baseline_at"]))
-            saved += 1
-        return saved
+    def copy_options(self, entry=None, watch=None):
+        """What could be saved to the Internet Archive for an archive entry or a
+        watched item, as a list of {"label", "url"}. Empty when nothing can be
+        saved (e.g. the page is already gone)."""
+        if entry is not None:
+            if entry["category"] not in COPY_WORTHY or entry["category"] == "page_removed":
+                return []
+            d = db.entry_details(entry)
+            if entry["kind"] == "wikipedia":
+                return [{"label": f"{entry['label']}: version before the change ({(entry['before_at'] or '')[:10]})",
+                         "url": d["before_link"]},
+                        {"label": f"{entry['label']}: version after the change ({(entry['after_at'] or '')[:10]})",
+                         "url": d["after_link"]}]
+            return [{"label": f"{entry['label']}: as it is right now", "url": entry["target"]}]
+        if watch["last_status"] == "Removed":
+            return []
+        if watch["kind"] == "wikipedia":
+            wiki = sources.Wikipedia(watch["lang"] or "en")
+            return [{"label": f"{watch['label']}: version of {(watch['baseline_at'] or '')[:10]}",
+                     "url": wiki.revision_url(watch["baseline_ref"])}]
+        return [{"label": f"{watch['label']}: as it is right now", "url": watch["target"]}]
+
+    def save_public_copy(self, user_id, option, watch_id=None, entry_id=None):
+        """Ask the Internet Archive to keep a public, permanent copy. Only call
+        this after the person has confirmed. Returns the copy's link."""
+        link = sources.archive_save(option["url"], timeout=90)
+        if not link:
+            raise sources.SourceError("The Internet Archive didn't say where it saved the copy. Try again later.")
+        self.conn.insert(
+            """INSERT INTO archive_copies (user_id, watch_id, entry_id, label, page_url, archive_url, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, watch_id, entry_id, option["label"], option["url"], link, db.now()))
+        return link
+
+    def copies(self, user_id, entry_id=None, watch_id=None):
+        query, params = "SELECT * FROM archive_copies WHERE user_id = ?", [user_id]
+        if entry_id is not None:
+            query += " AND entry_id = ?"
+            params.append(entry_id)
+        if watch_id is not None:
+            query += " AND watch_id = ?"
+            params.append(watch_id)
+        return self.conn.execute(query + " ORDER BY created_at DESC, id DESC", params).fetchall()
 
     # -- the archive --------------------------------------------------------
 
@@ -308,5 +325,7 @@ class Tripwire:
                 text += " Names that changed spelling: " + "; ".join(f"{o} → {n} ({label})" for label, o, n in names[:5]) + "."
             if big:
                 text += " Worth a look: " + ", ".join(dict.fromkeys(r["label"] for r in big)) + "."
+        copied = {r["entry_id"] for r in self.copies(user_id)}
+        offer_copy = [r for r in rows if r["category"] in ("major", "removal") and r["id"] not in copied]
         return {"period": period, "entries": rows, "counts": counts, "changed_items": changed_items,
-                "tracked": tracked, "names": names, "big": big, "text": text}
+                "tracked": tracked, "names": names, "big": big, "offer_copy": offer_copy, "text": text}

@@ -23,8 +23,8 @@
       </form>
     {% endif %}
     <form method="post" action="{{ url_for('disregard', entry_id=e.id) }}"
-          onsubmit="return confirm('Disregard this change? The entry will be deleted from your archive.')">
-      <input type="hidden" name="next" value="{{ request.full_path if request.endpoint != 'entry' else url_for('archive') }}">
+          onsubmit="return confirm('Disregard this change? It will be deleted from your list of changes.')">
+      <input type="hidden" name="next" value="{{ request.full_path if request.endpoint != 'entry' else url_for('change_list') }}">
       <button class="disregard">Disregard</button>
     </form>
   </div>

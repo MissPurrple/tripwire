@@ -12,6 +12,7 @@
     {% if g.user %}
     <nav>
       <a href="{{ url_for('index') }}">Watching</a>
+      <a href="{{ url_for('change_list') }}">Changes</a>
       <a href="{{ url_for('archive') }}">Archive</a>
       <a href="{{ url_for('summary') }}">Weekly summary</a>
     </nav>

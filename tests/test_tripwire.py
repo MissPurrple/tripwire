@@ -114,8 +114,8 @@ class CheckerTests(unittest.TestCase):
         if self.db_path.startswith("postgres"):
             import psycopg
             with psycopg.connect(self.db_path, autocommit=True) as conn:
-                conn.execute("DROP TABLE IF EXISTS entries, watches, themes, users CASCADE")
-        self.tw = Tripwire(self.db_path, archive=False)
+                conn.execute("DROP TABLE IF EXISTS archive_copies, entries, watches, themes, users CASCADE")
+        self.tw = Tripwire(self.db_path)
         self.user = self.tw.create_user("purple@example.org", "correct horse")
         FakeWikipedia.articles = {"Warli": [
             {"revid": 1, "user": "A", "comment": "start", "text": "The Warli are an Adivasi people of Maharashtra."},
@@ -232,26 +232,48 @@ class CheckerTests(unittest.TestCase):
         stored = self.tw.conn.execute("SELECT password_hash FROM users").fetchone()["password_hash"]
         self.assertNotIn("correct horse", stored)  # passwords are never stored as typed
 
-    def test_archive_copies_saved_for_before_and_after(self):
-        self.tw.archive = True
-        watch = self.tw.add_watch(self.theme, "Warli")
-        with mock.patch.object(sources, "archive_save", lambda url, timeout: "https://web.archive.org/web/1/" + url):
-            self.assertEqual(self.tw.save_archive_copies(), 1)
-            self.add_version(2, "The Warli are an Adivasi people of India.")
-            self.tw.check_watch(watch)
-            self.assertEqual(self.tw.save_archive_copies(), 1)
-            self.assertEqual(self.tw.save_archive_copies(), 0)  # nothing left to save
-        [entry] = self.entries()
-        self.assertTrue(entry["before_archive_url"].endswith("oldid=1"))
-        self.assertTrue(entry["after_archive_url"].endswith("oldid=2"))
+    def make_major_change(self, revid=2):
+        self.add_version(revid, " ".join(f"rewritten{i}" for i in range(150)))
 
-    def test_archive_failure_is_retried_later(self):
-        self.tw.archive = True
-        self.tw.add_watch(self.theme, "Warli")
-        with mock.patch.object(sources, "archive_save", side_effect=sources.SourceError("busy")):
-            self.assertEqual(self.tw.save_archive_copies(), 0)
-        with mock.patch.object(sources, "archive_save", lambda url, timeout: "https://web.archive.org/web/1/x"):
-            self.assertEqual(self.tw.save_archive_copies(), 1)
+    def test_single_links_dont_count_as_themes(self):
+        single = self.tw.single_links(self.user)
+        self.assertEqual(self.tw.single_links(self.user), single)  # made once, then reused
+        self.tw.add_theme(self.user, "Languages")
+        self.tw.add_theme(self.user, "Formula One")  # 3 real themes, plus Single links
+        self.tw.add_watch(single, "Warli")
+        self.assertEqual(self.tw.weekly_summary(self.user)["tracked"], 1)
+
+    def test_which_changes_are_offered_a_public_copy(self):
+        watch = self.tw.add_watch(self.theme, "Warli")
+        self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")  # name respelling only
+        tiny = self.tw.own_entry(self.user, self.tw.check_watch(watch))
+        self.assertEqual(self.tw.copy_options(entry=tiny), [])
+        self.make_major_change(3)
+        major = self.tw.own_entry(self.user, self.tw.check_watch(watch))
+        options = self.tw.copy_options(entry=major)
+        self.assertEqual([o["url"][-7:] for o in options], ["oldid=2", "oldid=3"])  # before and after
+        watched = self.tw.own_watch(self.user, watch)
+        self.assertEqual(len(self.tw.copy_options(watch=watched)), 1)
+
+    def test_removed_page_cannot_get_a_new_copy(self):
+        watch = self.tw.add_watch(self.theme, "Warli")
+        del FakeWikipedia.articles["Warli"]
+        removed = self.tw.own_entry(self.user, self.tw.check_watch(watch))
+        self.assertEqual(self.tw.copy_options(entry=removed), [])
+        self.assertEqual(self.tw.copy_options(watch=self.tw.own_watch(self.user, watch)), [])
+
+    def test_nothing_is_ever_saved_automatically(self):
+        watch = self.tw.add_watch(self.theme, "Warli")
+        self.make_major_change()
+        with mock.patch.object(sources, "archive_save", side_effect=AssertionError("saved without asking!")):
+            self.tw.check_all()
+        self.assertEqual(self.tw.copies(self.user), [])
+        self.assertEqual(len(self.tw.weekly_summary(self.user)["offer_copy"]), 1)
+
+    def test_archive_save_without_a_link_is_not_guessed(self):
+        response = mock.Mock(status_code=200, headers={}, url="https://web.archive.org/save/x")
+        with mock.patch.object(sources, "_get", return_value=response):
+            self.assertIsNone(sources.archive_save("https://example.org"))
 
 
 class WebAppTests(CheckerTests):
@@ -260,14 +282,14 @@ class WebAppTests(CheckerTests):
     def setUp(self):
         super().setUp()
         import app as webapp
-        webapp.app.config.update(DB_URL=self.db_path, ARCHIVE=False, TESTING=True)
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
         self.client = webapp.app.test_client()
 
     def log_in(self, email="purple@example.org", password="correct horse"):
         return self.client.post("/login", data={"email": email, "password": password}, follow_redirects=True)
 
     def test_pages_need_an_account(self):
-        for path in ["/", "/archive", "/summary", "/entries/1"]:
+        for path in ["/", "/changes", "/archive", "/summary", "/entries/1", "/copy/entry/1"]:
             response = self.client.get(path)
             self.assertEqual(response.status_code, 302)
             self.assertTrue(response.headers["Location"].endswith("/login"))
@@ -297,7 +319,7 @@ class WebAppTests(CheckerTests):
 
         # Disregard redirects back inside the site, never to another website.
         response = self.client.post("/entries/1/disregard", data={"next": "//evil.example"})
-        self.assertTrue(response.headers["Location"].endswith("/archive"))
+        self.assertTrue(response.headers["Location"].endswith("/changes"))
         self.assertEqual(self.entries(), [])
 
     def test_people_cannot_touch_each_others_things(self):
@@ -308,6 +330,7 @@ class WebAppTests(CheckerTests):
         self.log_in("stranger@example.org", "stranger danger")
 
         self.assertNotIn(b"Warli", self.client.get("/").data)
+        self.assertNotIn(b"Warli", self.client.get("/changes").data)
         self.assertNotIn(b"Warli", self.client.get("/archive").data)
         self.assertNotIn(b"Warlee", self.client.get(f"/entries/{entry}", follow_redirects=True).data)
         for path in [f"/entries/{entry}/disregard", f"/entries/{entry}/keep", f"/watches/{watch}/delete",
@@ -315,6 +338,54 @@ class WebAppTests(CheckerTests):
             self.assertEqual(self.client.post(path, data={"target": "X"}).status_code, 404, path)
         self.assertEqual(len(self.entries()), 1)
         self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM watches").fetchone()["n"], 1)
+
+    def test_public_copy_is_asked_twice(self):
+        self.log_in()
+        watch = self.tw.add_watch(self.theme, "Warli")
+        self.make_major_change()
+        entry = self.tw.check_watch(watch)
+        saved_urls = []
+
+        def fake_save(url, timeout):
+            saved_urls.append(url)
+            return "https://web.archive.org/web/2026/" + url
+
+        with mock.patch.object(sources, "archive_save", fake_save):
+            # Ask 1: the change page offers it, but saves nothing.
+            page = self.client.get(f"/entries/{entry}").data
+            self.assertIn(b"Is this important to you?", page)
+            # Ask 2: the confirmation page explains, still saves nothing.
+            page = self.client.get(f"/copy/entry/{entry}").data
+            self.assertIn(b"public and permanent", page)
+            self.assertEqual(saved_urls, [])
+            # Saying yes without ticking "I understand" saves nothing.
+            self.client.post(f"/copy/entry/{entry}", data={"option0": "1"})
+            self.assertEqual(saved_urls, [])
+            # Confirmed: only the chosen version is saved.
+            self.client.post(f"/copy/entry/{entry}", data={"option1": "1", "understood": "yes"})
+        self.assertEqual(len(saved_urls), 1)
+        self.assertTrue(saved_urls[0].endswith("oldid=2"))
+        archive_page = self.client.get("/archive").data
+        self.assertIn(b"https://web.archive.org/web/2026/", archive_page)
+        self.assertIn(b"Your public copies of this change", self.client.get(f"/entries/{entry}").data)
+        self.assertEqual(self.tw.weekly_summary(self.user)["offer_copy"], [])  # no longer offered
+
+    def test_single_link_from_the_web_page(self):
+        self.log_in()
+        response = self.client.post("/single-links", data={"target": "Warli", "days_ago": "0"}, follow_redirects=True)
+        self.assertIn(b"Now watching it", response.data)
+        self.assertIn(b"Single links", response.data)
+        single = self.tw.single_links(self.user)
+        self.assertEqual(self.client.post(f"/themes/{single}/delete").status_code, 404)  # can't be removed
+
+    def test_strangers_cannot_make_copies_of_your_things(self):
+        watch = self.tw.add_watch(self.theme, "Warli")
+        self.tw.create_user("stranger@example.org", "stranger danger")
+        self.log_in("stranger@example.org", "stranger danger")
+        with mock.patch.object(sources, "archive_save", side_effect=AssertionError("should not save")):
+            self.assertEqual(self.client.get(f"/copy/watch/{watch}").status_code, 404)
+            self.assertEqual(self.client.post(f"/copy/watch/{watch}",
+                                              data={"option0": "1", "understood": "yes"}).status_code, 404)
 
     def test_daily_check_needs_the_secret(self):
         watch = self.tw.add_watch(self.theme, "Warli")
@@ -348,7 +419,7 @@ class SetupTests(unittest.TestCase):
 
     def test_plain_words_error_page(self):
         import app as webapp
-        webapp.app.config.update(DB_URL=None, ARCHIVE=False, TESTING=False, PROPAGATE_EXCEPTIONS=False)
+        webapp.app.config.update(DB_URL=None, TESTING=False, PROPAGATE_EXCEPTIONS=False)
         client = webapp.app.test_client()
         with mock.patch.dict(os.environ, {"VERCEL": "1"}, clear=True):
             response = client.post("/login", data={"email": "a@b.co", "password": "whatever1"})

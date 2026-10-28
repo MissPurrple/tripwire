@@ -197,7 +197,7 @@ def archive_save(url, timeout=120):
         return "https://web.archive.org" + location
     if "/web/" in response.url:
         return response.url
-    return archive_latest(url)
+    return None
 
 
 def archive_latest(url):

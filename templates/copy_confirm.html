@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Keep a public copy? · Tripwire{% endblock %}
+{% block content %}
+<p><a href="{{ back }}">← Back</a></p>
+<section class="theme confirm">
+  <h1>Keep a public, permanent copy?</h1>
+  <p>Tripwire will ask the <strong>Internet Archive</strong> (web.archive.org) to save
+     {{ 'these versions' if options|length > 1 else 'this' }} exactly as {{ 'they are' if options|length > 1 else 'it is' }} now.</p>
+  <ul class="warning">
+    <li><strong>Public:</strong> anyone in the world can see the copy.</li>
+    <li><strong>Permanent:</strong> it is very difficult to remove once it's made.</li>
+    <li>If this is knowledge that a community keeps private or sacred, it may be better <strong>not</strong> to make a public copy. Tripwire already keeps its own private copy of the text for you.</li>
+  </ul>
+  <form method="post" class="confirm-form">
+    {% if options|length > 1 %}<p>Choose what to save:</p>{% endif %}
+    {% for o in options %}
+      <label class="check"><input type="checkbox" name="option{{ loop.index0 }}" value="1" checked> {{ o.label }}</label>
+    {% endfor %}
+    <label class="check understood"><input type="checkbox" name="understood" value="yes" required>
+      I understand this copy will be public and permanent.</label>
+    <div class="actions">
+      <button>Yes, save a public copy</button>
+      <a href="{{ back }}">Cancel</a>
+    </div>
+    <p class="meta">Saving can take up to a minute. Please keep this page open.</p>
+  </form>
+</section>
+{% endblock %}

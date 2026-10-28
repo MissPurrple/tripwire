@@ -2,11 +2,33 @@
 {% block title %}{{ e.label }} · Tripwire{% endblock %}
 {% block content %}
 {% set d = details(e) %}
-<p><a href="{{ url_for('archive') }}">← Back to archive</a></p>
+<p><a href="{{ url_for('change_list') }}">← Back to changes</a></p>
 {% include "_entry_card.html" %}
 
+{% if copies %}
+<section class="sources copies">
+  <h2>Your public copies of this change</h2>
+  <ul>{% for c in copies %}<li><a href="{{ c.archive_url }}" target="_blank" rel="noopener">{{ c.label }}</a> <span class="meta">saved {{ c.created_at[:10] }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% if copy_options and not copies %}
+<section class="sources offer">
+  <h2>Is this important to you?</h2>
+  <p>This looks like a big change. If it matters, you can ask the Internet Archive to keep a
+     <strong>public, permanent copy</strong>{% if e.kind == 'web' %} of the page as it is right now, before anything else changes{% else %} of the versions before and after the change{% endif %}.</p>
+  <a class="button secondary inline-button" href="{{ url_for('public_copy', kind='entry', item_id=e.id) }}">Keep a public copy…</a>
+</section>
+{% elif e.category == 'page_removed' %}
+<section class="sources offer">
+  <h2>This page is gone</h2>
+  <p>A new copy can't be made any more. Tripwire still has its own copy of the text (below).
+     {% if e.kind == 'web' %}The Internet Archive may have older copies:
+     <a href="https://web.archive.org/web/*/{{ e.target }}" target="_blank" rel="noopener">look for older copies</a>.{% endif %}</p>
+</section>
+{% endif %}
+
 <section class="sources">
-  <h2>Copies of this change</h2>
+  <h2>Where to see each version</h2>
   <ul>
     <li><strong>Before</strong> (version from {{ (e.before_at or '')[:10] }}):
       {% if d.before_link %}<a href="{{ d.before_link }}" target="_blank" rel="noopener">Wikipedia's permanent copy</a>{% endif %}

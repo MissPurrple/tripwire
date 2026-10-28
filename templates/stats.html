@@ -38,12 +38,17 @@
   {% if books %}
   <div class="stats-split">
     <div>
-      <p class="meta">Running totals since {{ books.first_year }} (books from before {{ books.first_year }} are counted in the starting value). A running total can only go up: you can't unpublish a book.</p>
-      {% set chart = books_chart %}{% set chart_title = "Running total of books published, all, print only and with a digital copy" %}{% set value_format = 'number' %}
+      <p class="meta">Running totals: a running total can only go up, because you can't unpublish a book.
+        Open Library's lines start in {{ books.first_year }} (older books are counted in the starting value).
+        The world estimate starts from Google's 2010 count.</p>
+      {% set chart = books_chart %}{% set chart_title = "Running total of books: Open Library (all, print only, with a digital copy) and a world estimate from Google's 2010 count" %}{% set value_format = 'number' %}
       {% include "_line_chart.html" %}
     </div>
     <aside class="stat-side">
-      <div class="stat-tile"><span>All books on record</span><strong>{{ '{:,}'.format(books.totals.all) }}</strong></div>
+      <div class="stat-tile"><span>World estimate, {{ books.world.now.year }}</span><strong>≈ {{ '{:,}'.format(books.world.now.mid) }}</strong>
+        <em>between {{ '{:,}'.format(books.world.now.low) }} and {{ '{:,}'.format(books.world.now.high) }}</em></div>
+      <div class="stat-tile"><span>Google's count, 2010</span><strong>{{ '{:,}'.format(google_count) }}</strong></div>
+      <div class="stat-tile"><span>In Open Library</span><strong>{{ '{:,}'.format(books.totals.all) }}</strong></div>
       <div class="stat-tile"><span>Peak year, print only</span><strong>{{ books.peaks.print.year }}</strong><em>{{ '{:,}'.format(books.peaks.print.count) }} books</em></div>
       <div class="stat-tile"><span>Peak year, digital</span><strong>{{ books.peaks.digital.year }}</strong><em>{{ '{:,}'.format(books.peaks.digital.count) }} books</em></div>
       <div class="stat-tile"><span>Lowest year, print only</span><strong>{{ books.lows.print.year }}</strong><em>{{ '{:,}'.format(books.lows.print.count) }} books</em></div>
@@ -52,13 +57,32 @@
   </div>
   {% endif %}
   {% if books_missing %}
-    <p class="meta" id="books-progress" data-fill="{{ url_for('stats_fill_books') }}">
-      Gathering data from Open Library: {{ books_total - books_missing }} of {{ books_total }} years so far…
-      {% if books %}The chart fills in as more arrive.{% endif %}</p>
+    <div class="progress-box" id="books-progress" data-fill="{{ url_for('stats_fill_books') }}"
+         data-done="{{ books_total - books_missing }}" data-total="{{ books_total }}">
+      <p class="meta"><span class="progress-text">Collecting book counts from Open Library: {{ books_total - books_missing }} of {{ books_total }} years so far.</span>
+        {% if books %}The chart fills in as more arrive.{% endif %}</p>
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ books_total }}" aria-valuenow="{{ books_total - books_missing }}">
+        <span style="width: {{ 100 * (books_total - books_missing) / books_total }}%"></span></div>
+      <p class="meta progress-problem" {% if not (books and books.problem) %}hidden{% endif %}>{{ books.problem if books else '' }}</p>
+    </div>
   {% endif %}
-  <p class="meta">Source: <a href="https://openlibrary.org" target="_blank" rel="noopener">Open Library</a>, the Internet Archive's catalogue of tens of millions of books,
-     counted by the year each book was first published. “With a digital copy” means Open Library has a scan or ebook of it; “print only” means it doesn't.
-     No one counts every book ever published (Google's last estimate was about 130 million in 2010), so these are the books on record there.</p>
+  <details class="explain">
+    <summary>Where these numbers come from, and what they miss</summary>
+    <p><strong>Nobody has a list of every book ever published.</strong> So this shows two different views:</p>
+    <ul>
+      <li><strong>Open Library</strong> (the Internet Archive's free catalogue): real, checkable counts of books by the year they were first published,
+        and whether a scan or ebook exists (“digital copy”) or not (“print only”). It leans towards books held in Western libraries.</li>
+      <li><strong>World estimate:</strong> in 2010 Google combined about a billion records from 150+ library catalogues, ISBN databases and booksellers,
+        removed duplicates and non-books, and arrived at <strong>{{ '{:,}'.format(google_count) }}</strong> different books (each edition counted separately).
+        From there, the estimate adds {{ '{:,}'.format(per_year_low) }} to {{ '{:,}'.format(per_year_high) }} new titles a year: the lower figure is
+        UNESCO's estimate of recorded titles, the higher one includes self-published books with ISBNs. The middle line is the average of the two.</li>
+      <li><strong>Books no one recorded.</strong> Many books never get an ISBN or a library record: printed locally and sold by hand, as often happens in
+        Lesotho and many other places. They're in none of these numbers, so the real total is higher than every line here.</li>
+    </ul>
+    <p class="meta">Sources:</p>
+    <ul class="meta">{% for title, link in world_sources %}<li><a href="{{ link }}" target="_blank" rel="noopener">{{ title }}</a></li>{% endfor %}
+      <li><a href="https://openlibrary.org" target="_blank" rel="noopener">Open Library</a> search counts, by first publication year</li></ul>
+  </details>
 </section>
 
 {# ---------------------------------------------------------------- your tripwire #}
@@ -118,11 +142,26 @@
   // Keep fetching book counts until every year is in, then show the full chart.
   var progress = document.getElementById("books-progress");
   if (progress) {
+    var stuck = 0, lastDone = +progress.dataset.done;
     var fill = function () {
       fetch(progress.dataset.fill, { method: "POST", credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
-        progress.firstChild.textContent = "Gathering data from Open Library: " + (d.total - d.missing) + " of " + d.total + " years so far… ";
-        if (d.missing === 0) { window.location.reload(); } else { setTimeout(fill, 1000); }
-      }).catch(function () {});
+        var done = d.total - d.missing;
+        progress.querySelector(".progress-text").textContent =
+          "Collecting book counts from Open Library: " + done + " of " + d.total + " years so far.";
+        progress.querySelector(".progress span").style.width = (100 * done / d.total) + "%";
+        var problem = progress.querySelector(".progress-problem");
+        if (d.problem) { problem.textContent = d.problem; problem.hidden = false; }
+        if (d.missing === 0) { window.location.reload(); return; }
+        stuck = done > lastDone ? 0 : stuck + 1;
+        lastDone = done;
+        if (stuck >= 3) {
+          problem.textContent = (d.problem || "Open Library isn't answering right now.") +
+            " Tripwire will keep collecting during its daily run; come back later.";
+          problem.hidden = false;
+          return;
+        }
+        setTimeout(fill, stuck ? 15000 : 1500);  // wait longer when Open Library is busy
+      }).catch(function () { setTimeout(fill, 15000); });
     };
     fill();
   }

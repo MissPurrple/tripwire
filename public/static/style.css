@@ -260,3 +260,12 @@ code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px;
 
 main.wide, .top.wide { max-width: 1160px; }
 .more-changes > summary { cursor: pointer; color: var(--accent); padding: 8px 0; }
+
+.line-chart .band { opacity: .18; }
+.line-chart .marker { fill: var(--card); stroke: var(--text); stroke-width: 2; }
+.band-swatch { opacity: .35; }
+.marker-key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--text); margin-right: 6px; vertical-align: -1px; }
+.progress { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--accent); transition: width .5s; }
+.explain { margin-top: 12px; }
+.explain > summary { cursor: pointer; color: var(--accent); }

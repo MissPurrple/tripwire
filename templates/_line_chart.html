@@ -8,8 +8,14 @@
     {% for t in chart.x_ticks %}
       <text class="axis" x="{{ '%.1f'|format(t.x) }}" y="{{ chart.base + 18 }}" text-anchor="middle">{{ t.label }}</text>
     {% endfor %}
+    {% if chart.band %}
+      <polygon class="band" points="{{ chart.band.points }}" fill="var(--series-{{ chart.band.series }})"><title>{{ chart.band.label }}</title></polygon>
+    {% endif %}
     {% for l in chart.lines %}
       <path class="line" d="{{ l.path }}" stroke="var(--series-{{ l.series }})"></path>
+    {% endfor %}
+    {% for m in chart.markers %}
+      <circle class="marker" cx="{{ '%.1f'|format(m.x) }}" cy="{{ '%.1f'|format(m.y) }}" r="5"><title>{{ m.label }}</title></circle>
     {% endfor %}
     {% for c in chart.columns %}
       <rect class="hover-col" x="{{ '%.1f'|format(c.x) }}" y="{{ chart.top }}" width="{{ '%.2f'|format(c.w) }}" height="{{ chart.plot_h }}">
@@ -19,9 +25,12 @@
     {% endfor %}
   </svg>
   <figcaption class="line-legend">
-    {% for l in chart.lines %}
+    {% for l in chart.lines if l.last is not none %}
       <span><span class="swatch" style="background: var(--series-{{ l.series }})"></span>{{ l.label }}:
         <strong>{{ ('{:.1f}%'.format(l.last)) if value_format == 'percent' else '{:,}'.format(l.last|int) }}</strong></span>
     {% endfor %}
+    {% if chart.band %}<span><span class="swatch band-swatch" style="background: var(--series-{{ chart.band.series }})"></span>{{ chart.band.label }}:
+      <strong>{{ '{:,}'.format(chart.band.low|int) }} – {{ '{:,}'.format(chart.band.high|int) }}</strong></span>{% endif %}
+    {% for m in chart.markers %}<span><span class="marker-key"></span>{{ m.label }}</span>{% endfor %}
   </figcaption>
 </figure>

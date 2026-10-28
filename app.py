@@ -532,12 +532,19 @@ def stats_page():
                                           y_suffix="%", y_max=100, x_ticks=7)
     books_chart = None
     if book_data:
+        world = book_data["world"]
         books_chart = charts.line_chart(book_data["years"], [
-            ("all", "All books", book_data["running"]["all"]),
-            ("print", "Print only", book_data["running"]["print"]),
-            ("digital", "With a digital copy", book_data["running"]["digital"])], width=520, height=280)
+            ("all", "Open Library: all books", book_data["running"]["all"]),
+            ("print", "Open Library: print only", book_data["running"]["print"]),
+            ("digital", "Open Library: with a digital copy", book_data["running"]["digital"]),
+            ("world", "World estimate (middle)", world["mid"])], width=520, height=300,
+            band={"series": 4, "low": world["low"], "high": world["high"], "label": "World estimate range"},
+            markers=[{"index": book_data["years"].index(stats.GOOGLE_2010_YEAR), "value": stats.GOOGLE_2010_COUNT,
+                      "label": "Google's 2010 count: 129,864,880"}] if stats.GOOGLE_2010_YEAR in book_data["years"] else [])
     return render_template("stats.html", traffic=traffic, traffic_chart=traffic_chart, books=book_data,
                            books_chart=books_chart, books_missing=len(missing), books_total=total_years,
+                           world_sources=stats.WORLD_SOURCES, google_count=stats.GOOGLE_2010_COUNT,
+                           per_year_low=stats.NEW_TITLES_PER_YEAR_LOW, per_year_high=stats.NEW_TITLES_PER_YEAR_HIGH,
                            mine=_my_numbers(g.user["id"]), groups=CHANGE_GROUPS)
 
 
@@ -552,8 +559,8 @@ def stats_traffic():
 @login_required
 def stats_fill_books():
     """Fetch a few more years of book counts. The Stats page calls this until all are in."""
-    missing, total = stats.Stats(tw().conn).fill_book_years(seconds=20)
-    return jsonify(missing=missing, total=total)
+    missing, total, problem = stats.Stats(tw().conn).fill_book_years(seconds=20)
+    return jsonify(missing=missing, total=total, problem=problem)
 
 
 # -- the daily check (called by Vercel's timer, see vercel.json) -------------

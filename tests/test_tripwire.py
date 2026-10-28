@@ -874,7 +874,7 @@ class StatsTests(CheckerTests):
     def test_book_running_totals_only_go_up(self):
         from tripwire import stats
         with mock.patch.object(stats, "_open_library_year", fake_year):
-            missing, total = self.stats().fill_book_years(seconds=30)
+            missing, total, problem = self.stats().fill_book_years(seconds=30)
         self.assertEqual(missing, 0)
         b = self.stats().books()
         for key in ("all", "print", "digital"):
@@ -885,10 +885,36 @@ class StatsTests(CheckerTests):
         self.assertEqual(b["lows"]["print"]["year"], 1944)
         self.assertEqual(b["totals"]["all"], b["totals"]["print"] + b["totals"]["digital"])
 
+    def test_world_estimate_starts_at_googles_count(self):
+        from tripwire import stats
+        with mock.patch.object(stats, "_open_library_year", fake_year):
+            self.stats().fill_book_years(seconds=30)
+        b = self.stats().books()
+        i2010 = b["years"].index(2010)
+        self.assertIsNone(b["world"]["mid"][i2010 - 1])  # no estimate before Google's count
+        self.assertEqual(b["world"]["mid"][i2010], 129_864_880)
+        self.assertEqual(b["world"]["low"][i2010 + 1], 129_864_880 + 2_200_000)
+        self.assertEqual(b["world"]["high"][i2010 + 1], 129_864_880 + 4_000_000)
+        mids = [v for v in b["world"]["mid"] if v is not None]
+        self.assertEqual(mids, sorted(mids))  # only goes up
+
+    def test_backs_off_when_open_library_is_busy(self):
+        from tripwire import stats
+        calls = []
+
+        def busy(year):
+            calls.append(year)
+            return "Open Library is busy (too many requests), so Tripwire is slowing down."
+        with mock.patch.object(stats, "_open_library_year", busy):
+            missing, total, problem = self.stats().fill_book_years(seconds=30)
+        self.assertIn("busy", problem)
+        self.assertEqual(missing, total)
+        self.assertLessEqual(len(calls), 3)  # stopped after one small batch
+
     def test_book_years_fetched_a_few_at_a_time(self):
         from tripwire import stats
         with mock.patch.object(stats, "_open_library_year", fake_year):
-            missing, total = self.stats().fill_book_years(seconds=0)
+            missing, total, problem = self.stats().fill_book_years(seconds=0)
         self.assertGreater(missing, 0)
         self.assertLess(missing, total)
 
@@ -905,7 +931,7 @@ class StatsPageTests(CheckerTests):
         os.environ.pop("CLOUDFLARE_API_TOKEN", None)
         page = self.client.get("/stats").data.decode()
         self.assertIn("Not connected yet", page)
-        self.assertIn("Gathering data from Open Library: 0 of", page)
+        self.assertIn("Collecting book counts from Open Library: 0 of", page)
         self.assertIn("No changes caught yet", page)
 
     def test_page_with_everything(self):
@@ -920,7 +946,8 @@ class StatsPageTests(CheckerTests):
             page = self.client.get("/stats").data.decode()
             live = self.client.get("/stats/traffic.json").json
         for expected in ["48.7%", "51.3%", "The last 7 days", "Peak year, digital", "Lowest year, print only",
-                         "1944", "Changes by kind", "Changes per week", "Tiny &amp; formatting"]:
+                         "1944", "Changes by kind", "Changes per week", "Tiny &amp; formatting",
+                         "Google's count, 2010", "129,864,880", "World estimate", "Lesotho"]:
             self.assertIn(expected, page)
         self.assertNotIn('id="books-progress"', page)  # the progress message is gone
         self.assertEqual(live["human"], 48.7)

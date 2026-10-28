@@ -20,6 +20,25 @@ CLOUDFLARE_API = "https://api.cloudflare.com/client/v4/radar/http"
 TRAFFIC_CACHE_MINUTES = 15
 
 FIRST_YEAR = 1900          # earlier books are counted together as "before 1900"
+
+# A world estimate, separate from Open Library (which leans towards books held
+# in Western libraries). Anchored on Google's 2010 count, then adding a yearly
+# range of new titles. Books never recorded anywhere (no ISBN, no library
+# record, e.g. printed locally and sold by hand) are in none of these numbers.
+GOOGLE_2010_COUNT = 129_864_880
+GOOGLE_2010_YEAR = 2010
+NEW_TITLES_PER_YEAR_LOW = 2_200_000   # UNESCO's widely cited figure for recorded new titles
+NEW_TITLES_PER_YEAR_HIGH = 4_000_000  # estimates that include self-published ISBN titles
+WORLD_SOURCES = [
+    ("Google Books, “Books of the world, stand up and be counted! All 129,864,880 of you” (Leonid Taycher, Aug 2010)",
+     "https://www.npr.org/sections/thetwo-way/2010/08/06/129027628/google-tallies-129-864-880-titles"),
+    ("Michel et al., “Quantitative Analysis of Culture Using Millions of Digitized Books”, Science (2011)",
+     "https://pubmed.ncbi.nlm.nih.gov/21163965/"),
+    ("UNESCO estimate of ~2.2 million new titles a year (via Books published per country per year)",
+     "https://en.wikipedia.org/wiki/Books_published_per_country_per_year"),
+    ("Bowker: over 2 million self-published ISBN titles a year in the US since 2019 (Publishers Weekly)",
+     "https://www.publishersweekly.com/pw/by-topic/industry-news/publisher-news/article/91574-self-publishing-is-thriving-according-to-bowker-report.html"),
+]
 RECENT_REFRESH_DAYS = 7    # the last few years keep growing in the catalogue, so refresh them weekly
 
 
@@ -88,20 +107,27 @@ class Stats:
                 needed.append(year)
         return needed, len(keys)
 
-    def fill_book_years(self, seconds=25, workers=6):
+    def fill_book_years(self, seconds=25, workers=3):
         """Fetch some missing years from Open Library, a few at a time in parallel,
-        stopping after about `seconds`. Returns (still missing, total)."""
+        stopping after about `seconds`, or straight away if Open Library says it's
+        busy (it asks to be called gently). Returns (still missing, total, problem)."""
         deadline = time.monotonic() + seconds
         needed, total = self.book_years_needed()
+        problem = None
         with ThreadPoolExecutor(max_workers=workers) as pool:
             first = True
             while needed and (first or time.monotonic() < deadline):  # always make some progress
                 first = False
                 batch, needed = needed[:workers], needed[workers:]
-                for year, counts in zip(batch, pool.map(_open_library_year, batch)):
-                    if counts:
-                        self._put(f"books:{year}", counts)
-        return len(self.book_years_needed()[0]), total
+                for year, result in zip(batch, pool.map(_open_library_year, batch)):
+                    if isinstance(result, dict):
+                        self._put(f"books:{year}", result)
+                    else:
+                        problem = result
+                if problem and ("busy" in problem or "429" in problem):
+                    break
+        self._put("openlibrary_problem", problem)
+        return len(self.book_years_needed()[0]), total, problem
 
     def books(self):
         """Per-year and running totals for the chart, plus peak and lowest years."""
@@ -122,11 +148,25 @@ class Stats:
                 totals[key] += value          # a running total only ever goes up
                 running[key].append(totals[key])
 
+        # The world estimate, from Google's 2010 count onwards (as a low-high range and its middle).
+        world = {"low": [], "mid": [], "high": []}
+        for year in years:
+            for key, per_year_new in (("low", NEW_TITLES_PER_YEAR_LOW), ("high", NEW_TITLES_PER_YEAR_HIGH),
+                                      ("mid", (NEW_TITLES_PER_YEAR_LOW + NEW_TITLES_PER_YEAR_HIGH) // 2)):
+                world[key].append(GOOGLE_2010_COUNT + per_year_new * (year - GOOGLE_2010_YEAR)
+                                  if year >= GOOGLE_2010_YEAR else None)
+        this_year = datetime.now(timezone.utc).year
+        world["now"] = {key: GOOGLE_2010_COUNT + n * (this_year - GOOGLE_2010_YEAR) for key, n in
+                        (("low", NEW_TITLES_PER_YEAR_LOW), ("high", NEW_TITLES_PER_YEAR_HIGH))}
+        world["now"]["mid"] = (world["now"]["low"] + world["now"]["high"]) // 2
+        world["now"]["year"] = this_year
+
         def extreme(key, pick):
             value = pick(per_year[key])
             return {"year": years[per_year[key].index(value)], "count": value}
 
-        return {"years": years, "per_year": per_year, "running": running, "totals": totals,
+        return {"years": years, "per_year": per_year, "running": running, "totals": totals, "world": world,
+                "problem": self._get("openlibrary_problem"),
                 "before": before, "first_year": years[0], "last_year": years[-1],
                 "peaks": {"print": extreme("print", max), "digital": extreme("digital", max)},
                 "lows": {"print": extreme("print", min), "digital": extreme("digital", min)}}
@@ -158,19 +198,24 @@ def _human_bot(summary):
 
 
 def _open_library_year(year):
-    """{"all": books first published that year, "digital": how many have a digital copy}."""
+    """{"all": books first published that year, "digital": how many have a digital copy},
+    or a short description of what went wrong (the year is tried again later)."""
     span = "[* TO 1899]" if year == "before" else str(year)
 
     def count(query):
         response = sources._get(f"{sources.OPEN_LIBRARY}/search.json",
-                                params={"q": query, "limit": 1, "fields": "key"}, timeout=30)
+                                params={"q": query, "limit": 1, "fields": "key"}, timeout=40)
+        if response.status_code in (429, 503):
+            raise sources.SourceError("Open Library is busy (too many requests), so Tripwire is slowing down.")
         if response.status_code != 200:
-            raise sources.SourceError(f"Open Library answered with error {response.status_code}")
+            raise sources.SourceError(f"Open Library answered with error {response.status_code}.")
         data = response.json()
         return int(data.get("numFound", data.get("num_found", 0)))
 
     try:
         return {"all": count(f"first_publish_year:{span}"),
                 "digital": count(f"first_publish_year:{span} AND has_fulltext:true")}
-    except (sources.SourceError, ValueError):
-        return None  # try this year again next time
+    except sources.SourceError as exc:
+        return str(exc)
+    except ValueError:
+        return "Open Library's answer wasn't in the expected format."

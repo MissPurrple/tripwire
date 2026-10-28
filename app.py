@@ -167,7 +167,7 @@ def add_watch(theme_id):
     try:
         tw().add_watch(theme_id, request.form.get("target", ""), kind=kind,
                        days_ago=int(request.form.get("days_ago") or 0))
-        flash("Now watching it. A copy of today's version will be saved to the Internet Archive on the next check.")
+        flash("Now watching it.")
     except (ValueError, sources.SourceError) as exc:
         flash(str(exc), "error")
     return redirect(url_for("index"))
@@ -198,7 +198,6 @@ def check_watch(watch_id):
 def check_all():
     started = time.monotonic()
     new = tw().check_all(g.user["id"], deadline=started + 25)
-    tw().save_archive_copies(deadline=started + 40)
     flash(f"Checked. {len(new)} new archive entr{'y' if len(new) == 1 else 'ies'}.")
     return redirect(url_for("archive") if new else url_for("index"))
 
@@ -264,9 +263,9 @@ def cron():
     if not expected or not hmac.compare_digest(given, f"Bearer {expected}"):
         abort(403)
     started = time.monotonic()
-    new = tw().check_all(deadline=started + CRON_BUDGET * 0.6)
-    saved = tw().save_archive_copies(deadline=started + CRON_BUDGET)
-    return jsonify(new_entries=len(new), archive_copies_saved=saved,
+    # Internet Archive copies are no longer made automatically: people will choose.
+    new = tw().check_all(deadline=started + CRON_BUDGET)
+    return jsonify(new_entries=len(new),
                    seconds=round(time.monotonic() - started, 1))
 
 

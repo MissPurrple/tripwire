@@ -61,7 +61,7 @@ You can also paste links to **other-language Wikipedias** (e.g. Konkani: `https:
 
 ### From the terminal
 ```
-python -m tripwire check     # check everything now, then save Internet Archive copies
+python -m tripwire check     # check everything now
 python -m tripwire summary   # print everyone's weekly summary
 python -m unittest -v        # run the tests (no internet needed)
 ```
@@ -96,7 +96,7 @@ Vercel doesn't keep files between visits, so online Tripwire stores everything i
 4. **Redeploy:** in the **Deployments** tab, open the "…" menu on the latest deployment → **Redeploy**.
 5. Open your site's link, make an account, and add your theme.
 
-**Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, then saves Internet Archive copies, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
+**Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
 
 ## Next up
 - Delivering the weekly summary by message (once a week only).

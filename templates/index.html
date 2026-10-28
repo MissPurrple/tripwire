@@ -4,7 +4,7 @@
   <h1>What you're watching</h1>
   <p>Tripwire checks these for changes. When something changes, it saves the before and after into
      <a href="{{ url_for('archive') }}">your archive</a>{% if new_count %} (<strong>{{ new_count }}</strong> waiting for you to look at){% endif %},
-     and the Internet Archive keeps a public copy too. Tripwire checks once a day by itself. No pings. Just a <a href="{{ url_for('summary') }}">weekly summary</a>.</p>
+     Tripwire checks once a day by itself. No pings. Just a <a href="{{ url_for('summary') }}">weekly summary</a>.</p>
   {% if themes %}
     <form method="post" action="{{ url_for('check_all') }}"><button>Check everything now</button></form>
   {% endif %}

@@ -74,6 +74,28 @@ CREATE TABLE IF NOT EXISTS entries (
 """
 
 
+class SetupError(RuntimeError):
+    """Something about Tripwire's settings is missing or wrong. The message says
+    what to fix in plain words, so it's safe to show on the page."""
+
+
+# Names Vercel and database providers commonly give the database address.
+DATABASE_SETTINGS = ["DATABASE_URL", "POSTGRES_URL", "NEON_DATABASE_URL", "SUPABASE_DB_URL"]
+
+
+def find_database_url():
+    """Look for the database address under the usual names, including names
+    with a custom prefix (e.g. STORAGE_DATABASE_URL). Returns (name, address)."""
+    candidates = DATABASE_SETTINGS + sorted(
+        name for name in os.environ
+        if name.endswith(("_DATABASE_URL", "_POSTGRES_URL")) and name not in DATABASE_SETTINGS)
+    for name in candidates:
+        value = os.environ.get(name, "").strip()
+        if value.startswith(("postgres://", "postgresql://")):
+            return name, value
+    return None, None
+
+
 def now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -83,15 +105,26 @@ class Connection:
     and get rows back as dictionaries, whether it's SQLite or Postgres."""
 
     def __init__(self, url=None):
-        url = url or os.environ.get("DATABASE_URL")
+        if not url:
+            _name, url = find_database_url()
         if not url and os.environ.get("VERCEL"):
-            raise RuntimeError("Add a database: in Vercel, connect a Postgres database so DATABASE_URL is set.")
+            raise SetupError(
+                "Tripwire can't find its database. In Vercel, open your project's Storage tab and make sure "
+                "a Postgres database is connected to this project (for Production), then redeploy. "
+                "Its address should appear under Settings → Environment Variables as DATABASE_URL "
+                "or POSTGRES_URL.")
         url = url or DEFAULT_PATH
         self.postgres = url.startswith(("postgres://", "postgresql://"))
         if self.postgres:
             import psycopg
             from psycopg.rows import dict_row
-            self.raw = psycopg.connect(url, row_factory=dict_row)
+            try:
+                self.raw = psycopg.connect(url, row_factory=dict_row, connect_timeout=15)
+            except psycopg.OperationalError as exc:
+                raise SetupError(
+                    "Tripwire found a database address but couldn't connect to it. Check the database is "
+                    "running in your database provider's dashboard, and that the address in Vercel's "
+                    "Environment Variables is complete and current.") from exc
             schema = SCHEMA.format(id="SERIAL PRIMARY KEY")
         else:
             self.raw = sqlite3.connect(url, timeout=30)

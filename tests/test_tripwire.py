@@ -329,5 +329,46 @@ class WebAppTests(CheckerTests):
             self.assertEqual(self.client.get("/cron").status_code, 403)  # no secret set: always refused
 
 
+class SetupTests(unittest.TestCase):
+    """What happens when Tripwire's online settings are missing or named differently."""
+
+    def test_database_found_under_other_names(self):
+        from tripwire import db
+        cases = [
+            ({"DATABASE_URL": "postgresql://a"}, "DATABASE_URL"),
+            ({"POSTGRES_URL": "postgres://b"}, "POSTGRES_URL"),
+            ({"STORAGE_DATABASE_URL": "postgresql://c"}, "STORAGE_DATABASE_URL"),
+            ({"TRIPWIRE_POSTGRES_URL": "postgresql://d"}, "TRIPWIRE_POSTGRES_URL"),
+            ({"POSTGRES_PRISMA_URL": "prisma://x"}, None),  # not a plain Postgres address
+            ({}, None),
+        ]
+        for env, expected in cases:
+            with mock.patch.dict(os.environ, env, clear=True):
+                self.assertEqual(db.find_database_url()[0], expected, env)
+
+    def test_plain_words_error_page(self):
+        import app as webapp
+        webapp.app.config.update(DB_URL=None, ARCHIVE=False, TESTING=False, PROPAGATE_EXCEPTIONS=False)
+        client = webapp.app.test_client()
+        with mock.patch.dict(os.environ, {"VERCEL": "1"}, clear=True):
+            response = client.post("/login", data={"email": "a@b.co", "password": "whatever1"})
+        self.assertEqual(response.status_code, 500)
+        self.assertIn(b"can&#39;t find its database", response.data)
+        self.assertIn(b"Storage tab", response.data)
+
+        with mock.patch.dict(os.environ, {"VERCEL": "1", "DATABASE_URL": "postgresql://nobody@127.0.0.1:1/x"},
+                             clear=True):
+            response = client.post("/login", data={"email": "a@b.co", "password": "whatever1"})
+        self.assertEqual(response.status_code, 500)
+        self.assertIn(b"couldn&#39;t connect", response.data)
+        self.assertNotIn(b"nobody@127.0.0.1", response.data)  # never show the address itself
+        webapp.app.config.update(TESTING=True, PROPAGATE_EXCEPTIONS=None)
+
+    def test_sign_up_is_easy_to_find(self):
+        import app as webapp
+        response = webapp.app.test_client().get("/login")
+        self.assertIn(b"Make an account", response.data)
+
+
 if __name__ == "__main__":
     unittest.main()

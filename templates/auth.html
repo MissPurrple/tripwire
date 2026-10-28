@@ -18,10 +18,14 @@
     </label>
     <button>{{ 'Sign up' if mode == 'signup' else 'Log in' }}</button>
   </form>
+  <div class="switch">
   {% if mode == 'signup' %}
-    <p class="switch">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+    <p>Already have an account?</p>
+    <a class="button secondary" href="{{ url_for('login') }}">Log in instead</a>
   {% else %}
-    <p class="switch">New here? <a href="{{ url_for('signup') }}">Make an account</a></p>
+    <p>New to Tripwire?</p>
+    <a class="button secondary" href="{{ url_for('signup') }}">Make an account</a>
   {% endif %}
+  </div>
 </section>
 {% endblock %}

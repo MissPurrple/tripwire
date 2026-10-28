@@ -25,9 +25,8 @@ ON_VERCEL = bool(os.environ.get("VERCEL"))
 app = Flask(__name__, static_folder="public/static", static_url_path="/static")
 
 secret = os.environ.get("TRIPWIRE_SECRET")
-if ON_VERCEL and not secret:
-    raise RuntimeError("Add a TRIPWIRE_SECRET environment variable in Vercel (any long random text).")
 app.secret_key = secret or os.urandom(16)
+SECRET_MISSING = ON_VERCEL and not secret
 app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=ON_VERCEL,
                   SESSION_COOKIE_HTTPONLY=True)
 
@@ -52,7 +51,21 @@ def close_db(_exc):
 
 @app.before_request
 def load_user():
+    if SECRET_MISSING and request.endpoint != "static":
+        raise db.SetupError("Add a TRIPWIRE_SECRET setting in Vercel (Settings → Environment Variables, "
+                            "any long random text), then redeploy.")
     g.user = tw().user(session["user_id"]) if "user_id" in session else None
+
+
+@app.errorhandler(500)
+def server_error(error):
+    """Show a plain-words page instead of a bare 'Internal Server Error'.
+    The full details still go to the logs (Vercel: the Logs tab)."""
+    original = getattr(error, "original_exception", None)
+    setup_problem = str(original) if isinstance(original, db.SetupError) else None
+    if "user" not in g:
+        g.user = None
+    return render_template("error.html", setup_problem=setup_problem), 500
 
 
 def login_required(view):

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong · Tripwire{% endblock %}
+{% block content %}
+<section class="theme auth">
+  {% if setup_problem %}
+    <h1>Tripwire needs a setting fixed</h1>
+    <p>{{ setup_problem }}</p>
+  {% else %}
+    <h1>Something went wrong</h1>
+    <p>Tripwire hit an unexpected problem. Nothing you did caused it.</p>
+    <p class="meta">If you run this site: the details are in the logs (on Vercel, the project's <strong>Logs</strong> tab).</p>
+  {% endif %}
+  <p><a href="{{ url_for('index') }}">← Try again</a></p>
+</section>
+{% endblock %}

@@ -63,3 +63,8 @@
 - Purple wondered about a one-day delay before offering a copy, then agreed the offer should be on the change itself. Not built as a delay. Ask if it comes up again.
 - **Books** (on-demand only, never scheduled): compare editions; metadata like page counts over time, author name spellings, summaries, character names. Claude's brainstorm is in the chat; nothing built yet.
 - **Songs:** later, not a priority.
+
+## Priority set 28 Oct (evening)
+1. Books, idea 2: compare two digital editions word by word (on request only). BUILDING.
+2. Videos page: YouTube and TikTok links (removed, private, restricted, retitled). BUILDING after books.
+3. Books, idea 1 (edition facts over time via Open Library) only if there's time.

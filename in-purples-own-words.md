@@ -171,3 +171,13 @@ Answers to Claude's questions:
 On talking a lot:
 > Damn, this Wispr Flow makes me talk a whole lot. Do let me know if you think I should be saying less.
 (Claude's answer: no. Ending with a short "decisions:" list helps.)
+
+---
+
+## 8. Books and videos priority (28 Oct 2026)
+
+> build 2 first, then 1 if there's time
+>
+> I really want books in there, so let's do that one first. We can get to one later if we have time.
+>
+> I would like to add the ability to do the "like" videos, so the YouTube and the TikTok links. I would like a page for those as well.

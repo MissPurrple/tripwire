@@ -80,7 +80,7 @@ python -m unittest -v        # run the tests (no internet needed)
 | `templates/`, `public/static/` | Page layouts and styling |
 | `vercel.json` | Tells Vercel to run the daily check |
 | `tests/` | Automatic checks |
-| `notes/` | Project notes and decisions |
+| (`notes` branch) | Project notes and decisions, kept separate from the code |
 
 ## Putting it online with Vercel
 

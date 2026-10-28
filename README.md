@@ -76,7 +76,7 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/checker.py` | Adds watches, checks for changes, keeps/disregards entries, writes the weekly summary |
 | `tripwire/changes.py` | Compares before and after text and judges how big the change is |
 | `tripwire/sources.py` | Talks to Wikipedia, ordinary websites, and the Internet Archive |
-| `tripwire/db.py` | Storage: one file, `tripwire.db`, on your computer |
+| `tripwire/db.py` | Storage: a `tripwire.db` file on your laptop, or a Postgres database online |
 | `templates/`, `public/static/` | Page layouts and styling |
 | `vercel.json` | Tells Vercel to run the daily check |
 | `tests/` | Automatic checks |
@@ -103,4 +103,3 @@ Vercel doesn't keep files between visits, so online Tripwire stores everything i
 - **Social video watching:** paste a YouTube or TikTok link and Tripwire notices if the video is removed, made private, marked sensitive or age-restricted, or retitled.
 - **"Watch this with Tripwire" browser extension:** one click to add the page you're on. Also short, live watching while your browser is open (e.g. a BBC live news page), with a sound or ping when it updates.
 - Offline, preservation-first copies through **[Kiwix](https://kiwix.org/en/)**. Kiwix packages Wikipedia and other knowledge sites into single files ("ZIM" files) that anyone can keep and read with no internet. Tripwire could compare live articles against a Kiwix copy, and keep its own archive in a format Kiwix can open.
-- Accounts, so different people can each have their own themes.

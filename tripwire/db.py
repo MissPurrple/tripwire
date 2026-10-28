@@ -96,6 +96,14 @@ CREATE TABLE IF NOT EXISTS book_comparisons (
     created_at  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS feedback (
+    id          {id},
+    user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    tried       TEXT,                            -- which part of Tripwire they tried
+    message     TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS book_jobs (
     id               {id},
     user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -120,6 +128,8 @@ CREATE TABLE IF NOT EXISTS book_jobs (
 # added automatically; nothing to do by hand.
 ADDED_COLUMNS = [
     ("themes", "loose", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "weekly_email", "INTEGER NOT NULL DEFAULT 1"),   # 1 = send the weekly summary by email
+    ("users", "summary_sent_at", "TEXT"),                       # when the last one went out
 ]
 
 

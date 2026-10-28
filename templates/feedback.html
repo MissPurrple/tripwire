@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Feedback · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>Feedback</h1>
+  <p>What people trying Tripwire have said. Only the site owner can see this page.</p>
+</section>
+{% for f in feedback %}
+<article class="entry">
+  <div class="entry-head"><span class="badge">{{ f.tried or 'General' }}</span><span class="when">{{ f.created_at[:16]|replace('T', ' ') }}</span></div>
+  <p class="feedback-message">{{ f.message }}</p>
+  <p class="meta">{{ f.email or 'deleted account' }}</p>
+</article>
+{% else %}
+<p class="empty">No feedback yet. Share the About page with your testers: it has the feedback box.</p>
+{% endfor %}
+{% endblock %}

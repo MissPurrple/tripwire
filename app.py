@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.exceptions import HTTPException
 
-from tripwire import books, changes, charts, db, humancheck, sources, stats
+from tripwire import books, changes, charts, db, humancheck, mailer, sources, stats
 from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
@@ -567,7 +567,112 @@ def delete_book_comparison(comparison_id):
 @app.get("/summary")
 @login_required
 def summary():
-    return render_template("summary.html", s=tw().weekly_summary(g.user["id"]))
+    return render_template("summary.html", s=tw().weekly_summary(g.user["id"]), email_ready=mailer.configured(),
+                           weekly_email=bool(g.user["weekly_email"]))
+
+
+def site_url():
+    """The site's address for links in emails: SITE_URL if set, otherwise the address being visited."""
+    return (os.environ.get("SITE_URL") or request.url_root).rstrip("/")
+
+
+def send_weekly_summary(user):
+    """Email one person their weekly summary. Raises mailer.MailError if it can't be sent."""
+    s = tw().weekly_summary(user["id"])
+    context = {"s": s, "site": site_url(), "email": user["email"], "CATEGORIES": changes.CATEGORIES}
+    subject = (f"Tripwire: {len(s['entries'])} change{'s' if len(s['entries']) != 1 else ''} this week"
+               if s["entries"] else "Tripwire: a quiet week, nothing changed")
+    mailer.send(user["email"], subject, render_template("emails/weekly.txt", **context),
+                render_template("emails/weekly.html", **context))
+    tw().mark_summary_sent(user["id"])
+
+
+@app.post("/summary/email")
+@login_required
+def summary_email_setting():
+    on = request.form.get("weekly_email") == "on"
+    tw().set_weekly_email(g.user["id"], on)
+    flash("Weekly emails are on: one every Monday." if on else "Weekly emails are off.")
+    return redirect(url_for("summary"))
+
+
+@app.post("/summary/send")
+@login_required
+def summary_send_now():
+    """Send this week's summary straight away (handy for a demo). At most once every 2 minutes."""
+    if time.time() - session.get("summary_sent_now", 0) < 120:
+        flash("One just went out. Give it a couple of minutes before sending another.", "error")
+        return redirect(url_for("summary"))
+    try:
+        send_weekly_summary(g.user)
+    except mailer.MailError as exc:
+        flash(str(exc), "error")
+    else:
+        session["summary_sent_now"] = time.time()
+        flash(f"Sent to {g.user['email']}. It can take a minute to arrive (check spam the first time).")
+    return redirect(url_for("summary"))
+
+
+# -- about, feedback, and demo data ------------------------------------------
+
+def is_admin():
+    """The site owner(s): emails listed in the ADMIN_EMAILS setting (comma-separated)."""
+    admins = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
+    return bool(g.user) and g.user["email"].lower() in admins
+
+
+@app.context_processor
+def admin_flag():
+    return {"is_admin": is_admin() if "user" in g else False}
+
+
+FEEDBACK_AREAS = ["Watching pages", "Changes", "Videos", "Books", "Stats", "Public copies", "Weekly summary",
+                  "The look and feel", "Something else"]
+
+
+@app.get("/about")
+def about():
+    return render_template("about.html", totals=tw().totals(), areas=FEEDBACK_AREAS)
+
+
+@app.post("/feedback")
+@login_required
+def send_feedback():
+    try:
+        tw().add_feedback(g.user["id"], request.form.get("tried"), request.form.get("message"))
+    except ValueError as exc:
+        flash(str(exc), "error")
+    else:
+        flash("Thank you! Your feedback went straight to the person who made Tripwire.")
+    return redirect(url_for("about") + "#feedback")
+
+
+@app.get("/feedback")
+@login_required
+def feedback_inbox():
+    if not is_admin():
+        abort(404)
+    return render_template("feedback.html", feedback=tw().all_feedback())
+
+
+@app.post("/demo-data")
+@login_required
+def demo_data():
+    """Fill the signed-in person's own account with real examples (for pitches and exploring)."""
+    report = tw().add_demo_data(g.user["id"], deadline=time.monotonic() + 40)
+    parts = [f"{report['watched']} Wikipedia article{'s' if report['watched'] != 1 else ''} added"
+             f" ({report['changes']} with changes in the last 90 days)"]
+    if report["video"]:
+        parts.append("a video")
+    message = "Examples added: " + ", ".join(parts) + "."
+    if report["unfinished"]:
+        message += " Some were left out to keep this quick: press the button again to add the rest."
+    if report["problems"]:
+        message += " Couldn't add: " + "; ".join(report["problems"][:3]) + "."
+    flash(message, "error" if report["problems"] and not report["watched"] else "message")
+    if report["book_job"]:
+        return redirect(url_for("book_job", job_id=report["book_job"]))
+    return redirect(url_for("index"))
 
 
 # -- stats --------------------------------------------------------------------
@@ -681,10 +786,21 @@ def cron():
         tw().run_book_job(job["id"])
         finished += 1
     tw().delete_book_files(older_than_days=BOOK_FILE_DAYS)
+    # Mondays: send each person who wants it their weekly summary.
+    emailed = 0
+    if mailer.configured() and time.gmtime().tm_wday == 0:
+        for user in tw().users_due_summary():
+            if time.monotonic() > started + CRON_BUDGET:
+                break
+            try:
+                send_weekly_summary(user)
+                emailed += 1
+            except mailer.MailError:
+                app.logger.exception("Weekly summary email to user %s failed", user["id"])
     remaining = started + CRON_BUDGET - time.monotonic()
     if remaining > 5:
         stats.Stats(tw().conn).fill_book_years(seconds=remaining - 3)
-    return jsonify(new_entries=len(new), book_jobs_run=finished,
+    return jsonify(new_entries=len(new), book_jobs_run=finished, summaries_emailed=emailed,
                    seconds=round(time.monotonic() - started, 1))
 
 

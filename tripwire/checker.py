@@ -505,6 +505,114 @@ class Tripwire:
         """Delete an archive entry the person doesn't care about."""
         self.conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
 
+    # -- weekly summary email ------------------------------------------------
+
+    SUMMARY_EVERY_DAYS = 6  # "weekly", with a day's slack so a late daily run never skips a week
+
+    def set_weekly_email(self, user_id, on):
+        self.conn.execute("UPDATE users SET weekly_email = ? WHERE id = ?", (1 if on else 0, user_id))
+
+    def users_due_summary(self):
+        cutoff = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - self.SUMMARY_EVERY_DAYS * 86400))
+        return self.conn.execute("""SELECT * FROM users WHERE weekly_email = 1
+                                    AND (summary_sent_at IS NULL OR summary_sent_at < ?) ORDER BY id""",
+                                 (cutoff,)).fetchall()
+
+    def mark_summary_sent(self, user_id):
+        self.conn.execute("UPDATE users SET summary_sent_at = ? WHERE id = ?", (db.now(), user_id))
+
+    # -- feedback from people trying Tripwire --------------------------------
+
+    def add_feedback(self, user_id, tried, message):
+        message = (message or "").strip()
+        if len(message) < 3:
+            raise ValueError("Write a few words first.")
+        return self.conn.insert("INSERT INTO feedback (user_id, tried, message, created_at) VALUES (?, ?, ?, ?)",
+                                (user_id, (tried or "").strip()[:60], message[:4000], db.now()))
+
+    def all_feedback(self):
+        return self.conn.execute("""SELECT f.*, u.email FROM feedback f LEFT JOIN users u ON u.id = f.user_id
+                                    ORDER BY f.id DESC""").fetchall()
+
+    # -- demo data: real examples to explore (only ever added to one person's own account) --
+
+    DEMO_THEMES = {
+        "Indigenous communities": ["Adivasi", "Warli", "Siddi", "Basotho", "Indigenous peoples"],
+        "Language & memory": ["Konkani language", "Sotho language", "Endangered language", "Oral tradition"],
+    }
+    DEMO_SINGLE_LINKS = ["Internet Archive"]
+    DEMO_VIDEO = "https://www.youtube.com/watch?v=jNQXAC9IVRw"  # "Me at the zoo", the first YouTube video (2005)
+    DEMO_BOOK = ("Frankenstein: the 1818 edition vs the 1831 rewrite",
+                 "https://www.gutenberg.org/cache/epub/41445/pg41445.txt",   # 1818 edition
+                 "https://www.gutenberg.org/cache/epub/42324/pg42324.txt")   # 1831 edition
+    DEMO_LOOK_BACK_DAYS = 90
+
+    def add_demo_data(self, user_id, deadline=None):
+        """Add the demo examples to this person's account, skipping anything already there.
+        Stops adding when `deadline` (time.monotonic()) passes. Returns a report."""
+        report = {"watched": 0, "changes": 0, "video": False, "book_job": None, "problems": [], "unfinished": False}
+
+        def out_of_time():
+            if deadline and time.monotonic() > deadline:
+                report["unfinished"] = True
+                return True
+            return False
+
+        mine = {(w["target"] or "").lower() for w in self.conn.execute(
+            "SELECT w.target FROM watches w JOIN themes t ON t.id = w.theme_id WHERE t.user_id = ?", (user_id,)).fetchall()}
+        themes = {t["name"]: t["id"] for t in self.conn.execute(
+            "SELECT id, name FROM themes WHERE user_id = ? AND loose = 0", (user_id,)).fetchall()}
+        plan = []
+        for name, titles in self.DEMO_THEMES.items():
+            if name not in themes:
+                try:
+                    themes[name] = self.add_theme(user_id, name)
+                except ValueError:  # already has 3 themes: use single links instead
+                    themes[name] = self.single_links(user_id)
+            plan += [(themes[name], title) for title in titles]
+        plan += [(self.single_links(user_id), title) for title in self.DEMO_SINGLE_LINKS]
+
+        new_watches = []
+        for theme_id, title in plan:
+            if title.lower() in mine or out_of_time():
+                continue
+            try:
+                new_watches.append(self.add_watch(theme_id, title, kind="wikipedia", days_ago=self.DEMO_LOOK_BACK_DAYS))
+                report["watched"] += 1
+            except (ValueError, sources.SourceError) as exc:
+                report["problems"].append(f"{title}: {exc}")
+        for watch_id in new_watches:
+            if out_of_time():
+                break
+            if self.check_watch(watch_id):
+                report["changes"] += 1
+
+        if self.DEMO_VIDEO.lower() not in mine and not out_of_time():
+            try:
+                self.add_video(user_id, self.DEMO_VIDEO)
+                report["video"] = True
+            except (ValueError, sources.SourceError) as exc:
+                report["problems"].append(f"Video: {exc}")
+
+        title, link_a, link_b = self.DEMO_BOOK
+        already = self.conn.execute("SELECT id FROM book_jobs WHERE user_id = ? AND link_a = ? AND link_b = ?",
+                                    (user_id, link_a, link_b)).fetchone()
+        if not already:
+            report["book_job"] = self.start_book_job(user_id, title, {"link": link_a}, {"link": link_b})
+        return report
+
+    # -- totals for the About page (counts only, nothing personal) -----------
+
+    def totals(self):
+        def count(sql):
+            return self.conn.execute(sql).fetchone()["n"]
+        return {"people": count("SELECT COUNT(*) AS n FROM users"),
+                "watched": count("SELECT COUNT(*) AS n FROM watches"),
+                "changes": count("SELECT COUNT(*) AS n FROM entries"),
+                "books": count("SELECT COUNT(*) AS n FROM book_comparisons"),
+                "copies": count("SELECT COUNT(*) AS n FROM archive_copies"),
+                "feedback": count("SELECT COUNT(*) AS n FROM feedback")}
+
     # -- weekly summary -----------------------------------------------------
 
     def weekly_summary(self, user_id, days=7):

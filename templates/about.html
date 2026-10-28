@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}About · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>About Tripwire</h1>
+  <div class="screen about-screen" data-typewriter="24">
+    <p class="screen-line big" data-speed="60">THE RECORD OF THE WORLD IS QUIETLY CHANGING.</p>
+    <p class="screen-line soft">Pages vanish. Articles get rewritten. Books get edited between editions. Videos disappear.
+      Most of the time, nobody notices. Tripwire notices, and keeps a copy.</p>
+  </div>
+</section>
+
+<section class="theme">
+  <h2>Who it's for</h2>
+  <ul class="about-list">
+    <li><strong>Indigenous communities, and the people who document them.</strong> Their knowledge is thin online, and what exists is easy to rewrite, poison or delete.</li>
+    <li><strong>Independent journalists, storytellers and archivists,</strong> whose work lives on platforms that can remove it overnight.</li>
+    <li><strong>Researchers, librarians and Wikipedia editors</strong> who need to know what a source said before it changed.</li>
+    <li><strong>Anyone whose subject is easy to overlook:</strong> a minority language, a local history, a person who isn't famous.</li>
+  </ul>
+</section>
+
+<section class="theme">
+  <h2>Why it exists</h2>
+  <blockquote class="founder-quote">
+    “I would like to ensure that Indigenous knowledge does not just die with the people who have this knowledge if it is not documented,
+    [and] get preserved and archived in its most raw and most honest format, such that there is still a point of reference that cannot
+    necessarily be prompt-injected with some poisoning.”
+    <footer>Purple, Tripwire's maker</footer>
+  </blockquote>
+  <p>As AI learns from the internet, whatever survives online starts to count as the truth. Communities with little written about them
+     risk being left out, or misrepresented by whoever edits last. Tripwire is a small tool against that: it watches the record, and it keeps the receipts.</p>
+</section>
+
+<section class="theme">
+  <h2>What it does</h2>
+  <ul class="about-list">
+    <li><strong>Watches</strong> Wikipedia articles (in any language) and any web page, grouped into themes or as single links, once a day.</li>
+    <li><strong>Keeps the before and after</strong> of every change, sorts it from a tiny typo to a large removal, and flags names spelled differently.</li>
+    <li><strong>Watches videos</strong> on YouTube and TikTok for removals, private videos, age restrictions and new titles.</li>
+    <li><strong>Compares two editions of a book</strong> word by word: swapped words, renamed people and places, removed passages, plus facts about both editions.</li>
+    <li><strong>Keeps public copies</strong> with the Internet Archive, only when you choose.</li>
+    <li><strong>Sends one calm summary a week</strong>, by email if you like, instead of a ping for every change.</li>
+  </ul>
+</section>
+
+<section class="theme">
+  <h2>Deliberate choices</h2>
+  <dl class="choices">
+    <dt>No AI inside, on purpose.</dt>
+    <dd>Tripwire compares texts with plain, fixed rules. It gives the same answer every time, it's free to run, and it can't make things up,
+        which matters for a tool about keeping the record honest.</dd>
+    <dt>Public copies are asked for twice.</dt>
+    <dd>A copy at the Internet Archive is public and very hard to remove. Tripwire only offers one for big changes, asks twice,
+        and reminds you that knowledge a community keeps private or sacred may be better left uncopied.</dd>
+    <dt>A weekly summary, not a ping for every change.</dt>
+    <dd>Alerts in the middle of your day mostly cause panic. One summary a week is enough to notice what matters.</dd>
+    <dt>Names are watched closely.</dt>
+    <dd>A person's or place's name spelled differently can mean a language is spreading, or fading. Tripwire flags it.</dd>
+    <dt>Book files are deleted after 7 days.</dt>
+    <dd>Only the comparison is kept. Copyrighted books stay private to you.</dd>
+    <dt>Privacy by default.</dt>
+    <dd>No ads, no selling data. Fonts are served by Tripwire itself, so visitors' browsers don't contact a font company.
+        The site counts anonymous visits with Vercel Web Analytics, which uses no cookies.</dd>
+    <dt>Our own human check.</dt>
+    <dd>Signing up asks a question in words and does a little maths in the background, with no outside service watching you.
+        No check stops a determined AI; this one makes automated sign-ups slow and costly.</dd>
+    <dt>Honest numbers.</dt>
+    <dd>The Stats page says what it can't count: books printed locally without an ISBN or a library record, as often happens
+        in Lesotho and many other places, aren't in anyone's totals.</dd>
+    <dt>Slow on purpose.</dt>
+    <dd>Text types itself out, and Books pauses for a moment before it opens. Preservation is patient work.</dd>
+  </dl>
+</section>
+
+<section class="theme">
+  <h2>What it can't do (yet)</h2>
+  <ul class="about-list">
+    <li>TikTok doesn't publicly say when a video is marked sensitive, so Tripwire can't see that.</li>
+    <li>YouTube sometimes blocks servers from reading video pages; Tripwire then knows less (but never reports a false removal).</li>
+    <li>Scanned PDFs (pictures of pages) can't be read yet.</li>
+    <li>The Internet Archive can only save a page as it is now. Once a page has changed, the old version can only be saved if it still exists somewhere (Wikipedia keeps every version; most websites don't).</li>
+  </ul>
+  <p class="meta">Next: a “Watch this with Tripwire” browser button, short live watching (like a news live page), and offline copies with <a href="https://kiwix.org/en/" target="_blank" rel="noopener">Kiwix</a>.</p>
+</section>
+
+<section class="theme">
+  <h2>How Tripwire changed</h2>
+  <p class="meta">Built in two days at the Edge City Buildathon (October 2026), in response to its purpose and to what didn't work.</p>
+  <ol class="timeline">
+    <li><strong>The idea:</strong> watch for edits to information about Indigenous communities.</li>
+    <li><strong>Alerts → a weekly summary.</strong> A ping for every edit would just make people panic. Now it's one calm summary.</li>
+    <li><strong>Automatic Internet Archive copies → asked twice.</strong> Copies are public and permanent, and some knowledge shouldn't be public. Now Tripwire only offers, and only for big changes.</li>
+    <li><strong>Themes only → single links too.</strong> Sometimes you care about one page, not a whole topic.</li>
+    <li><strong>Added videos,</strong> because so much independent journalism and storytelling now lives on YouTube and TikTok.</li>
+    <li><strong>Added books,</strong> after hearing of books being quietly reworded between editions.</li>
+    <li><strong>A cluttered list of changes → a chart, highlights and book facts.</strong> The first version was a wall of text.</li>
+    <li><strong>Fake changes from Project Gutenberg's licence text → ignored.</strong> Two identical books looked different.</li>
+    <li><strong>Open Library only → plus a world estimate.</strong> One catalogue leans towards Western libraries; the page now says what no one can count.</li>
+    <li><strong>Going live:</strong> fixed a Vercel “not found” error and a missing database, and a bug the tests caught before anyone saw it.</li>
+    <li><strong>A plain look → a retro computer</strong> that slows you down a little, on purpose.</li>
+    <li><strong>Next: what testers tell us.</strong> {% if totals.feedback %}{{ totals.feedback }} piece{{ 's' if totals.feedback != 1 }} of feedback so far.{% else %}Leave yours below.{% endif %}</li>
+  </ol>
+</section>
+
+<section class="theme">
+  <h2>So far</h2>
+  <div class="tiles">
+    <div class="stat-tile"><span>People</span><strong>{{ totals.people }}</strong></div>
+    <div class="stat-tile"><span>Things watched</span><strong>{{ totals.watched }}</strong></div>
+    <div class="stat-tile"><span>Changes caught</span><strong>{{ totals.changes }}</strong></div>
+    <div class="stat-tile"><span>Books compared</span><strong>{{ totals.books }}</strong></div>
+    <div class="stat-tile"><span>Public copies kept</span><strong>{{ totals.copies }}</strong></div>
+  </div>
+  <p class="meta">Live counts from this site. Nothing personal is shown.</p>
+</section>
+
+<section class="theme" id="feedback">
+  <h2>Tell us what you think</h2>
+  {% if g.user %}
+    <p>Tried something? What worked, what confused you, what's missing? It goes straight to the person who made Tripwire.</p>
+    <form method="post" action="{{ url_for('send_feedback') }}" class="feedback-form">
+      <label>What did you try?
+        <select name="tried">{% for area in areas %}<option>{{ area }}</option>{% endfor %}</select>
+      </label>
+      <label>Your feedback
+        <textarea name="message" rows="5" required minlength="3" placeholder="It would be better if…"></textarea>
+      </label>
+      <button>Send feedback</button>
+    </form>
+  {% else %}
+    <p><a href="{{ url_for('login') }}">Log in</a> or <a href="{{ url_for('signup') }}">make an account</a> to leave feedback.</p>
+  {% endif %}
+</section>
+
+{% if g.user %}
+<section class="theme" id="demo">
+  <h2>Try it with real examples</h2>
+  <p>Fill your account with real things to explore: Wikipedia articles about Indigenous peoples and languages (with the last 90 days of real edits),
+     a famous video, and Mary Shelley's <em>Frankenstein</em>, 1818 edition against her 1831 rewrite.</p>
+  <form method="post" action="{{ url_for('demo_data') }}">
+    <button>Add the examples to my account</button>
+  </form>
+  <p class="meta">Only your own account is changed. This takes up to a minute, because Tripwire fetches everything live.</p>
+</section>
+{% endif %}
+
+<section class="theme">
+  <h2>Made by</h2>
+  <p><strong>Purple</strong>, at the Edge City Buildathon, Goa, October 2026, with Claude (an AI assistant) as a building partner.
+     The little white rabbit in the corner is Purple's signature. <img class="inline-rabbit" src="{{ url_for('static', filename='rabbit.png') }}" alt="" width="14" height="22"></p>
+  <p class="meta">With thanks to the free, open sources Tripwire relies on: Wikipedia, the Internet Archive, Open Library, Project Gutenberg
+     and Cloudflare Radar. Fonts: VT323 and IBM Plex, under the SIL Open Font License.</p>
+</section>
+{% endblock %}

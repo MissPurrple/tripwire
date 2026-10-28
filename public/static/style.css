@@ -508,3 +508,20 @@ footer { padding-bottom: 56px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 .screen-line.big.intro-text { font-size: clamp(2rem, 5vw, 3.4rem); }
+.email-box form + form { margin-top: 12px; }
+.email-toggle .check { font-family: var(--font-body); }
+
+/* About */
+.about-screen { margin: 16px 0 8px; border-radius: 12px; }
+.about-list { padding-left: 20px; } .about-list li { margin: 8px 0; }
+.founder-quote { margin: 0 0 12px; padding: 14px 18px; border-left: 4px solid var(--accent); background: var(--bg); font-size: 1.05rem; }
+.founder-quote footer { padding: 6px 0 0; text-align: left; font-family: var(--font-mono); font-size: .8rem; color: var(--muted); }
+.choices dt { font-weight: 600; margin-top: 12px; }
+.choices dd { margin: 4px 0 0; color: var(--text); }
+.timeline { padding-left: 22px; } .timeline li { margin: 8px 0; }
+.feedback-form { display: grid; gap: 12px; }
+textarea { font: inherit; width: 100%; padding: 8px 10px; border: 2px solid var(--edge); border-radius: 4px; background: var(--bg); color: var(--text); }
+.feedback-message { white-space: pre-wrap; overflow-wrap: anywhere; }
+.inline-rabbit { vertical-align: -4px; }
+.stats > div strong { font-family: var(--font-pixel); font-weight: 400; font-size: 2.2rem; }
+.stats > div span { font-family: var(--font-mono); font-size: .8rem; }

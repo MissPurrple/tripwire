@@ -4,6 +4,7 @@ These never touch the internet: Wikipedia and web pages are replaced by small
 pretend versions whose content the tests control."""
 
 import os
+import time
 import tempfile
 import unittest
 from unittest import mock
@@ -114,7 +115,7 @@ class CheckerTests(unittest.TestCase):
         if self.db_path.startswith("postgres"):
             import psycopg
             with psycopg.connect(self.db_path, autocommit=True) as conn:
-                conn.execute("DROP TABLE IF EXISTS stats_cache, book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
+                conn.execute("DROP TABLE IF EXISTS feedback, stats_cache, book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
         self.tw = Tripwire(self.db_path)
         self.user = self.tw.create_user("purple@example.org", "correct horse")
         FakeWikipedia.articles = {"Warli": [
@@ -1056,6 +1057,150 @@ class StatsPageTests(CheckerTests):
         self.assertIn('href="/watching"', page)
         self.assertIn("<summary >More</summary>", page.replace('<summary class="on">', "<summary >"))
         self.assertIn("Weekly summary", page)
+
+
+class FakeSMTP:
+    """Stands in for an email server; remembers what was sent."""
+    sent = []
+
+    def __init__(self, host, port, timeout=None):
+        self.host = host
+
+    def starttls(self):
+        pass
+
+    def login(self, user, password):
+        if password == "wrong":
+            import smtplib
+            raise smtplib.SMTPAuthenticationError(535, b"bad login")
+
+    def send_message(self, message):
+        FakeSMTP.sent.append(message)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+EMAIL_SETTINGS = {"SMTP_HOST": "smtp.example.org", "SMTP_PORT": "587", "SMTP_USER": "tripwire",
+                  "SMTP_PASSWORD": "secret", "MAIL_FROM": "Tripwire <hello@example.org>"}
+
+
+class EmailAndAboutTests(CheckerTests):
+    def setUp(self):
+        super().setUp()
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        self.client = webapp.app.test_client()
+        self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+        FakeSMTP.sent = []
+        smtp = mock.patch("smtplib.SMTP", FakeSMTP)
+        smtp.start()
+        self.addCleanup(smtp.stop)
+
+    def make_a_change(self):
+        watch = self.tw.add_watch(self.theme, "Warli")
+        self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")
+        self.tw.check_watch(watch)
+
+    def test_email_not_set_up(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            for key in EMAIL_SETTINGS:
+                os.environ.pop(key, None)
+            self.assertIn("Email isn't set up on this site yet", self.client.get("/summary").data.decode())
+            response = self.client.post("/summary/send", follow_redirects=True)
+        self.assertIn("Email isn&#39;t set up on this site yet", response.data.decode())
+        self.assertEqual(FakeSMTP.sent, [])
+
+    def test_send_summary_now(self):
+        self.make_a_change()
+        with mock.patch.dict(os.environ, EMAIL_SETTINGS):
+            page = self.client.post("/summary/send", follow_redirects=True).data.decode()
+            self.assertIn("Sent to purple@example.org", page)
+            again = self.client.post("/summary/send", follow_redirects=True).data.decode()
+        self.assertIn("One just went out", again)  # not twice in a row
+        [message] = FakeSMTP.sent
+        self.assertEqual(message["To"], "purple@example.org")
+        self.assertEqual(message["Subject"], "Tripwire: 1 change this week")
+        text = message.get_body(("plain",)).get_content()
+        html = message.get_body(("html",)).get_content()
+        self.assertIn("Warli → Warlee", text)
+        self.assertIn("http://localhost/entries/1", html)
+        self.assertIn("Switch them off", html)
+
+    def test_bad_email_login_is_explained(self):
+        with mock.patch.dict(os.environ, dict(EMAIL_SETTINGS, SMTP_PASSWORD="wrong")):
+            page = self.client.post("/summary/send", follow_redirects=True).data.decode()
+        self.assertIn("didn&#39;t accept the login", page)
+
+    def test_weekly_emails_go_out_on_mondays_once(self):
+        self.make_a_change()
+        other = self.tw.create_user("quiet@example.org", "another password")
+        self.tw.set_weekly_email(other, False)  # switched off
+        monday, tuesday = time.struct_time((2026, 11, 2, 3, 17, 0, 0, 306, 0)), time.struct_time((2026, 11, 3, 3, 17, 0, 1, 307, 0))
+        env = dict(EMAIL_SETTINGS, CRON_SECRET="s3cret")
+        with mock.patch.dict(os.environ, env):
+            with mock.patch("time.gmtime", side_effect=lambda *a: tuesday if not a else time.struct_time(time.localtime(a[0]))):
+                self.assertEqual(self.client.get("/cron", headers={"Authorization": "Bearer s3cret"}).json["summaries_emailed"], 0)
+            with mock.patch("time.gmtime", side_effect=lambda *a: monday if not a else time.struct_time(time.localtime(a[0]))):
+                self.assertEqual(self.client.get("/cron", headers={"Authorization": "Bearer s3cret"}).json["summaries_emailed"], 1)
+                self.assertEqual(self.client.get("/cron", headers={"Authorization": "Bearer s3cret"}).json["summaries_emailed"], 0)
+        self.assertEqual([m["To"] for m in FakeSMTP.sent], ["purple@example.org"])
+
+    def test_switch_weekly_email_off_and_on(self):
+        with mock.patch.dict(os.environ, EMAIL_SETTINGS):
+            self.assertIn('value="on" checked', self.client.get("/summary").data.decode())
+            self.client.post("/summary/email", data={})
+            self.assertNotIn('value="on" checked', self.client.get("/summary").data.decode())
+            self.assertEqual(self.tw.users_due_summary(), [])
+            self.client.post("/summary/email", data={"weekly_email": "on"})
+            self.assertEqual(len(self.tw.users_due_summary()), 1)
+
+    def test_about_page_is_public(self):
+        self.client.post("/logout")
+        page = self.client.get("/about").data.decode()
+        for expected in ["Who it&#39;s for", "No AI inside, on purpose", "How Tripwire changed", "So far",
+                         "Purple, Tripwire&#39;s maker", "to leave feedback"]:
+            self.assertIn(expected, page.replace("Who it's for", "Who it&#39;s for").replace("Purple, Tripwire's maker", "Purple, Tripwire&#39;s maker"))
+        self.assertNotIn("Add the examples to my account", page)  # demo button only for signed-in people
+        self.assertIn("[A] ABOUT TRIPWIRE", self.client.get("/").data.decode())
+
+    def test_feedback_reaches_only_the_owner(self):
+        self.client.post("/feedback", data={"tried": "Books", "message": "Loved the Frankenstein comparison!"})
+        self.assertEqual(self.tw.totals()["feedback"], 1)
+        self.assertEqual(self.client.get("/feedback").status_code, 404)  # not the owner
+        self.assertNotIn("Feedback inbox", self.client.get("/about").data.decode())
+        with mock.patch.dict(os.environ, {"ADMIN_EMAILS": "someone@else.org, Purple@Example.org"}):
+            page = self.client.get("/feedback").data.decode()
+            self.assertIn("Loved the Frankenstein comparison!", page)
+            self.assertIn("Feedback inbox", self.client.get("/about").data.decode())
+        self.client.post("/logout")
+        self.assertEqual(self.client.post("/feedback", data={"message": "spam"}).status_code, 302)  # must log in
+        self.assertEqual(self.tw.totals()["feedback"], 1)
+
+    def test_demo_data(self):
+        FakeWikipedia.articles = {title: [{"revid": n * 10 + 1, "user": "A", "comment": "", "text": f"About {title}. " * 20},
+                                          {"revid": n * 10 + 2, "user": "B", "comment": "update", "text": f"About {title}, rewritten. " * 20}]
+                                  for n, title in enumerate(sum(self.tw.DEMO_THEMES.values(), []) + self.tw.DEMO_SINGLE_LINKS)}
+        with mock.patch.object(sources, "_get", fake_video_site(player=youtube_player(title="Me at the zoo"))):
+            response = self.client.post("/demo-data")
+        self.assertIn("/books/jobs/", response.headers["Location"])  # straight to the Frankenstein comparison
+        totals = self.tw.totals()
+        self.assertEqual(totals["watched"], 11)  # 10 articles + 1 video
+        self.assertEqual(totals["changes"], 10)
+        job = self.tw.conn.execute("SELECT title, link_a, link_b FROM book_jobs").fetchone()
+        self.assertIn("Frankenstein", job["title"])
+        self.assertIn("41445", job["link_a"])
+        # Pressing it again adds nothing new.
+        with mock.patch.object(sources, "_get", fake_video_site(player=youtube_player(title="Me at the zoo"))):
+            self.client.post("/demo-data")
+        self.assertEqual(self.tw.totals()["watched"], 11)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM book_jobs").fetchone()["n"], 1)
+        # Only this account was touched.
+        other = self.tw.create_user("other@example.org", "another password")
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM themes WHERE user_id = ?", (other,)).fetchone()["n"], 0)
 
 
 class SetupTests(unittest.TestCase):

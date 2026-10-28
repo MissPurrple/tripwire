@@ -78,6 +78,8 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/sources.py` | Talks to Wikipedia, ordinary websites, YouTube, TikTok and the Internet Archive |
 | `tripwire/books.py` | Reads book files (EPUB, PDF, text, Project Gutenberg) for comparing two editions |
 | `tripwire/stats.py`, `tripwire/charts.py` | The Stats page's numbers (Cloudflare Radar, Open Library) and the charts |
+| `tripwire/mailer.py`, `templates/emails/` | The weekly summary email |
+| `tripwire/humancheck.py` | The sign-up page's own "are you human?" check |
 | `tripwire/db.py` | Storage: a `tripwire.db` file on your laptop, or a Postgres database online |
 | `templates/`, `public/static/` | Page layouts, the retro styling, and the fonts (VT323 and IBM Plex, free under the SIL Open Font License, served by Tripwire itself) |
 | `vercel.json` | Tells Vercel this is a Flask app, and to run the daily check |
@@ -106,9 +108,26 @@ Vercel doesn't keep files between visits, so online Tripwire stores everything i
 
 The books-published numbers need no setup. They come from Open Library and fill in gradually the first time the Stats page is opened (and during the daily run).
 
+**Weekly summary by email (optional):** Tripwire sends email through any email service that offers "SMTP". Add these in **Settings → Environment Variables**, then **Redeploy**:
+
+| Name | What to put |
+|---|---|
+| `SMTP_HOST` | the service's SMTP address (see below) |
+| `SMTP_PORT` | `587` |
+| `SMTP_USER` | the login the service gives you |
+| `SMTP_PASSWORD` | the password or key the service gives you |
+| `MAIL_FROM` | who it's from, e.g. `Tripwire <you@example.com>` |
+
+*Easiest, with a Gmail account:* turn on **2-Step Verification** for the account, then go to **myaccount.google.com/apppasswords**, create an app password called `Tripwire`, and copy the 16 letters. Use `SMTP_HOST` = `smtp.gmail.com`, `SMTP_USER` = your full Gmail address, `SMTP_PASSWORD` = the 16 letters (no spaces), `MAIL_FROM` = `Tripwire <your Gmail address>`.
+
+*Or with Resend (resend.com, free tier):* create an API key; use `SMTP_HOST` = `smtp.resend.com`, `SMTP_USER` = `resend`, `SMTP_PASSWORD` = the API key. To email anyone, verify your own domain in Resend and send from it; without a domain, Resend only delivers to your own account's address (`MAIL_FROM` = `Tripwire <onboarding@resend.dev>`).
+
+Summaries go out on Mondays during the daily run, to everyone who has them switched on (the Weekly summary page has the switch and an **Email it to me now** button). Optional: `SITE_URL` (e.g. `https://tripwire.vercel.app`) sets the address used in email links.
+
+**Feedback inbox (optional):** add `ADMIN_EMAILS` with your own account's email. Then **More → Feedback inbox** shows what testers wrote in the About page's feedback box. Nobody else can see it.
+
 **Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
 
 ## Next up
-- Delivering the weekly summary by message (once a week only).
 - **"Watch this with Tripwire" browser extension:** one click to add the page you're on. Also short, live watching while your browser is open (e.g. a BBC live news page), with a sound or ping when it updates.
 - Offline, preservation-first copies through **[Kiwix](https://kiwix.org/en/)**. Kiwix packages Wikipedia and other knowledge sites into single files ("ZIM" files) that anyone can keep and read with no internet. Tripwire could compare live articles against a Kiwix copy, and keep its own archive in a format Kiwix can open.

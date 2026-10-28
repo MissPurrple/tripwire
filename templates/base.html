@@ -14,7 +14,8 @@
                         ('change_list', 'Changes', ['change_list', 'entry']),
                         ('book_list', 'Books', ['book_list', 'book_comparison', 'book_job']),
                         ('stats_page', 'Stats', ['stats_page'])] %}
-  {% set more_links = [('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Weekly summary', ['summary'])] %}
+  {% set more_links = [('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Weekly summary', ['summary']),
+                        ('about', 'About Tripwire', ['about'])] + ([('feedback_inbox', 'Feedback inbox', ['feedback_inbox'])] if is_admin else []) %}
   <header class="top {{ self.main_class() }}">
     <a class="brand" href="{{ url_for('home') }}">Tripwire<span class="cursor" aria-hidden="true"></span></a>
     {% if g.user %}
@@ -54,6 +55,6 @@
     {% block content %}{% endblock %}
   </main>
   <img class="signature" src="{{ url_for('static', filename='rabbit.png') }}" alt="" aria-hidden="true" width="26" height="41">
-  <footer><span>TRIPWIRE</span> · keeps a copy when the information you care about changes · <span class="ready">READY.</span></footer>
+  <footer><span>TRIPWIRE</span> · keeps a copy when the information you care about changes · <a href="{{ url_for('about') }}">about</a> · <span class="ready">READY.</span></footer>
 </body>
 </html>

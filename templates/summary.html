@@ -6,6 +6,24 @@
   <p class="meta">{{ s.period }}</p>
   <blockquote class="digest">{{ s.text }}</blockquote>
 </section>
+
+<section class="theme email-box">
+  <h2>By email</h2>
+  {% if email_ready %}
+    <p>Tripwire can email you this summary every Monday, so you don't have to come and look. One email a week, never more.</p>
+    <form method="post" action="{{ url_for('summary_email_setting') }}" class="email-toggle">
+      <label class="check"><input type="checkbox" name="weekly_email" value="on" {% if weekly_email %}checked{% endif %}
+             onchange="this.form.submit()"> Email me this summary every Monday ({{ g.user.email }})</label>
+      <noscript><button>Save</button></noscript>
+    </form>
+    <form method="post" action="{{ url_for('summary_send_now') }}">
+      <button class="secondary-button">Email it to me now</button>
+    </form>
+  {% else %}
+    <p class="meta">Email isn't set up on this site yet. The site owner connects an email service in Vercel
+       (see “Weekly summary by email” in the README), and then this summary can arrive every Monday.</p>
+  {% endif %}
+</section>
 {% if s.entries %}
 <section class="stats">
   <div><strong>{{ s.entries|length }}</strong><span>changes</span></div>

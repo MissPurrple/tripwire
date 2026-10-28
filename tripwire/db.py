@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS archive_copies (
     page_url     TEXT NOT NULL,                  -- the page that was saved
     archive_url  TEXT NOT NULL,                  -- where the Internet Archive keeps it
     created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS book_comparisons (
+    id          {id},
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    edition_a   TEXT NOT NULL,                   -- e.g. "dahl-1998.epub (EPUB, 31,000 words)"
+    edition_b   TEXT NOT NULL,
+    category    TEXT NOT NULL,
+    summary     TEXT NOT NULL,
+    details     TEXT NOT NULL DEFAULT '{{}}',    -- JSON: word swaps, changes with a little context
+    created_at  TEXT NOT NULL
 )
 """
 

@@ -15,7 +15,7 @@ import time
 
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from tripwire import changes, db, sources
+from tripwire import books, changes, db, sources
 from tripwire.checker import MAX_THEMES, SINGLE_LINKS, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
@@ -319,6 +319,57 @@ def public_copy(kind, item_id):
 def archive():
     """Every public Internet Archive copy this person chose to make."""
     return render_template("archive.html", copies=tw().copies(g.user["id"]))
+
+
+# -- books: compare two editions, only when asked ---------------------------
+
+# Vercel refuses uploads bigger than about 4.5 MB in total, so the page warns
+# before sending; links have no such limit because Tripwire downloads them itself.
+UPLOAD_LIMIT_MB = 4.4
+
+
+def _edition(which):
+    upload = request.files.get(f"file_{which}")
+    link = request.form.get(f"link_{which}", "").strip()
+    if upload and upload.filename:
+        return upload.filename, upload.read()
+    if link:
+        return books.fetch_book(link)
+    raise books.BookError(f"Add edition {which.upper()}: upload a file or paste a link.")
+
+
+@app.route("/books", methods=["GET", "POST"])
+@login_required
+def book_list():
+    if request.method == "POST":
+        try:
+            comparison = tw().compare_books(g.user["id"], request.form.get("title", ""),
+                                            _edition("a"), _edition("b"))
+        except (books.BookError, sources.SourceError) as exc:
+            flash(str(exc), "error")
+        else:
+            return redirect(url_for("book_comparison", comparison_id=comparison))
+    return render_template("books.html", comparisons=tw().book_comparisons(g.user["id"]),
+                           upload_limit_mb=UPLOAD_LIMIT_MB)
+
+
+@app.get("/books/<int:comparison_id>")
+@login_required
+def book_comparison(comparison_id):
+    row = tw().own_book_comparison(g.user["id"], comparison_id)
+    if not row:
+        abort(404)
+    return render_template("book.html", c=row)
+
+
+@app.post("/books/<int:comparison_id>/delete")
+@login_required
+def delete_book_comparison(comparison_id):
+    if not tw().own_book_comparison(g.user["id"], comparison_id):
+        abort(404)
+    tw().delete_book_comparison(comparison_id)
+    flash("Comparison deleted.")
+    return redirect(url_for("book_list"))
 
 
 @app.get("/summary")

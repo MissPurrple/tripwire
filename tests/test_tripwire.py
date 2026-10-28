@@ -114,7 +114,7 @@ class CheckerTests(unittest.TestCase):
         if self.db_path.startswith("postgres"):
             import psycopg
             with psycopg.connect(self.db_path, autocommit=True) as conn:
-                conn.execute("DROP TABLE IF EXISTS archive_copies, entries, watches, themes, users CASCADE")
+                conn.execute("DROP TABLE IF EXISTS book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
         self.tw = Tripwire(self.db_path)
         self.user = self.tw.create_user("purple@example.org", "correct horse")
         FakeWikipedia.articles = {"Warli": [
@@ -398,6 +398,152 @@ class WebAppTests(CheckerTests):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CRON_SECRET", None)
             self.assertEqual(self.client.get("/cron").status_code, 403)  # no secret set: always refused
+
+
+def make_epub(chapters):
+    """A real, minimal EPUB file containing the given chapter texts."""
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("mimetype", "application/epub+zip")
+        z.writestr("META-INF/container.xml", '<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')
+        items = "".join(f'<item id="c{i}" href="c{i}.xhtml" media-type="application/xhtml+xml"/>' for i in range(len(chapters)))
+        spine = "".join(f'<itemref idref="c{i}"/>' for i in reversed(range(len(chapters))))  # reading order differs from file order
+        z.writestr("OEBPS/content.opf", f'<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><manifest>{items}</manifest><spine>{spine}</spine></package>')
+        for i, text in enumerate(chapters):
+            z.writestr(f"OEBPS/c{i}.xhtml", f"<html><body><p>{text}</p></body></html>")
+    return buf.getvalue()
+
+
+def make_pdf(pages):
+    """A real, minimal PDF file with one line of text per page."""
+    objects = ["<< /Type /Catalog /Pages 2 0 R >>", None, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    kids = []
+    for text in pages:
+        stream = f"BT /F1 11 Tf 40 700 Td ({text}) Tj ET".encode()
+        objects.append(f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream")
+        objects.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {len(objects)} 0 R "
+                       f"/Resources << /Font << /F1 3 0 R >> >> >>")
+        kids.append(f"{len(objects)} 0 R")
+    objects[1] = f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(kids)} >>"
+    out, offsets = b"%PDF-1.4\n", []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        body = body if isinstance(body, bytes) else body.encode()
+        out += f"{number} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    out += b"".join(f"{o:010d} 00000 n \n".encode() for o in offsets)
+    out += f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF".encode()
+    return out
+
+
+OLD_BOOK = ("Augustus Gloop was enormously fat. He killed the time by eating chocolate all day long. "
+            "Mrs Twit was ugly and she killed flies with a swatter. The boy from Loompaland sang a song. ") * 3
+NEW_BOOK = ("Augustus Gloop was enormous. He unalived the time by eating chocolate all day long. "
+            "Mrs Twit was beastly and she unalived flies with a swatter. The boy from Lumpaland sang a song. ") * 3
+
+
+class BookTests(unittest.TestCase):
+    def test_read_plain_text_epub_pdf_and_html(self):
+        from tripwire import books
+        text, info = books.read_book("old.txt", OLD_BOOK.encode())
+        self.assertEqual(info["format"], "plain text")
+        text, info = books.read_book("old.epub", make_epub([OLD_BOOK[:200], OLD_BOOK[200:]]))
+        self.assertEqual(info["format"], "EPUB")
+        self.assertTrue(text.startswith(OLD_BOOK[200:210].strip()))  # follows the book's reading order
+        text, info = books.read_book("old.pdf", make_pdf([OLD_BOOK[:90], OLD_BOOK[90:180], OLD_BOOK[180:270]]))
+        self.assertEqual((info["format"], info["pages"]), ("PDF", 3))
+        self.assertIn("enormously fat", text)
+        text, info = books.read_book("old.html", f"<html><body><p>{OLD_BOOK}</p></body></html>".encode())
+        self.assertEqual(info["format"], "web page")
+
+    def test_unreadable_books_explain_why(self):
+        from tripwire import books
+        with self.assertRaises(books.BookError):
+            books.read_book("empty.txt", b"")
+        with self.assertRaises(books.BookError) as caught:
+            books.read_book("scan.pdf", make_pdf(["", ""]))
+        self.assertIn("scanned", str(caught.exception))
+        with self.assertRaises(books.BookError):
+            books.read_book("broken.epub", b"PK not really a zip")
+
+    def test_line_breaks_and_hyphens_dont_count_as_changes(self):
+        a = "The elders of the village gathered by the river. They sang the old har-\nvest song together."
+        b = "The elders of the village\ngathered by the river.\nThey sang the old harvest\nsong together."
+        self.assertEqual(changes.compare_long(a, b)["hunks"], [])
+
+    def test_word_swaps_are_counted(self):
+        result = changes.compare_long(OLD_BOOK, NEW_BOOK)
+        swaps = changes.swap_counts(result["replacements"])
+        self.assertEqual(swaps[0], ("killed", "unalived", 6))
+        self.assertIn(("Loompaland", "Lumpaland"), result["name_changes"])
+
+
+class BookPageTests(CheckerTests):
+    def setUp(self):
+        super().setUp()
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        self.client = webapp.app.test_client()
+        self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+
+    def test_compare_uploaded_editions(self):
+        import io
+        unchanged = " ".join(f"Chapter {i} tells of the river and the old stone house." for i in range(2000))
+        response = self.client.post("/books", data={
+            "title": "Chocolate",
+            "file_a": (io.BytesIO(make_epub([OLD_BOOK, unchanged])), "dahl-1998.epub"),  # read in reverse: unchanged first
+            "file_b": (io.BytesIO((unchanged + " " + NEW_BOOK).encode()), "dahl-2023.txt"),
+        }, content_type="multipart/form-data", follow_redirects=True)
+        page = response.data.decode()
+        self.assertIn("Word swaps", page)
+        self.assertIn("unalived", page)
+        self.assertIn("Lumpaland", page)
+        self.assertIn("dahl-1998.epub (EPUB", page)
+        self.assertIn("Chocolate", self.client.get("/books").data.decode())
+        stored = self.tw.conn.execute("SELECT details FROM book_comparisons").fetchone()["details"]
+        self.assertLess(len(stored), len(unchanged) / 10)  # only the changes are stored, not the books
+        self.assertNotIn("Chapter 1999", stored)
+
+    def test_compare_from_links(self):
+        from tripwire import books
+        files = {"https://example.org/a.txt": ("a.txt", OLD_BOOK.encode()),
+                 "https://example.org/b.pdf": ("b.pdf", make_pdf([NEW_BOOK[:100], NEW_BOOK[100:200]]))}
+        with mock.patch.object(books, "fetch_book", lambda url: files[url]):
+            response = self.client.post("/books", data={"link_a": "https://example.org/a.txt",
+                                                         "link_b": "https://example.org/b.pdf"},
+                                        follow_redirects=True)
+        self.assertIn("b.pdf (PDF, 2 pages", response.data.decode())
+
+    def test_missing_edition_is_explained(self):
+        import io
+        response = self.client.post("/books", data={"file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt")},
+                                    content_type="multipart/form-data", follow_redirects=True)
+        self.assertIn("Add edition B", response.data.decode())
+
+    def test_unreachable_link_is_explained_plainly(self):
+        from tripwire import books
+        with mock.patch.object(sources.requests, "get", side_effect=sources.requests.ConnectionError("proxy 403 gibberish")):
+            response = self.client.post("/books", data={"link_a": "https://example.org/a.txt",
+                                                        "link_b": "https://example.org/b.txt"}, follow_redirects=True)
+        page = response.data.decode()
+        self.assertIn("Couldn&#39;t reach example.org. Check the link", page)
+        self.assertNotIn("gibberish", page)
+
+    def test_comparisons_are_private(self):
+        import io
+        self.client.post("/books", data={"title": "Secret comparison",
+                                         "file_a": (io.BytesIO(OLD_BOOK.encode()), "a.txt"),
+                                         "file_b": (io.BytesIO(NEW_BOOK.encode()), "b.txt")},
+                         content_type="multipart/form-data")
+        self.tw.create_user("stranger@example.org", "stranger danger")
+        self.client.post("/logout")
+        self.client.post("/login", data={"email": "stranger@example.org", "password": "stranger danger"})
+        self.assertEqual(self.client.get("/books/1").status_code, 404)
+        self.assertEqual(self.client.post("/books/1/delete").status_code, 404)
+        self.assertNotIn("Secret comparison", self.client.get("/books").data.decode())
 
 
 class SetupTests(unittest.TestCase):

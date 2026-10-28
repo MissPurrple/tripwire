@@ -137,3 +137,15 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; max-hei
 .understood { padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
 .entry.copy { border-left-color: var(--edit); }
 .single { border-style: dashed; }
+
+/* Books */
+.book-form { display: grid; gap: 12px; }
+.book-form fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; margin: 0; min-width: 0; }
+.book-form legend { padding: 0 6px; }
+.book-form input[type=file] { padding: 6px; }
+.book-title { margin: 6px 0; font-size: 1.6rem; }
+.editions { padding-left: 20px; overflow-wrap: anywhere; }
+.swaps { width: 100%; border-collapse: collapse; }
+.swaps th, .swaps td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.swaps th { color: var(--muted); font-weight: 500; font-size: .85rem; }
+.swaps td:last-child, .swaps th:last-child { text-align: right; width: 4em; }

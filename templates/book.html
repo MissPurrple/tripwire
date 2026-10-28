@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ c.title }} · Books · Tripwire{% endblock %}
+{% block content %}
+{% set d = details(c) %}
+<p><a href="{{ url_for('book_list') }}">← Back to books</a></p>
+<article class="entry cat-{{ c.category }}">
+  <div class="entry-head">
+    <span class="badge cat-{{ c.category }}">{{ CATEGORIES[c.category] }}</span>
+    {% if d.name_changes %}<span class="badge names">Name spelling changed</span>{% endif %}
+    <span class="when">{{ c.created_at[:10] }}</span>
+  </div>
+  <h1 class="book-title">{{ c.title }}</h1>
+  <p class="summary">{{ c.summary }}</p>
+  <ul class="editions">
+    <li><strong>A (older):</strong> {{ c.edition_a }}</li>
+    <li><strong>B (newer):</strong> {{ c.edition_b }}</li>
+  </ul>
+  {% if d.info_a.pages and d.info_b.pages and d.info_a.pages != d.info_b.pages %}
+    <p class="meta">Page count changed: {{ d.info_a.pages }} → {{ d.info_b.pages }} pages.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('delete_book_comparison', comparison_id=c.id) }}"
+        onsubmit="return confirm('Delete this comparison?')"><button class="disregard">Delete comparison</button></form>
+</article>
+
+{% if d.name_changes %}
+<section class="sources">
+  <h2>Names spelled differently</h2>
+  <p class="names-list">{% for old, new in d.name_changes %}<span><del>{{ old }}</del> → <ins>{{ new }}</ins></span>{% endfor %}</p>
+</section>
+{% endif %}
+
+{% if d.swaps %}
+<section class="sources">
+  <h2>Word swaps</h2>
+  <p class="meta">Short words or phrases replaced by others, most frequent first.</p>
+  <table class="swaps">
+    <thead><tr><th>Edition A said</th><th>Edition B says</th><th>Times</th></tr></thead>
+    <tbody>{% for old, new, n in d.swaps %}<tr><td><del>{{ old }}</del></td><td><ins>{{ new }}</ins></td><td>{{ n }}</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if d.hunks %}
+<section class="hunks">
+  <h2>Every change, in order</h2>
+  <p class="meta">Red was in edition A, green is in edition B. Grey is the surrounding text.
+    {% if d.hunk_count > d.hunks|length %}Showing the first {{ d.hunks|length }} of {{ d.hunk_count }} changes.{% endif %}
+    {% if d.rewritten_blocks %}Some long stretches were too different to compare word by word, so they show as a word count.{% endif %}</p>
+  {% for h in d.hunks %}
+    <p class="hunk">… {{ h.before }} {% if h.removed %}<del>{{ h.removed }}</del>{% endif %} {% if h.added %}<ins>{{ h.added }}</ins>{% endif %} {{ h.after }} …</p>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

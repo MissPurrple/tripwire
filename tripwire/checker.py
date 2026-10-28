@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import changes, db, sources
+from . import books, changes, db, sources
 
 MAX_THEMES = 3
 MIN_PASSWORD = 8
@@ -287,6 +287,43 @@ class Tripwire:
             query += " AND watch_id = ?"
             params.append(watch_id)
         return self.conn.execute(query + " ORDER BY created_at DESC, id DESC", params).fetchall()
+
+    # -- books (only compared when a person asks) ---------------------------
+
+    def compare_books(self, user_id, title, edition_a, edition_b):
+        """Compare two editions, each given as (filename, file contents).
+        Saves and returns the comparison's id. The books themselves aren't kept."""
+        text_a, info_a = books.read_book(*edition_a)
+        text_b, info_b = books.read_book(*edition_b)
+        result = changes.compare_long(text_a, text_b)
+        label_a = books.edition_label(books.clean_name(edition_a[0]), info_a)
+        label_b = books.edition_label(books.clean_name(edition_b[0]), info_b)
+        swaps = changes.swap_counts(result["replacements"])
+        if not result["hunks"]:
+            summary = "No differences in the words: the two editions read the same."
+        else:
+            summary = changes.describe(result)
+            if swaps:
+                summary += f" · {len(result['replacements'])} word swaps"
+        details = {"swaps": swaps, "hunks": result["hunks"][:300], "hunk_count": len(result["hunks"]),
+                   "name_changes": result["name_changes"], "info_a": info_a, "info_b": info_b,
+                   "rewritten_blocks": result["rewritten_blocks"]}
+        title = title.strip() or books.clean_name(edition_b[0])
+        return self.conn.insert(
+            """INSERT INTO book_comparisons (user_id, title, edition_a, edition_b, category, summary, details, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, title[:200], label_a, label_b, result["category"], summary, json.dumps(details), db.now()))
+
+    def book_comparisons(self, user_id):
+        return self.conn.execute("SELECT * FROM book_comparisons WHERE user_id = ? ORDER BY id DESC",
+                                 (user_id,)).fetchall()
+
+    def own_book_comparison(self, user_id, comparison_id):
+        return self.conn.execute("SELECT * FROM book_comparisons WHERE id = ? AND user_id = ?",
+                                 (comparison_id, user_id)).fetchone()
+
+    def delete_book_comparison(self, comparison_id):
+        self.conn.execute("DELETE FROM book_comparisons WHERE id = ?", (comparison_id,))
 
     # -- the archive --------------------------------------------------------
 

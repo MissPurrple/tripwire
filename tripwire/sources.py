@@ -27,7 +27,7 @@ def _get(url, **kwargs):
     try:
         return requests.get(url, headers=headers, **kwargs)
     except requests.RequestException as exc:
-        raise SourceError(f"Could not reach {urlparse(url).netloc}: {exc}") from exc
+        raise SourceError(f"Couldn't reach {urlparse(url).netloc}. Check the link, or try again later.") from exc
 
 
 # ---------------------------------------------------------------------------

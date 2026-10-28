@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Books · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>Books</h1>
+  <p>Has a book been quietly changed? Give Tripwire two editions, an older one and a newer one, and it compares
+     them word by word: swapped words (like “killed” → “unalived”), renamed people and places, and removed passages.
+     Books are only compared when you ask, and Tripwire never keeps the books themselves, just what changed.</p>
+</section>
+
+<section class="theme">
+  <h2>Compare two editions</h2>
+  <form method="post" enctype="multipart/form-data" class="book-form" id="book-form">
+    <label>Book title (optional)
+      <input name="title" placeholder="e.g. Charlie and the Chocolate Factory">
+    </label>
+    {% for which, name, hint in [('a', 'Edition A', 'the older one'), ('b', 'Edition B', 'the newer one')] %}
+    <fieldset>
+      <legend><strong>{{ name }}</strong>: {{ hint }}</legend>
+      <label>Upload a file (EPUB, PDF or plain text)
+        <input type="file" name="file_{{ which }}" accept=".epub,.pdf,.txt,.html,.htm,text/plain,application/pdf,application/epub+zip">
+      </label>
+      <label>… or paste a link to a free public copy
+        <input name="link_{{ which }}" type="url" placeholder="e.g. a Project Gutenberg or Internet Archive link">
+      </label>
+    </fieldset>
+    {% endfor %}
+    <p class="meta">Best results: EPUB or plain text. PDFs work if they contain real text (not scanned pictures of pages).
+       Uploads can be up to {{ upload_limit_mb }} MB in total; for bigger books, paste links instead.
+       Copyrighted books are fine to compare here: the result stays private to you.</p>
+    <button>Compare</button>
+    <p class="meta" id="book-wait" hidden>Comparing… a whole book can take a little while. Please keep this page open.</p>
+  </form>
+</section>
+
+{% if comparisons %}
+<section>
+  <h2>Your comparisons</h2>
+  {% for c in comparisons %}
+  <article class="entry cat-{{ c.category }}">
+    <div class="entry-head"><span class="badge cat-{{ c.category }}">{{ CATEGORIES[c.category] }}</span><span class="when">{{ c.created_at[:10] }}</span></div>
+    <h3><a href="{{ url_for('book_comparison', comparison_id=c.id) }}">{{ c.title }}</a></h3>
+    <p class="summary">{{ c.summary }}</p>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+<script>
+  // Warn before uploading more than Vercel accepts, instead of failing with a confusing error.
+  document.getElementById("book-form").addEventListener("submit", function (event) {
+    var total = 0;
+    this.querySelectorAll("input[type=file]").forEach(function (input) {
+      if (input.files[0]) total += input.files[0].size;
+    });
+    if (total > {{ upload_limit_mb }} * 1024 * 1024) {
+      event.preventDefault();
+      alert("These files are " + (total / 1048576).toFixed(1) + " MB together. Uploads can be up to {{ upload_limit_mb }} MB in total. Try an EPUB or text version, or paste links instead.");
+      return;
+    }
+    document.getElementById("book-wait").hidden = false;
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Tripwire{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="{{ url_for('index') }}">Tripwire</a>
+    <nav>
+      <a href="{{ url_for('index') }}">Watching</a>
+      <a href="{{ url_for('archive') }}">Archive</a>
+      <a href="{{ url_for('summary') }}">Weekly summary</a>
+    </nav>
+  </header>
+  <main>
+    {% for kind, message in get_flashed_messages(with_categories=true) %}
+      <p class="flash {{ kind }}">{{ message }}</p>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer>Tripwire keeps a copy when the information you care about changes.</footer>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ e.label }} · Tripwire{% endblock %}
+{% block content %}
+{% set d = details(e) %}
+<p><a href="{{ url_for('archive') }}">← Back to archive</a></p>
+{% include "_entry_card.html" %}
+
+<section class="sources">
+  <h2>Copies of this change</h2>
+  <ul>
+    <li><strong>Before</strong> (version from {{ (e.before_at or '')[:10] }}):
+      {% if d.before_link %}<a href="{{ d.before_link }}" target="_blank" rel="noopener">Wikipedia's permanent copy</a>{% endif %}
+      {% if e.before_archive_url %}<a href="{{ e.before_archive_url }}" target="_blank" rel="noopener">Internet Archive copy</a>{% endif %}
+      {% if not d.before_link and not e.before_archive_url %}saved only in Tripwire (below){% endif %}
+    </li>
+    {% if e.category != 'page_removed' %}
+    <li><strong>After</strong> (version from {{ (e.after_at or '')[:10] }}):
+      {% if d.after_link %}<a href="{{ d.after_link }}" target="_blank" rel="noopener">Wikipedia's permanent copy</a>{% endif %}
+      {% if e.after_archive_url %}<a href="{{ e.after_archive_url }}" target="_blank" rel="noopener">Internet Archive copy</a>{% endif %}
+      {% if not d.after_link and not e.after_archive_url %}saved only in Tripwire (below){% endif %}
+    </li>
+    {% endif %}
+    {% if e.compare_url %}<li><a href="{{ e.compare_url }}" target="_blank" rel="noopener">Wikipedia's own side-by-side comparison</a></li>{% endif %}
+  </ul>
+  {% if d.edit_notes %}
+    <h3>What the editors said about their edits</h3>
+    <ul class="notes">{% for note in d.edit_notes %}<li>{{ note }}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+
+{% if d.hunks %}
+<section class="hunks">
+  <h2>What changed</h2>
+  <p class="meta">Red was removed, green was added. Grey is the surrounding text.
+    {% if d.hunk_count > d.hunks|length %}Showing the first {{ d.hunks|length }} of {{ d.hunk_count }} changes.{% endif %}</p>
+  {% for h in d.hunks %}
+    <p class="hunk">… {{ h.before }} {% if h.removed %}<del>{{ h.removed }}</del>{% endif %} {% if h.added %}<ins>{{ h.added }}</ins>{% endif %} {{ h.after }} …</p>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="texts">
+  <details><summary>Full text before</summary><pre>{{ e.before_text or '' }}</pre></details>
+  {% if e.after_text %}<details><summary>Full text after</summary><pre>{{ e.after_text }}</pre></details>{% endif %}
+</section>
+{% endblock %}

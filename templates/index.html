@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="intro">
+  <h1>What you're watching</h1>
+  <p>Tripwire checks these for changes. When something changes, it saves the before and after into
+     <a href="{{ url_for('archive') }}">your archive</a>{% if new_count %} (<strong>{{ new_count }}</strong> waiting for you to look at){% endif %},
+     and asks the Internet Archive to keep a copy too. No pings. Just a <a href="{{ url_for('summary') }}">weekly summary</a>.</p>
+  {% if themes %}
+    <form method="post" action="{{ url_for('check_all') }}"><button>Check everything now</button></form>
+  {% endif %}
+</section>
+
+{% for t in themes %}
+<section class="theme">
+  <div class="theme-head">
+    <h2>{{ t.name }}</h2>
+    <form method="post" action="{{ url_for('remove_theme', theme_id=t.id) }}"
+          onsubmit="return confirm('Remove the theme “{{ t.name }}” and everything in it, including its archive entries?')">
+      <button class="link danger">Remove theme</button>
+    </form>
+  </div>
+
+  {% if watches[t.id] %}
+  <ul class="watches">
+    {% for w in watches[t.id] %}
+    <li>
+      <div>
+        <span class="kind">{{ 'Wikipedia' if w.kind == 'wikipedia' else 'Web page' }}</span>
+        <a href="{{ w.target if w.kind == 'web' else 'https://' ~ (w.lang or 'en') ~ '.wikipedia.org/wiki/' ~ w.target|replace(' ', '_') }}" target="_blank" rel="noopener">{{ w.label }}</a>
+        <span class="status">{{ w.last_status or '' }}{% if w.last_checked_at %} · checked {{ w.last_checked_at[:10] }}{% endif %}</span>
+        {% if w.baseline_archive_url %}<a class="small" href="{{ w.baseline_archive_url }}" target="_blank" rel="noopener">Internet Archive copy</a>{% endif %}
+      </div>
+      <div class="row-actions">
+        <form method="post" action="{{ url_for('check_watch', watch_id=w.id) }}"><button class="link">Check</button></form>
+        <form method="post" action="{{ url_for('remove_watch', watch_id=w.id) }}"
+              onsubmit="return confirm('Stop watching this? Its archive entries will be deleted too.')"><button class="link danger">Stop watching</button></form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Nothing here yet. Add a Wikipedia article or a web page below.</p>
+  {% endif %}
+
+  <form class="add-watch" method="post" action="{{ url_for('add_watch', theme_id=t.id) }}">
+    <label>Watch
+      <input name="target" required placeholder="A Wikipedia article name, or paste any link">
+    </label>
+    <label>Type
+      <select name="kind">
+        <option value="">Work it out from what I typed</option>
+        <option value="wikipedia">Wikipedia article</option>
+        <option value="web">Any web page</option>
+      </select>
+    </label>
+    <label>Start
+      <select name="days_ago">
+        {% for days, text in lookback %}<option value="{{ days }}">{{ text }}{% if days %} (Wikipedia only){% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    <button>Add</button>
+  </form>
+</section>
+{% endfor %}
+
+{% if themes|length < max_themes %}
+<section class="theme new-theme">
+  <h2>{{ 'Add a theme' if themes else 'Start with a theme' }}</h2>
+  <p>A theme is something you care about, like “Indigenous communities”. You can have up to {{ max_themes }}.</p>
+  <form method="post" action="{{ url_for('add_theme') }}" class="inline">
+    <input name="name" required placeholder="e.g. Indigenous communities" value="{{ '' if themes else 'Indigenous communities' }}">
+    <button>Add theme</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

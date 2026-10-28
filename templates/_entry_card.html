@@ -1,0 +1,31 @@
+{% set d = details(e) %}
+<article class="entry cat-{{ e.category }}{% if e.kept %} kept{% endif %}">
+  <div class="entry-head">
+    <span class="badge cat-{{ e.category }}">{{ CATEGORIES[e.category] }}</span>
+    {% if d.name_changes %}<span class="badge names">Name spelling changed</span>{% endif %}
+    {% if e.kept %}<span class="badge kept-badge">Kept</span>{% endif %}
+    <span class="when">{{ e.detected_at[:10] }}</span>
+  </div>
+  <h3><a href="{{ url_for('entry', entry_id=e.id) }}">{{ e.label }}</a></h3>
+  <p class="summary">{{ e.summary }}</p>
+  {% if d.name_changes %}
+    <p class="names-list">
+      {% for old, new in d.name_changes %}<span><del>{{ old }}</del> → <ins>{{ new }}</ins></span>{% endfor %}
+    </p>
+  {% endif %}
+  {% if d.edits %}<p class="meta">{{ d.edits }} edit{{ 's' if d.edits != 1 }} by {{ d.editors|join(', ') }}</p>{% endif %}
+  <div class="actions">
+    <a href="{{ url_for('entry', entry_id=e.id) }}">See what changed</a>
+    {% if not e.kept %}
+      <form method="post" action="{{ url_for('keep', entry_id=e.id) }}">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <button class="keep">Keep</button>
+      </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('disregard', entry_id=e.id) }}"
+          onsubmit="return confirm('Disregard this change? The entry will be deleted from your archive.')">
+      <input type="hidden" name="next" value="{{ request.full_path if request.endpoint != 'entry' else url_for('archive') }}">
+      <button class="disregard">Disregard</button>
+    </form>
+  </div>
+</article>

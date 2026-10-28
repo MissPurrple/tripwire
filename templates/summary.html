@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Weekly summary · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>Weekly summary</h1>
+  <p class="meta">{{ s.period }}</p>
+  <blockquote class="digest">{{ s.text }}</blockquote>
+</section>
+{% if s.entries %}
+<section class="stats">
+  <div><strong>{{ s.entries|length }}</strong><span>changes</span></div>
+  <div><strong>{{ s.changed_items }} / {{ s.tracked }}</strong><span>tracked items changed</span></div>
+  <div><strong>{{ s.big|length }}</strong><span>big changes</span></div>
+  <div><strong>{{ s.names|length }}</strong><span>name spelling changes</span></div>
+</section>
+<section>
+  <h2>By size</h2>
+  <ul>{% for cat, n in s.counts.most_common() %}<li><a href="{{ url_for('archive', category=cat) }}">{{ CATEGORIES[cat] }}</a>: {{ n }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}

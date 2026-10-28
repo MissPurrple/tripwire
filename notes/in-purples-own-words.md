@@ -71,3 +71,26 @@ On "Overheard at Edge" (Edge City Telegram group):
 
 Rejected: "What does AI think it knows about us?" ("It just shows the disregarding. It doesn't really help with anything"), the printed archive ("I don't want to print anything"), and the human time capsule as a standalone idea.
 > so I'm going for 1 and 3.
+
+---
+
+## 5. Tripwire design decisions, in Purple's words (28 Oct 2026)
+
+On saving instead of just alerting:
+> By simply alerting somebody, all that it likely does is just might make them freak out. If they're in the middle of something, there's not much they can do about it, is there?
+>
+> I think I like that idea of saving something and creating a mini archive of progress to see the last update and whatnots. They can go in and see a summary of the notes in their archive, so they can see the difference between this and this: is this it? If the difference is just a grammar correction, the spelling, or whatever, they can just say, "Disregard." By clicking Disregard, it can delete that instance or that archive entry, right, because then it is not necessary.
+>
+> Some people might find it important to see the difference between a person's name being spelled differently compared to what it was before, because then maybe it means either the language is being more proliferated or it is disappearing. It could be anything, but they should be given the choice to select out of these differences: "Do you care about this enough to keep it?" Instead of just overwhelming them and having 5,000 different changes made to, say, a Wikipedia page, Internet Archive, or whatever.
+
+On alerts and the bot:
+> I don't know if I want these to be sent to Telegram. It's going to be so crowded.
+>
+> Yes, you can have your archive bot, right, but I think the archive bot should merely give a weekly summary. You don't need to know every single day when an article is being changed. I think a weekly summary could be good enough to just say, "There were two changes made to five articles," or, "There were two changes made in all your tracked items," or something, right? It can also say the changes were trivial, or it can say these were massive-scale changes, things like that. I don't think I wanted to be updating people every single time something changes.
+
+On what to track:
+> I would like for people to be able to choose their own themes and select which websites they want to add instead of just Wikipedia. I am definitely for the Internet Archive thing as well. In fact, for Wikipedia, I want the offline Wikipedia versions, so maybe I want to see if I can use things like Kiwi, for instance. Is it Kiwi X or something?
+
+> I like tripwire, by the way, will change the name of the repo even
+
+> start with Indigenous communities, solo for now, go ahead

@@ -1,7 +1,5 @@
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
-  ],
+  "framework": "flask",
   "crons": [
     { "path": "/cron", "schedule": "17 3 * * *" }
   ]

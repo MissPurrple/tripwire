@@ -78,7 +78,7 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/sources.py` | Talks to Wikipedia, ordinary websites, and the Internet Archive |
 | `tripwire/db.py` | Storage: a `tripwire.db` file on your laptop, or a Postgres database online |
 | `templates/`, `public/static/` | Page layouts and styling |
-| `api/index.py`, `vercel.json` | Tell Vercel where Tripwire starts, and to run the daily check |
+| `vercel.json` | Tells Vercel this is a Flask app, and to run the daily check |
 | `tests/` | Automatic checks |
 | (`notes` branch) | Project notes and decisions, kept separate from the code |
 
@@ -86,7 +86,7 @@ python -m unittest -v        # run the tests (no internet needed)
 
 Vercel doesn't keep files between visits, so online Tripwire stores everything in a **Postgres database** instead of the `tripwire.db` file.
 
-1. **Import the project:** on vercel.com, choose **Add New → Project**, pick this GitHub repo, and click **Deploy**. Leave the settings as they are ("Framework Preset: Other" is fine). `vercel.json` tells Vercel where Tripwire starts. (The first deploy will show an error page until steps 2 and 3 are done. That's expected.)
+1. **Import the project:** on vercel.com, choose **Add New → Project**, pick this GitHub repo, and click **Deploy**. Leave the settings as they are. Whatever "Framework Preset" Vercel shows, `vercel.json` tells it this is a Flask app. (The first deploy will show an error page until steps 2 and 3 are done. That's expected.)
 2. **Add a database:** in the project, open the **Storage** tab, create a **Postgres** database (Neon is the usual choice, free tier), and connect it to the project. This adds a `DATABASE_URL` setting automatically.
 3. **Add two secret settings:** go to **Settings → Environment Variables** and add:
    - `TRIPWIRE_SECRET`: any long random text (keeps logins safe)

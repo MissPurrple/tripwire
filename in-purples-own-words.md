@@ -181,3 +181,25 @@ On talking a lot:
 > I really want books in there, so let's do that one first. We can get to one later if we have time.
 >
 > I would like to add the ability to do the "like" videos, so the YouTube and the TikTok links. I would like a page for those as well.
+
+---
+
+## 9. Books chart, book facts, stats page, look and feel (28 Oct 2026, evening)
+
+> We need a pie chart. We need some kind of data summary chart. I'm thinking a pie chart to show the major changes that were done, so that we can see if the major changes were between spelling, content, formatting, etc.
+>
+> Also, I'm curious what the changes are running on, on this web app. It's not using my credits on Claude, right ... we want this to be intelligent, right, but we also want it to be informative and quick. We don't need it to be super, super, super, super, super uber smart.
+>
+> We definitely need to add the book facts, 100%, 100%. ... It needs to be on the same page, on the side somewhere. ... the authors on both the books being compared, the years on both the books, the publishers on both the books, the amount of pages, quick facts about the books
+>
+> forget about the pitch for now. Relax, calm down. We've got at least, what is this, 16 hours left
+>
+> I would like to have a stats page that shows the live counter right now ... internet traffic: how many bots are on the internet and how many real, verified humans are on the internet.
+>
+> books published: total books ... That number should never, ever, ever decrease, because you can't unpublish a book ... the amount of digital books and the amount of physical books ... the peak year for physical books published, the peak year for digital books published, the lowest year for physical books, the lowest year for digital books
+>
+> the more tabs I add, the more it fills up on the page ... We need to fix the optics. ... It needs to be pretty, but have a bit of nostalgia to it ... a nice fusion blend of retro. Actually, it would be nice if it had a retro computer aesthetic, a little bit, just a little bit. You can do that after you've done the important core content stuff.
+>
+> Reviewing books takes a while, so maybe go read another book, or go watch a video, or say something nerdy ... You should be able to run these checks, even if a person does not have the page still open. ... after 7 days, the ePubs and the PDFs should be deleted.
+
+Purple's answers to Claude's questions: humans vs bots = **live from Cloudflare** (Purple will create a free token); books published = **Open Library counts**.

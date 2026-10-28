@@ -70,3 +70,14 @@
 3. Books, idea 1 (edition facts over time via Open Library) only if there's time.
 
 - Not yet tested against the real YouTube/TikTok (blocked from Claude's cloud computer); first real test is on the live site.
+
+## Built 28 Oct (late evening)
+- Tripwire uses NO AI and nothing connected to Purple's Claude account: plain rule-based Python on Vercel. Free, fast, same answer every time.
+- Books: donut chart of change kinds (spelling, names, grammar & punctuation, formatting, word swaps, content); "most interesting changes"; book facts panel on the side (title, author, year, publisher, pages, words, language, format for both editions + Open Library quick facts). Project Gutenberg licence text is ignored.
+- Book comparisons run as background jobs with a waiting page of nerdy jokes; they carry on if the page is closed. Book files are deleted after 7 days (or on request); results stay.
+- Stats page: humans vs bots (Cloudflare Radar, needs CLOUDFLARE_API_TOKEN in Vercel, NOT SET YET); books published running totals + peak/lowest years (Open Library); "Your Tripwire" numbers and charts.
+- Menu: Watching · Videos · Changes · Books · Stats + "More" (Archive, Weekly summary, log out); "Menu" button on phones.
+
+## Next
+- Retro computer look ("just a little bit"), after core features are solid.
+- Purple to add the Cloudflare token, then test Stats, Books (with Gutenberg links) and Videos on the live site.

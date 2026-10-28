@@ -84,5 +84,5 @@ python -m unittest -v        # run the tests (no internet needed)
 ## Next up
 - Checking automatically on a schedule (right now you press the button or run `python -m tripwire check`).
 - Delivering the weekly summary by message (once a week only).
-- Offline Wikipedia through **Kiwix**, so a saved copy of the articles works without internet.
+- Offline, preservation-first copies through **[Kiwix](https://kiwix.org/en/)**. Kiwix packages Wikipedia and other knowledge sites into single files ("ZIM" files) that anyone can keep and read with no internet. Tripwire could compare live articles against a Kiwix copy, and keep its own archive in a format Kiwix can open.
 - Accounts, so different people can each have their own themes.

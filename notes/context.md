@@ -35,4 +35,7 @@
 - Each entry shows the difference and how big it is (trivial vs. massive). The user can **Disregard** an entry, which deletes it, or keep it.
 - Name spelling changes matter. Flag them, because they can show a language spreading or disappearing.
 - Notifications: **only a weekly summary** (e.g. "2 changes across 5 articles, mostly trivial"). No per-change Telegram pings.
-- Wants offline Wikipedia via **Kiwix** (Purple said "Kiwi X") later.
+- Wants offline Wikipedia via **Kiwix**: https://kiwix.org/en/ (Purple: "its more preservation forward as well").
+
+## Team
+- Purple wants to open the Tripwire team to more people (up to 5 in total). The draft call for teammates is in `notes/team-call.md`.

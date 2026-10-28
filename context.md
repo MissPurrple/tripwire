@@ -81,3 +81,10 @@
 ## Next
 - Retro computer look ("just a little bit"), after core features are solid.
 - Purple to add the Cloudflare token, then test Stats, Books (with Gutenberg links) and Videos on the live site.
+
+## Built overnight 28-29 Oct
+- Purple added the Cloudflare token. Purple also merged a Vercel Web Analytics change into main (keep it).
+- Home page ("/") is a retro box computer that boots up; Watching moved to /watching. Retro look site-wide; fonts self-hosted.
+- Styled error pages (404 etc.) and loading states.
+- Stats: world book estimate (Google 2010 count + 2.2M-4M new titles/yr) in its own chart; Open Library chart separate; note about unrecorded books (e.g. Lesotho). Open Library fetching is gentler and shows progress/problems.
+- Rubric suggestions: see rubric-suggestions.md (Purple to decide which to act on).

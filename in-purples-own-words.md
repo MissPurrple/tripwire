@@ -203,3 +203,17 @@ On talking a lot:
 > Reviewing books takes a while, so maybe go read another book, or go watch a video, or say something nerdy ... You should be able to run these checks, even if a person does not have the page still open. ... after 7 days, the ePubs and the PDFs should be deleted.
 
 Purple's answers to Claude's questions: humans vs bots = **live from Cloudflare** (Purple will create a free token); books published = **Open Library counts**.
+
+---
+
+## 10. Before bed (28-29 Oct 2026)
+
+> the updated books page works great. I like it a lot. The earlier uncomfortable issue was that it just looked cluttered, weird, and didn't look great, to be honest. The stats page is nice too.
+>
+> I would like you to please configure the 404 page so that it still maintains the formatting of the site. ... All loading pages should have some kind of nice loading formatting ... For all those random edge case situations, we should keep the formatting for that.
+>
+> I want a nice-looking old computer feel. In fact, the homepage should be an old computer ... When the site opens, it should actually be a box computer. By box, I mean that: not a laptop, not a big flat screen ... the boxy aesthetic, retro computer situation.
+>
+> I would like you to please find this paper or that report that Google did in 2010 ... I do not want to get this information strictly just from Open Library because it would be very biassed, and that would mean you'll get stuck with just Western books for the most part ... in Lesotho, a lot of people don't quite go through the entire process of ISBN and whatnot. Sometimes you just go through the process of just printing it
+>
+> I've also attached the rubric for the Buildathon. Make suggestions ... I do not necessarily want to completely change everything of mine just to fit the rubric, but I do kind of want to be able to get a pretty high score. Maybe I might even win.

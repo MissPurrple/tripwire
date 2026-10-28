@@ -35,7 +35,11 @@
 - Each entry shows the difference and how big it is (trivial vs. massive). The user can **Disregard** an entry, which deletes it, or keep it.
 - Name spelling changes matter. Flag them, because they can show a language spreading or disappearing.
 - Notifications: **only a weekly summary** (e.g. "2 changes across 5 articles, mostly trivial"). No per-change Telegram pings.
+- **Accounts** added (email + password). Each person has their own themes and archive.
+- Hosting: **Vercel** (Purple is setting it up), with a Postgres database. A daily Vercel cron job runs the checks.
+- Later: **YouTube / TikTok links**: notice when a video is removed, made private, marked sensitive, or retitled.
+- Later / pitch "next step": **browser extension** with a "Watch this with Tripwire" button, plus short live watching while the browser is open (e.g. BBC live news) with a sound or ping.
 - Wants offline Wikipedia via **Kiwix**: https://kiwix.org/en/ (Purple: "its more preservation forward as well").
 
 ## Team
-- Purple wants to open the Tripwire team to more people (up to 5 in total). The draft call for teammates is in `notes/team-call.md`.
+- Purple wants to open the Tripwire team to more people (up to 5 in total). The call for teammates is in `notes/team-call.md`. The PUBLIC buildathon description must stay vague: no details of how Tripwire works.

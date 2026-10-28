@@ -1,12 +1,28 @@
 # Tripwire: call for teammates (draft, 28 Oct 2026)
 
+## PUBLIC version (buildathon page): keep it vague, no details of how it works
+
+**Tripwire: keeping watch over the record**
+
+Knowledge about Indigenous communities, minority languages, and the work of independent storytellers, journalists and archivists online is fragile. It gets edited, removed, or quietly lost, often without anyone noticing. Tripwire is a tool for noticing, and for making sure the record survives.
+
+A first version is already up and running (Python + Flask). Looking for:
+- a **back-end developer**
+- a **front-end developer / designer**
+- an **archivist, archive enthusiast, or data person**
+
+If you care about who gets to keep the record, come build with us.
+
+---
+
+
 ## Who the team needs
 1. **Python / back-end developer.** Scheduled checking, Kiwix (ZIM file) integration, making it robust against real-world Wikipedia and web pages.
 2. **Front-end / design person.** Makes the archive and weekly summary a joy to use; ideally mobile-friendly.
 3. **Archivist, Wikipedian, or someone who knows Indigenous data governance.** Doesn't need to code. Knows what's worth watching, how Wikipedia editing really works, and how to handle community knowledge respectfully (e.g. the CARE principles).
 4. (Optional) **Bot / integrations developer.** The once-a-week summary message (Telegram or email).
 
-## Description to post
+## Detailed description (private: not for the public page)
 
 **Tripwire: catch the internet rewriting history**
 
@@ -23,7 +39,7 @@ A working first version is already built (Python + Flask). Next: automatic sched
 
 If you care about who gets to define the truth, come build with me.
 
-## Casual version (Telegram)
+## Casual version (Telegram; detailed, so only where Purple is happy to share how it works)
 
 hey Edge fam 👋 building **Tripwire** for the buildathon and looking for teammates
 

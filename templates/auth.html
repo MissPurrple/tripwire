@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Sign up' if mode == 'signup' else 'Log in' }} · Tripwire{% endblock %}
+{% block content %}
+<section class="theme auth">
+  {% if mode == 'signup' %}
+    <h1>Make an account</h1>
+    <p>Watch the information you care about, and keep a copy when it changes.</p>
+  {% else %}
+    <h1>Log in</h1>
+  {% endif %}
+  <form method="post">
+    <label>Email
+      <input type="email" name="email" required autocomplete="email" value="{{ request.form.email or '' }}">
+    </label>
+    <label>Password{% if mode == 'signup' %} (at least 8 characters){% endif %}
+      <input type="password" name="password" required minlength="{{ 8 if mode == 'signup' else 1 }}"
+             autocomplete="{{ 'new-password' if mode == 'signup' else 'current-password' }}">
+    </label>
+    <button>{{ 'Sign up' if mode == 'signup' else 'Log in' }}</button>
+  </form>
+  {% if mode == 'signup' %}
+    <p class="switch">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+  {% else %}
+    <p class="switch">New here? <a href="{{ url_for('signup') }}">Make an account</a></p>
+  {% endif %}
+</section>
+{% endblock %}

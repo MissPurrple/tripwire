@@ -48,7 +48,7 @@ pip install -r requirements.txt
 ```
 python app.py
 ```
-Then open **http://localhost:5000** in your browser. To stop it, go back to the terminal and press **Ctrl + C**.
+Then open **http://localhost:5000** in your browser and click **Make an account**. (On your laptop the account only exists on your laptop.) To stop it, go back to the terminal and press **Ctrl + C**.
 
 Next time, you only need to open a terminal in the folder, run the `activate` line from step 2, then `python app.py`.
 
@@ -61,8 +61,8 @@ You can also paste links to **other-language Wikipedias** (e.g. Konkani: `https:
 
 ### From the terminal
 ```
-python -m tripwire check     # check everything now
-python -m tripwire summary   # print the weekly summary
+python -m tripwire check     # check everything now, then save Internet Archive copies
+python -m tripwire summary   # print everyone's weekly summary
 python -m unittest -v        # run the tests (no internet needed)
 ```
 
@@ -77,12 +77,30 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/changes.py` | Compares before and after text and judges how big the change is |
 | `tripwire/sources.py` | Talks to Wikipedia, ordinary websites, and the Internet Archive |
 | `tripwire/db.py` | Storage: one file, `tripwire.db`, on your computer |
-| `templates/`, `static/` | Page layouts and styling |
+| `templates/`, `public/static/` | Page layouts and styling |
+| `vercel.json` | Tells Vercel to run the daily check |
 | `tests/` | Automatic checks |
 | `notes/` | Project notes and decisions |
 
+## Putting it online with Vercel
+
+Vercel doesn't keep files between visits, so online Tripwire stores everything in a **Postgres database** instead of the `tripwire.db` file.
+
+1. **Import the project:** on vercel.com, choose **Add New → Project**, pick this GitHub repo, and click **Deploy**. Leave the settings as they are. Vercel finds `app.py` by itself. (The first deploy will show an error page until steps 2 and 3 are done. That's expected.)
+2. **Add a database:** in the project, open the **Storage** tab, create a **Postgres** database (Neon is the usual choice, free tier), and connect it to the project. This adds a `DATABASE_URL` setting automatically.
+3. **Add two secret settings:** go to **Settings → Environment Variables** and add:
+   - `TRIPWIRE_SECRET`: any long random text (keeps logins safe)
+   - `CRON_SECRET`: a different long random text (so only Vercel's daily timer can start a check)
+
+   An easy way to make random text: a password manager's generator, at least 32 characters.
+4. **Redeploy:** in the **Deployments** tab, open the "…" menu on the latest deployment → **Redeploy**.
+5. Open your site's link, make an account, and add your theme.
+
+**Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, then saves Internet Archive copies, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
+
 ## Next up
-- Checking automatically on a schedule (right now you press the button or run `python -m tripwire check`).
 - Delivering the weekly summary by message (once a week only).
+- **Social video watching:** paste a YouTube or TikTok link and Tripwire notices if the video is removed, made private, marked sensitive or age-restricted, or retitled.
+- **"Watch this with Tripwire" browser extension:** one click to add the page you're on. Also short, live watching while your browser is open (e.g. a BBC live news page), with a sound or ping when it updates.
 - Offline, preservation-first copies through **[Kiwix](https://kiwix.org/en/)**. Kiwix packages Wikipedia and other knowledge sites into single files ("ZIM" files) that anyone can keep and read with no internet. Tripwire could compare live articles against a Kiwix copy, and keep its own archive in a format Kiwix can open.
 - Accounts, so different people can each have their own themes.

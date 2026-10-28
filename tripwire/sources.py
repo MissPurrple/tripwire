@@ -186,10 +186,10 @@ def fetch_page(url):
 # Internet Archive (Wayback Machine)
 # ---------------------------------------------------------------------------
 
-def archive_save(url):
+def archive_save(url, timeout=120):
     """Ask the Internet Archive to save a copy of `url` right now.
     Returns the link to the saved copy. This can take up to a minute."""
-    response = _get("https://web.archive.org/save/" + url, timeout=120)
+    response = _get("https://web.archive.org/save/" + url, timeout=timeout)
     if response.status_code >= 400:
         raise SourceError(f"The Internet Archive couldn't save the page (error {response.status_code})")
     location = response.headers.get("Content-Location")

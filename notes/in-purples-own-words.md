@@ -94,3 +94,35 @@ On what to track:
 > I like tripwire, by the way, will change the name of the repo even
 
 > start with Indigenous communities, solo for now, go ahead
+
+---
+
+## 6. Public description, social video, the plugin, and Vercel (28 Oct 2026)
+
+On the public team description:
+> this is public on the Buildathon thing, so I don't necessarily want to tell everybody what it does.
+>
+> I need something that has a lot less information. It needs to summarise what it is we're building, or what it is Tripwire is, in a way that doesn't tell everyone that this is how it's going to work
+
+On social video:
+> With the rise of independent storytellers, independent journalists, and archivists on social platforms like YouTube, TikTok, Twitter, and Instagram (in particular, I'm thinking YouTube and TikTok), it would be great to include those too.
+>
+> Say a video was up, and then it was flagged and then removed. It would be great to know that that video has been removed, because sometimes you go looking for something, and then you go looking for a video on somebody's feed. You find that that video is gone.
+>
+> we can still keep it simple, and we can just say, "Paste the link here." If you paste the link, it will update you if anything changes about this video. The changes about the video would likely be if the video got deleted, or if the video has been classified as sensitive or something like that.
+>
+> Same with YouTube: if, say, the video got a new title, that could be great.
+
+On the plugin:
+> Definitely love the future "Watch This with Tripwire" button.
+>
+> We can just make a note to say that it only runs while your browser is open. Maybe the plugin can be for temporary runs, right? If you want to run more minute checks, let's say you are on a news site, like the BBC, when they're doing live reporting. You're on your browser, but you're doing other things. If you want to know when the news site on the BBC updates their news site, it can watch it for you. If something changes on the site, it can do an alert or something, maybe either a sound or just a ping.
+>
+> if it's not done when I'm pitching, I can mention that that's something that we can add later on.
+
+On hosting and accounts:
+> Putting it online: I can do that with Vercel.
+>
+> Automatic daily checking: would that be a cron job?
+>
+> let's do accounts.

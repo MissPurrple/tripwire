@@ -1,6 +1,13 @@
-"""Tripwire's storage: one small SQLite database file (tripwire.db).
+"""Tripwire's storage.
 
-Three tables:
+Two ways to store things, same tables either way:
+  - On your laptop: one small SQLite file (tripwire.db). Nothing to set up.
+  - Online (Vercel): a Postgres database. Vercel forgets files between visits,
+    so set the DATABASE_URL setting to your database's address and Tripwire
+    uses that instead.
+
+Tables:
+  users    people with an account
   themes   what a person cares about, e.g. "Indigenous communities"
   watches  the things being watched inside a theme (a Wikipedia article or a web page),
            with a saved copy of the version Tripwire last saw (the "baseline")
@@ -16,14 +23,22 @@ from datetime import datetime, timezone
 DEFAULT_PATH = os.environ.get("TRIPWIRE_DB", os.path.join(os.path.dirname(__file__), "..", "tripwire.db"))
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id             {id},
+    email          TEXT NOT NULL UNIQUE,
+    password_hash  TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS themes (
-    id          INTEGER PRIMARY KEY,
+    id          {id},
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
     created_at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS watches (
-    id                    INTEGER PRIMARY KEY,
+    id                    {id},
     theme_id              INTEGER NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
     kind                  TEXT NOT NULL,          -- 'wikipedia' or 'web'
     label                 TEXT NOT NULL,          -- what we show people
@@ -39,7 +54,7 @@ CREATE TABLE IF NOT EXISTS watches (
 );
 
 CREATE TABLE IF NOT EXISTS entries (
-    id                  INTEGER PRIMARY KEY,
+    id                  {id},
     watch_id            INTEGER NOT NULL REFERENCES watches(id) ON DELETE CASCADE,
     detected_at         TEXT NOT NULL,
     category            TEXT NOT NULL,           -- see changes.CATEGORIES
@@ -53,9 +68,9 @@ CREATE TABLE IF NOT EXISTS entries (
     before_archive_url  TEXT,
     after_archive_url   TEXT,
     compare_url         TEXT,                    -- e.g. Wikipedia's own diff page
-    details             TEXT NOT NULL DEFAULT '{}',  -- JSON: hunks, names, editors
+    details             TEXT NOT NULL DEFAULT '{{}}',  -- JSON: hunks, names, editors
     kept                INTEGER NOT NULL DEFAULT 0
-);
+)
 """
 
 
@@ -63,12 +78,65 @@ def now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def connect(path=None):
-    conn = sqlite3.connect(path or DEFAULT_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(SCHEMA)
-    return conn
+class Connection:
+    """A thin wrapper so the rest of Tripwire can write SQL with ? placeholders
+    and get rows back as dictionaries, whether it's SQLite or Postgres."""
+
+    def __init__(self, url=None):
+        url = url or os.environ.get("DATABASE_URL")
+        if not url and os.environ.get("VERCEL"):
+            raise RuntimeError("Add a database: in Vercel, connect a Postgres database so DATABASE_URL is set.")
+        url = url or DEFAULT_PATH
+        self.postgres = url.startswith(("postgres://", "postgresql://"))
+        if self.postgres:
+            import psycopg
+            from psycopg.rows import dict_row
+            self.raw = psycopg.connect(url, row_factory=dict_row)
+            schema = SCHEMA.format(id="SERIAL PRIMARY KEY")
+        else:
+            self.raw = sqlite3.connect(url, timeout=30)
+            self.raw.row_factory = sqlite3.Row
+            self.raw.execute("PRAGMA foreign_keys = ON")
+            schema = SCHEMA.format(id="INTEGER PRIMARY KEY")
+        for statement in schema.split(";"):
+            self.raw.execute(statement)
+        self.raw.commit()
+
+    def execute(self, sql, params=()):
+        """Run one SQL statement and save it. Use .fetchone() / .fetchall() on
+        the result to read rows."""
+        if self.postgres:
+            sql = sql.replace("?", "%s")
+        try:
+            cur = self.raw.execute(sql, params)
+            rows = cur.fetchall() if cur.description else []
+        except Exception:
+            self.raw.rollback()
+            raise
+        self.raw.commit()
+        return Result(rows)
+
+    def insert(self, sql, params=()):
+        """Run an INSERT and return the new row's id."""
+        return self.execute(sql + " RETURNING id", params).fetchone()["id"]
+
+    def close(self):
+        self.raw.close()
+
+
+class Result:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
+    def fetchall(self):
+        return self.rows
+
+
+def connect(url=None):
+    return Connection(url)
 
 
 def entry_details(entry):

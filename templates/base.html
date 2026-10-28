@@ -9,11 +9,16 @@
 <body>
   <header class="top">
     <a class="brand" href="{{ url_for('index') }}">Tripwire</a>
+    {% if g.user %}
     <nav>
       <a href="{{ url_for('index') }}">Watching</a>
       <a href="{{ url_for('archive') }}">Archive</a>
       <a href="{{ url_for('summary') }}">Weekly summary</a>
     </nav>
+    <form class="account" method="post" action="{{ url_for('logout') }}">
+      <span>{{ g.user.email }}</span><button class="link">Log out</button>
+    </form>
+    {% endif %}
   </header>
   <main>
     {% for kind, message in get_flashed_messages(with_categories=true) %}

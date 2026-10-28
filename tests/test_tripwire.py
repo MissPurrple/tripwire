@@ -109,15 +109,21 @@ class FakeWikipedia:
 class CheckerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db_path = os.path.join(self.tmp.name, "test.db")
+        # Set TRIPWIRE_TEST_DB to a Postgres address to run the same tests on Postgres.
+        self.db_path = os.environ.get("TRIPWIRE_TEST_DB") or os.path.join(self.tmp.name, "test.db")
+        if self.db_path.startswith("postgres"):
+            import psycopg
+            with psycopg.connect(self.db_path, autocommit=True) as conn:
+                conn.execute("DROP TABLE IF EXISTS entries, watches, themes, users CASCADE")
         self.tw = Tripwire(self.db_path, archive=False)
+        self.user = self.tw.create_user("purple@example.org", "correct horse")
         FakeWikipedia.articles = {"Warli": [
             {"revid": 1, "user": "A", "comment": "start", "text": "The Warli are an Adivasi people of Maharashtra."},
         ]}
         patcher = mock.patch.object(sources, "Wikipedia", FakeWikipedia)
         patcher.start()
         self.addCleanup(patcher.stop)
-        self.theme = self.tw.add_theme("Indigenous communities")
+        self.theme = self.tw.add_theme(self.user, "Indigenous communities")
 
     def tearDown(self):
         self.tw.conn.close()
@@ -130,10 +136,13 @@ class CheckerTests(unittest.TestCase):
         return self.tw.conn.execute("SELECT * FROM entries ORDER BY id").fetchall()
 
     def test_theme_limit(self):
-        self.tw.add_theme("Languages")
-        self.tw.add_theme("Oral history")
+        self.tw.add_theme(self.user, "Languages")
+        self.tw.add_theme(self.user, "Oral history")
         with self.assertRaises(ValueError):
-            self.tw.add_theme("One too many")
+            self.tw.add_theme(self.user, "One too many")
+        # The limit is per person: someone else can still make their own.
+        other = self.tw.create_user("friend@example.org", "another password")
+        self.tw.add_theme(other, "Languages")
 
     def test_no_change_means_no_entry(self):
         watch = self.tw.add_watch(self.theme, "Warli")
@@ -152,7 +161,7 @@ class CheckerTests(unittest.TestCase):
         self.assertIn("Warlee", entry["after_text"])
         self.assertIn("Warli → Warlee", entry["summary"])
         self.assertIn("diff=3&oldid=1", entry["compare_url"])
-        details = self.tw.conn.execute("SELECT details FROM entries").fetchone()[0]
+        details = self.tw.conn.execute("SELECT details FROM entries").fetchone()["details"]
         self.assertIn('"editors": ["B", "C"]', details)
 
         # The baseline moved forward, so checking again finds nothing new.
@@ -198,41 +207,126 @@ class CheckerTests(unittest.TestCase):
         watch = self.tw.add_watch(self.theme, "Warli")
         with mock.patch.object(FakeWikipedia, "revisions_since", side_effect=sources.SourceError("offline")):
             self.assertIsNone(self.tw.check_watch(watch))
-        status = self.tw.conn.execute("SELECT last_status FROM watches").fetchone()[0]
+        status = self.tw.conn.execute("SELECT last_status FROM watches").fetchone()["last_status"]
         self.assertEqual(status, "Couldn't check: offline")
 
     def test_weekly_summary(self):
-        self.assertIn("no changes across your 0 tracked items", self.tw.weekly_summary()["text"])
+        self.assertIn("no changes across your 0 tracked items", self.tw.weekly_summary(self.user)["text"])
         watch = self.tw.add_watch(self.theme, "Warli")
         self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")
         self.tw.check_watch(watch)
-        text = self.tw.weekly_summary()["text"]
+        text = self.tw.weekly_summary(self.user)["text"]
         self.assertIn("1 change across 1 of your 1 tracked items", text)
         self.assertIn("Names that changed spelling: Warli → Warlee (Warli)", text)
 
+    def test_accounts(self):
+        self.assertEqual(self.tw.log_in(" Purple@Example.org ", "correct horse")["id"], self.user)
+        self.assertIsNone(self.tw.log_in("purple@example.org", "wrong password"))
+        self.assertIsNone(self.tw.log_in("nobody@example.org", "correct horse"))
+        with self.assertRaises(ValueError):
+            self.tw.create_user("purple@example.org", "some password")  # already taken
+        with self.assertRaises(ValueError):
+            self.tw.create_user("new@example.org", "short")
+        with self.assertRaises(ValueError):
+            self.tw.create_user("not an email", "long enough password")
+        stored = self.tw.conn.execute("SELECT password_hash FROM users").fetchone()["password_hash"]
+        self.assertNotIn("correct horse", stored)  # passwords are never stored as typed
+
+    def test_archive_copies_saved_for_before_and_after(self):
+        self.tw.archive = True
+        watch = self.tw.add_watch(self.theme, "Warli")
+        with mock.patch.object(sources, "archive_save", lambda url, timeout: "https://web.archive.org/web/1/" + url):
+            self.assertEqual(self.tw.save_archive_copies(), 1)
+            self.add_version(2, "The Warli are an Adivasi people of India.")
+            self.tw.check_watch(watch)
+            self.assertEqual(self.tw.save_archive_copies(), 1)
+            self.assertEqual(self.tw.save_archive_copies(), 0)  # nothing left to save
+        [entry] = self.entries()
+        self.assertTrue(entry["before_archive_url"].endswith("oldid=1"))
+        self.assertTrue(entry["after_archive_url"].endswith("oldid=2"))
+
+    def test_archive_failure_is_retried_later(self):
+        self.tw.archive = True
+        self.tw.add_watch(self.theme, "Warli")
+        with mock.patch.object(sources, "archive_save", side_effect=sources.SourceError("busy")):
+            self.assertEqual(self.tw.save_archive_copies(), 0)
+        with mock.patch.object(sources, "archive_save", lambda url, timeout: "https://web.archive.org/web/1/x"):
+            self.assertEqual(self.tw.save_archive_copies(), 1)
+
 
 class WebAppTests(CheckerTests):
-    """Click through every page of the web app with the pretend Wikipedia."""
+    """Click through the web app with the pretend Wikipedia."""
+
+    def setUp(self):
+        super().setUp()
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, ARCHIVE=False, TESTING=True)
+        self.client = webapp.app.test_client()
+
+    def log_in(self, email="purple@example.org", password="correct horse"):
+        return self.client.post("/login", data={"email": email, "password": password}, follow_redirects=True)
+
+    def test_pages_need_an_account(self):
+        for path in ["/", "/archive", "/summary", "/entries/1"]:
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(response.headers["Location"].endswith("/login"))
+
+    def test_signup_and_login(self):
+        response = self.client.post("/signup", data={"email": "new@example.org", "password": "long enough"},
+                                    follow_redirects=True)
+        self.assertIn(b"new@example.org", response.data)
+        self.assertIn(b"Start with a theme", response.data)
+        self.client.post("/logout")
+        self.assertIn(b"don&#39;t match", self.log_in(password="wrong").data)
+        self.assertIn(b"Indigenous communities", self.log_in().data)
 
     def test_pages_load(self):
-        import app as webapp
-        webapp.app.config.update(DB_PATH=self.db_path, ARCHIVE=False, TESTING=True)
-        client = webapp.app.test_client()
-
-        response = client.post(f"/themes/{self.theme}/watches", data={"target": "Warli", "days_ago": "0"},
-                                follow_redirects=True)
+        self.log_in()
+        response = self.client.post(f"/themes/{self.theme}/watches", data={"target": "Warli", "days_ago": "0"},
+                                    follow_redirects=True)
         self.assertIn(b"Now watching it", response.data)
         self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")
-        response = client.post("/check", follow_redirects=True)
-        self.assertIn(b"Possible name spelling change", response.data.replace(b"possible", b"Possible"))
-        self.assertIn(b"Warlee", client.get("/entries/1").data)
-        self.assertIn(b"1 change across 1", client.get("/summary").data)
-        self.assertEqual(client.get("/").status_code, 200)
+        response = self.client.post("/check", follow_redirects=True)
+        self.assertIn(b"Name spelling changed", response.data)
+        self.assertIn(b"Warlee", self.client.get("/entries/1").data)
+        self.assertIn(b"1 change across 1", self.client.get("/summary").data)
+        self.assertEqual(self.client.get("/").status_code, 200)
+        with self.client.get("/static/style.css") as css:
+            self.assertEqual(css.status_code, 200)
 
         # Disregard redirects back inside the site, never to another website.
-        response = client.post("/entries/1/disregard", data={"next": "//evil.example"})
+        response = self.client.post("/entries/1/disregard", data={"next": "//evil.example"})
         self.assertTrue(response.headers["Location"].endswith("/archive"))
         self.assertEqual(self.entries(), [])
+
+    def test_people_cannot_touch_each_others_things(self):
+        watch = self.tw.add_watch(self.theme, "Warli")
+        self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")
+        entry = self.tw.check_watch(watch)
+        self.tw.create_user("stranger@example.org", "stranger danger")
+        self.log_in("stranger@example.org", "stranger danger")
+
+        self.assertNotIn(b"Warli", self.client.get("/").data)
+        self.assertNotIn(b"Warli", self.client.get("/archive").data)
+        self.assertNotIn(b"Warlee", self.client.get(f"/entries/{entry}", follow_redirects=True).data)
+        for path in [f"/entries/{entry}/disregard", f"/entries/{entry}/keep", f"/watches/{watch}/delete",
+                     f"/watches/{watch}/check", f"/themes/{self.theme}/delete", f"/themes/{self.theme}/watches"]:
+            self.assertEqual(self.client.post(path, data={"target": "X"}).status_code, 404, path)
+        self.assertEqual(len(self.entries()), 1)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM watches").fetchone()["n"], 1)
+
+    def test_daily_check_needs_the_secret(self):
+        watch = self.tw.add_watch(self.theme, "Warli")
+        self.add_version(2, "The Warli are an Adivasi people of India.")
+        with mock.patch.dict(os.environ, {"CRON_SECRET": "s3cret"}):
+            self.assertEqual(self.client.get("/cron").status_code, 403)
+            self.assertEqual(self.client.get("/cron", headers={"Authorization": "Bearer wrong"}).status_code, 403)
+            response = self.client.get("/cron", headers={"Authorization": "Bearer s3cret"})
+        self.assertEqual(response.json["new_entries"], 1)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CRON_SECRET", None)
+            self.assertEqual(self.client.get("/cron").status_code, 403)  # no secret set: always refused
 
 
 if __name__ == "__main__":

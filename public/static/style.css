@@ -37,6 +37,11 @@ main { max-width: 860px; margin: 0 auto; padding: 16px; }
 .top nav { display: flex; gap: 16px; flex-wrap: wrap; }
 .top nav a { text-decoration: none; color: var(--muted); }
 .top nav a:hover { color: var(--accent); }
+.account { margin-left: auto; display: flex; gap: 6px; align-items: baseline; color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+
+.theme.auth { max-width: 420px; margin: 32px auto; }
+.auth form { display: grid; gap: 12px; }
+.auth .switch { color: var(--muted); }
 footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 32px 16px; }
 
 .flash { padding: 10px 14px; border-radius: 8px; background: var(--ins-bg); color: var(--ins-text); }

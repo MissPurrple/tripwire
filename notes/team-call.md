@@ -22,3 +22,20 @@ A working first version is already built (Python + Flask). Next: automatic sched
 - an archivist, Wikipedian, or anyone who knows Indigenous data governance (no coding needed)
 
 If you care about who gets to define the truth, come build with me.
+
+## Casual version (Telegram)
+
+hey Edge fam 👋 building **Tripwire** for the buildathon and looking for teammates
+
+the gist: info about Indigenous communities, minority languages & local histories is thin online, and it gets quietly edited, poisoned or deleted. and AI is learning from whatever's left 🫠
+
+Tripwire watches the Wikipedia pages + sites you care about. when something changes it doesn't spam you. it saves the before/after into your own archive, gets the Internet Archive to keep a copy, tells you if it was a typo or a whole section vanishing, and flags names that got respelled. one chill weekly summary, that's it
+
+a first version already works 🐍 (Python + Flask). next up: auto-checking, offline preservation with Kiwix, a weekly summary bot
+
+looking for:
+• a Python / back-end person
+• a front-end / design person
+• an archivist / Wikipedia nerd / someone who gets Indigenous data stuff (no code needed!)
+
+DM me if you wanna help decide who gets to define the truth ✨

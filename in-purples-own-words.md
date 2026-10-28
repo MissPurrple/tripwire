@@ -231,3 +231,13 @@ Purple's answers to Claude's questions: humans vs bots = **live from Cloudflare*
 > I would like it to say, "You are now entering unrestricted knowledge preservation." ... when you click on books ... locked in for a minimum of 2 seconds to force a bit of a pause.
 >
 > every single piece of text that comes on like that should have the animated typing thing to it. The idea is to force people to slow down just a little bit. Don't try to speed everything up all the time. You're going to get there anyway. Just give it a few extra seconds. Calm down. ... Don't forget my bunny.
+
+---
+
+## 12. Before sleeping, night two (29 Oct 2026)
+
+> could you please build the About page and the demo data for the pitch account, and the weekly summary (sent by email as well)? Essentially, all the stuff that you can do as per the rubric, please do it for me.
+>
+> point of correction: I cannot get people to try it on the train. The hackathon ends before the train, so those two don't go together. The Telemon project was to build something before the train happens so that when we're on the train, the app is ready for the train.
+>
+> I'm going to try to get some people to try it in a few hours, I guess, but it will not be on the train.

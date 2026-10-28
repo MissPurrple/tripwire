@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ c.title }} · Books · Tripwire{% endblock %}
+{% block main_class %}wide{% endblock %}
 
 {% macro fact(info, key, fallback_key=None) -%}
   {%- set ol = info.open_library or {} -%}
@@ -80,8 +81,10 @@
       {% if d.hunk_count > d.hunks|length %}Showing the first {{ d.hunks|length }} of {{ d.hunk_count }} changes.{% endif %}
       {% if d.rewritten_blocks %}Some long stretches were too different to compare word by word, so they show as a word count.{% endif %}</p>
     {% for h in d.hunks %}
+      {% if loop.index == 21 %}<details class="more-changes"><summary>Show all {{ d.hunks|length }} changes</summary>{% endif %}
       <p class="hunk">{% set k = h.kind or 'content' %}<span class="kind-dot" style="background: var(--series-{{ KIND_SERIES[k] }})" title="{{ CHANGE_KINDS[k] }}"></span>
         … {{ h.before }} {% if h.removed %}<del>{{ h.removed }}</del>{% endif %} {% if h.added %}<ins>{{ h.added }}</ins>{% endif %} {{ h.after }} …</p>
+      {% if loop.last and loop.index > 20 %}</details>{% endif %}
     {% endfor %}
   </section>
   {% elif not d.hunks %}

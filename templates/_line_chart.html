@@ -1,0 +1,27 @@
+{# A line chart. Needs `chart` = line_chart(...), `chart_title`, and optional `value_format` ('number' or 'percent'). #}
+<figure class="line-figure">
+  <svg class="line-chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart_title }}">
+    {% for t in chart.y_ticks %}
+      <line class="grid" x1="{{ chart.left }}" x2="{{ chart.left + chart.plot_w }}" y1="{{ '%.1f'|format(t.y) }}" y2="{{ '%.1f'|format(t.y) }}"></line>
+      <text class="axis" x="{{ chart.left - 6 }}" y="{{ '%.1f'|format(t.y + 3) }}" text-anchor="end">{{ t.label }}</text>
+    {% endfor %}
+    {% for t in chart.x_ticks %}
+      <text class="axis" x="{{ '%.1f'|format(t.x) }}" y="{{ chart.base + 18 }}" text-anchor="middle">{{ t.label }}</text>
+    {% endfor %}
+    {% for l in chart.lines %}
+      <path class="line" d="{{ l.path }}" stroke="var(--series-{{ l.series }})"></path>
+    {% endfor %}
+    {% for c in chart.columns %}
+      <rect class="hover-col" x="{{ '%.1f'|format(c.x) }}" y="{{ chart.top }}" width="{{ '%.2f'|format(c.w) }}" height="{{ chart.plot_h }}">
+        <title>{{ c.label }}{% for label, v in c.readings %}
+{{ label }}: {{ ('{:.1f}%'.format(v)) if value_format == 'percent' else '{:,}'.format(v|int) }}{% endfor %}</title>
+      </rect>
+    {% endfor %}
+  </svg>
+  <figcaption class="line-legend">
+    {% for l in chart.lines %}
+      <span><span class="swatch" style="background: var(--series-{{ l.series }})"></span>{{ l.label }}:
+        <strong>{{ ('{:.1f}%'.format(l.last)) if value_format == 'percent' else '{:,}'.format(l.last|int) }}</strong></span>
+    {% endfor %}
+  </figcaption>
+</figure>

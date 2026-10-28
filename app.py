@@ -15,7 +15,7 @@ import time
 
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from tripwire import books, changes, charts, db, sources
+from tripwire import books, changes, charts, db, sources, stats
 from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
@@ -477,6 +477,85 @@ def summary():
     return render_template("summary.html", s=tw().weekly_summary(g.user["id"]))
 
 
+# -- stats --------------------------------------------------------------------
+
+# The Stats page groups the kinds of change into a few slices.
+CHANGE_GROUPS = {"small": "Tiny & formatting", "edit": "Edits", "major": "Major changes",
+                 "removal": "Removals & removed pages", "video": "Video changes"}
+GROUP_OF = {"formatting": "small", "tiny": "small", "edit": "edit", "major": "major", "removal": "removal",
+            "page_removed": "removal", "video_retitled": "video", "video_restricted": "video", "video_gone": "video"}
+
+
+def _my_numbers(user_id):
+    """The signed-in person's own Tripwire numbers."""
+    from datetime import datetime, timedelta, timezone
+    rows = tw().conn.execute("""SELECT e.category, e.detected_at FROM entries e JOIN watches w ON w.id = e.watch_id
+                                JOIN themes t ON t.id = w.theme_id WHERE t.user_id = ?""", (user_id,)).fetchall()
+    groups = dict.fromkeys(CHANGE_GROUPS, 0)
+    for r in rows:
+        groups[GROUP_OF.get(r["category"], "edit")] += 1
+    today = datetime.now(timezone.utc).date()
+    week_start = today - timedelta(days=today.weekday())
+    weeks = [week_start - timedelta(weeks=n) for n in range(11, -1, -1)]
+    per_week = dict.fromkeys(weeks, 0)
+    for r in rows:
+        day = datetime.strptime(r["detected_at"][:10], "%Y-%m-%d").date()
+        monday = day - timedelta(days=day.weekday())
+        if monday in per_week:
+            per_week[monday] += 1
+    top = charts.nice_max(max(per_week.values()) or 1)
+    bars = [{"label": w.strftime("%d %b"), "count": n, "height": 100 * n / top} for w, n in per_week.items()]
+    swaps, comparisons = {}, tw().book_comparisons(user_id)
+    for c in comparisons:
+        for old, new, n in db.entry_details(c).get("swaps", []):
+            swaps[(old, new)] = swaps.get((old, new), 0) + n
+    top_swaps = sorted(swaps.items(), key=lambda item: -item[1])[:3]
+    watched = tw().conn.execute("""SELECT COUNT(*) AS n FROM watches w JOIN themes t ON t.id = w.theme_id
+                                   WHERE t.user_id = ?""", (user_id,)).fetchone()["n"]
+    return {"groups": groups, "total": len(rows), "bars": bars, "bar_top": top, "watched": watched,
+            "comparisons": len(comparisons), "swap_total": sum(swaps.values()), "top_swaps": top_swaps,
+            "copies": len(tw().copies(user_id))}
+
+
+@app.get("/stats")
+@login_required
+def stats_page():
+    st = stats.Stats(tw().conn)
+    traffic = st.traffic()
+    book_data = st.books()
+    missing, total_years = st.book_years_needed()
+    traffic_chart = None
+    if traffic.get("series") and traffic["series"]["timestamps"]:
+        labels = [t[5:10].replace("-", "/") for t in traffic["series"]["timestamps"]]
+        traffic_chart = charts.line_chart(labels, [("human", "Humans", traffic["series"]["human"]),
+                                                   ("bot", "Bots", traffic["series"]["bot"])],
+                                          y_suffix="%", y_max=100, x_ticks=7)
+    books_chart = None
+    if book_data:
+        books_chart = charts.line_chart(book_data["years"], [
+            ("all", "All books", book_data["running"]["all"]),
+            ("print", "Print only", book_data["running"]["print"]),
+            ("digital", "With a digital copy", book_data["running"]["digital"])], width=520, height=280)
+    return render_template("stats.html", traffic=traffic, traffic_chart=traffic_chart, books=book_data,
+                           books_chart=books_chart, books_missing=len(missing), books_total=total_years,
+                           mine=_my_numbers(g.user["id"]), groups=CHANGE_GROUPS)
+
+
+@app.get("/stats/traffic.json")
+@login_required
+def stats_traffic():
+    traffic = stats.Stats(tw().conn).traffic()
+    return jsonify({k: traffic.get(k) for k in ("connected", "human", "bot", "updated", "error", "stale")})
+
+
+@app.post("/stats/books/fill")
+@login_required
+def stats_fill_books():
+    """Fetch a few more years of book counts. The Stats page calls this until all are in."""
+    missing, total = stats.Stats(tw().conn).fill_book_years(seconds=20)
+    return jsonify(missing=missing, total=total)
+
+
 # -- the daily check (called by Vercel's timer, see vercel.json) -------------
 
 @app.get("/cron")
@@ -496,6 +575,9 @@ def cron():
         tw().run_book_job(job["id"])
         finished += 1
     tw().delete_book_files(older_than_days=BOOK_FILE_DAYS)
+    remaining = started + CRON_BUDGET - time.monotonic()
+    if remaining > 5:
+        stats.Stats(tw().conn).fill_book_years(seconds=remaining - 3)
     return jsonify(new_entries=len(new), book_jobs_run=finished,
                    seconds=round(time.monotonic() - started, 1))
 

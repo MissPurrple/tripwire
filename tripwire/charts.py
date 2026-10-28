@@ -38,3 +38,45 @@ def nice_max(value):
         if value <= step * power:
             return step * power
     return 10 * power
+
+
+def short_number(value):
+    """12345678 -> '12.3M', 4500 -> '4.5K'."""
+    for size, suffix in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if abs(value) >= size:
+            text = f"{value / size:.1f}".rstrip("0").rstrip(".")
+            return text + suffix
+    return f"{value:g}"
+
+
+def line_chart(labels, series, width=640, height=260, y_suffix="", y_max=None, x_ticks=6):
+    """A line chart with one y axis. labels: the x values (e.g. years);
+    series: [(key, label, values)] in a fixed order (colours follow that order).
+    Returns everything a template needs to draw it as SVG."""
+    left, right, top, bottom = 48, 16, 12, 28
+    plot_w, plot_h = width - left - right, height - top - bottom
+    top_value = y_max or nice_max(max((max(v) for _, _, v in series if v), default=1))
+    count = len(labels)
+
+    def x(i):
+        return left + (plot_w * i / (count - 1) if count > 1 else plot_w / 2)
+
+    def y(v):
+        return top + plot_h - plot_h * v / top_value
+
+    lines = []
+    for n, (key, label, values) in enumerate(series, start=1):
+        points = [(x(i), y(v)) for i, v in enumerate(values)]
+        lines.append({"key": key, "label": label, "series": n,
+                      "path": " ".join(f"{'M' if i == 0 else 'L'}{px:.1f},{py:.1f}" for i, (px, py) in enumerate(points)),
+                      "end": points[-1] if points else (left, top + plot_h),
+                      "last": values[-1] if values else 0})
+    step = max(1, round((count - 1) / max(1, x_ticks - 1))) if count > 1 else 1
+    x_ticks_out = [{"x": x(i), "label": labels[i]} for i in range(0, count, step)]
+    y_ticks = [{"y": y(top_value * f), "label": short_number(top_value * f) + y_suffix} for f in (0, .25, .5, .75, 1)]
+    # One invisible column per x value, for hover tooltips listing every series' value.
+    columns = [{"x": x(i) - (plot_w / max(count - 1, 1)) / 2, "w": plot_w / max(count - 1, 1), "label": labels[i],
+                "readings": [(label, values[i]) for _, label, values in series]} for i in range(count)]
+    return {"width": width, "height": height, "left": left, "top": top, "plot_w": plot_w, "plot_h": plot_h,
+            "base": top + plot_h, "lines": lines, "x_ticks": x_ticks_out, "y_ticks": y_ticks,
+            "columns": columns, "y_suffix": y_suffix}

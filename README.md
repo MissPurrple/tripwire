@@ -76,7 +76,8 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/checker.py` | Adds watches, checks for changes, keeps/disregards entries, writes the weekly summary |
 | `tripwire/changes.py` | Compares before and after text and judges how big the change is |
 | `tripwire/sources.py` | Talks to Wikipedia, ordinary websites, YouTube, TikTok and the Internet Archive |
-| `tripwire/books.py` | Reads book files (EPUB, PDF, text) for comparing two editions |
+| `tripwire/books.py` | Reads book files (EPUB, PDF, text, Project Gutenberg) for comparing two editions |
+| `tripwire/stats.py`, `tripwire/charts.py` | The Stats page's numbers (Cloudflare Radar, Open Library) and the charts |
 | `tripwire/db.py` | Storage: a `tripwire.db` file on your laptop, or a Postgres database online |
 | `templates/`, `public/static/` | Page layouts and styling |
 | `vercel.json` | Tells Vercel this is a Flask app, and to run the daily check |
@@ -97,10 +98,17 @@ Vercel doesn't keep files between visits, so online Tripwire stores everything i
 4. **Redeploy:** in the **Deployments** tab, open the "…" menu on the latest deployment → **Redeploy**.
 5. Open your site's link, make an account, and add your theme.
 
+**Stats page, humans vs bots (optional):** the live numbers come from Cloudflare Radar, which needs a free API token:
+1. Sign up (free) at **dash.cloudflare.com**.
+2. Click your profile icon (top right) → **My Profile** → **API Tokens** → **Create Token** → **Create Custom Token**.
+3. Give it a name like `tripwire-radar`. Under **Permissions**, choose **Account** → **Radar** → **Read**. Click **Continue to summary** → **Create Token**, and copy the token. It's only shown once.
+4. In Vercel: **Settings → Environment Variables** → add `CLOUDFLARE_API_TOKEN` with the token as its value → **Save** → **Redeploy**.
+
+The books-published numbers need no setup. They come from Open Library and fill in gradually the first time the Stats page is opened (and during the daily run).
+
 **Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
 
 ## Next up
 - Delivering the weekly summary by message (once a week only).
-- **Book facts over time:** page counts, author name spellings, summaries and characters across editions (via Open Library).
 - **"Watch this with Tripwire" browser extension:** one click to add the page you're on. Also short, live watching while your browser is open (e.g. a BBC live news page), with a sound or ping when it updates.
 - Offline, preservation-first copies through **[Kiwix](https://kiwix.org/en/)**. Kiwix packages Wikipedia and other knowledge sites into single files ("ZIM" files) that anyone can keep and read with no internet. Tripwire could compare live articles against a Kiwix copy, and keep its own archive in a format Kiwix can open.

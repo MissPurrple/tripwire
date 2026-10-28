@@ -114,7 +114,7 @@ class CheckerTests(unittest.TestCase):
         if self.db_path.startswith("postgres"):
             import psycopg
             with psycopg.connect(self.db_path, autocommit=True) as conn:
-                conn.execute("DROP TABLE IF EXISTS book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
+                conn.execute("DROP TABLE IF EXISTS stats_cache, book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
         self.tw = Tripwire(self.db_path)
         self.user = self.tw.create_user("purple@example.org", "correct horse")
         FakeWikipedia.articles = {"Warli": [
@@ -123,6 +123,10 @@ class CheckerTests(unittest.TestCase):
         patcher = mock.patch.object(sources, "Wikipedia", FakeWikipedia)
         patcher.start()
         self.addCleanup(patcher.stop)
+        from tripwire import stats
+        no_books = mock.patch.object(stats, "_open_library_year", lambda year: None)  # never reach the real Open Library
+        no_books.start()
+        self.addCleanup(no_books.stop)
         self.theme = self.tw.add_theme(self.user, "Indigenous communities")
 
     def tearDown(self):
@@ -818,6 +822,114 @@ class VideoWatchTests(CheckerTests):
             response = client.post("/single-links", data={"target": "https://youtu.be/aaaaaaaaaaa"}, follow_redirects=True)
         self.assertIn("Now watching that video", response.data.decode())  # pasted in the wrong place, still works
         self.assertIn("Second video", client.get("/videos").data.decode())
+
+
+def fake_cloudflare(status=200, human="48.7", bot="51.3"):
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        response = mock.Mock(status_code=status)
+        if "summary" in url:
+            response.json.return_value = {"success": True, "result": {"summary_0": {"human": human, "bot": bot}}}
+        else:
+            response.json.return_value = {"success": True, "result": {"serie_0": {
+                "timestamps": ["2026-10-27T00:00:00Z", "2026-10-27T01:00:00Z", "2026-10-28T00:00:00Z"],
+                "human": ["50.1", "49.0", "48.7"], "bot": ["49.9", "51.0", "51.3"]}}}
+        return response
+    return fake_get, calls
+
+
+def fake_year(year):
+    """Pretend Open Library: more books every year, digital copies taking off after 2000."""
+    if year == "before":
+        return {"all": 5000, "digital": 4000}
+    return {"all": 1000 + (year - 1900) * 10 - (500 if year == 1944 else 0), "digital": max(0, (year - 2000) * 50) + 5}
+
+
+class StatsTests(CheckerTests):
+    def stats(self):
+        from tripwire import stats
+        return stats.Stats(self.tw.conn)
+
+    def test_traffic_needs_a_token(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CLOUDFLARE_API_TOKEN", None)
+            self.assertEqual(self.stats().traffic(), {"connected": False})
+
+    def test_traffic_from_cloudflare_is_cached(self):
+        fake, calls = fake_cloudflare()
+        with mock.patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "t"}), mock.patch.object(sources, "_get", fake):
+            t = self.stats().traffic()
+            self.assertEqual((t["human"], t["bot"]), (48.7, 51.3))
+            self.assertEqual(t["series"]["bot"], [49.9, 51.0, 51.3])
+            self.stats().traffic()
+        self.assertEqual(len(calls), 2)  # the second visit used the remembered numbers
+
+    def test_bad_token_is_explained(self):
+        fake, _ = fake_cloudflare(status=403)
+        with mock.patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "t"}), mock.patch.object(sources, "_get", fake):
+            self.assertIn("didn't accept the API token", self.stats().traffic()["error"])
+
+    def test_book_running_totals_only_go_up(self):
+        from tripwire import stats
+        with mock.patch.object(stats, "_open_library_year", fake_year):
+            missing, total = self.stats().fill_book_years(seconds=30)
+        self.assertEqual(missing, 0)
+        b = self.stats().books()
+        for key in ("all", "print", "digital"):
+            values = b["running"][key]
+            self.assertEqual(values, sorted(values), key)  # never decreases
+        self.assertEqual(b["running"]["all"][0], 5000 + 1000)
+        self.assertEqual(b["peaks"]["digital"]["year"], b["last_year"])
+        self.assertEqual(b["lows"]["print"]["year"], 1944)
+        self.assertEqual(b["totals"]["all"], b["totals"]["print"] + b["totals"]["digital"])
+
+    def test_book_years_fetched_a_few_at_a_time(self):
+        from tripwire import stats
+        with mock.patch.object(stats, "_open_library_year", fake_year):
+            missing, total = self.stats().fill_book_years(seconds=0)
+        self.assertGreater(missing, 0)
+        self.assertLess(missing, total)
+
+
+class StatsPageTests(CheckerTests):
+    def setUp(self):
+        super().setUp()
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        self.client = webapp.app.test_client()
+        self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+
+    def test_page_before_anything_is_connected(self):
+        os.environ.pop("CLOUDFLARE_API_TOKEN", None)
+        page = self.client.get("/stats").data.decode()
+        self.assertIn("Not connected yet", page)
+        self.assertIn("Gathering data from Open Library: 0 of", page)
+        self.assertIn("No changes caught yet", page)
+
+    def test_page_with_everything(self):
+        from tripwire import stats
+        watch = self.tw.add_watch(self.theme, "Warli")
+        self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")
+        self.tw.check_watch(watch)
+        with mock.patch.object(stats, "_open_library_year", fake_year):
+            self.assertEqual(self.client.post("/stats/books/fill").json["missing"], 0)
+        fake, _ = fake_cloudflare()
+        with mock.patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "t"}), mock.patch.object(sources, "_get", fake):
+            page = self.client.get("/stats").data.decode()
+            live = self.client.get("/stats/traffic.json").json
+        for expected in ["48.7%", "51.3%", "The last 7 days", "Peak year, digital", "Lowest year, print only",
+                         "1944", "Changes by kind", "Changes per week", "Tiny &amp; formatting"]:
+            self.assertIn(expected, page)
+        self.assertNotIn('id="books-progress"', page)  # the progress message is gone
+        self.assertEqual(live["human"], 48.7)
+
+    def test_menu(self):
+        page = self.client.get("/stats").data.decode()
+        self.assertIn('href="/stats" class="on" aria-current="page"', page)
+        self.assertIn("<summary >More</summary>", page.replace('<summary class="on">', "<summary >"))
+        self.assertIn("Weekly summary", page)
 
 
 class SetupTests(unittest.TestCase):

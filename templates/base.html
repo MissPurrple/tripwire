@@ -7,23 +7,44 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="top">
+  {% set main_links = [('index', 'Watching', ['index']), ('videos', 'Videos', ['videos']),
+                        ('change_list', 'Changes', ['change_list', 'entry']),
+                        ('book_list', 'Books', ['book_list', 'book_comparison', 'book_job']),
+                        ('stats_page', 'Stats', ['stats_page'])] %}
+  {% set more_links = [('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Weekly summary', ['summary'])] %}
+  <header class="top {{ self.main_class() }}">
     <a class="brand" href="{{ url_for('index') }}">Tripwire</a>
     {% if g.user %}
-    <nav>
-      <a href="{{ url_for('index') }}">Watching</a>
-      <a href="{{ url_for('change_list') }}">Changes</a>
-      <a href="{{ url_for('videos') }}">Videos</a>
-      <a href="{{ url_for('book_list') }}">Books</a>
-      <a href="{{ url_for('archive') }}">Archive</a>
-      <a href="{{ url_for('summary') }}">Weekly summary</a>
+    <nav class="nav-wide" aria-label="Main">
+      {% for endpoint, label, active in main_links %}
+        <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+      <details class="more">
+        <summary {% if request.endpoint in (more_links|map(attribute=2)|sum(start=[])) %}class="on"{% endif %}>More</summary>
+        <div class="menu">
+          {% for endpoint, label, active in more_links %}
+            <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ label }}</a>
+          {% endfor %}
+          <hr>
+          <span class="who">{{ g.user.email }}</span>
+          <form method="post" action="{{ url_for('logout') }}"><button class="link">Log out</button></form>
+        </div>
+      </details>
     </nav>
-    <form class="account" method="post" action="{{ url_for('logout') }}">
-      <span>{{ g.user.email }}</span><button class="link">Log out</button>
-    </form>
+    <details class="nav-narrow">
+      <summary>Menu</summary>
+      <div class="menu">
+        {% for endpoint, label, active in main_links + more_links %}
+          <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+        <hr>
+        <span class="who">{{ g.user.email }}</span>
+        <form method="post" action="{{ url_for('logout') }}"><button class="link">Log out</button></form>
+      </div>
+    </details>
     {% endif %}
   </header>
-  <main>
+  <main class="{% block main_class %}{% endblock %}">
     {% for kind, message in get_flashed_messages(with_categories=true) %}
       <p class="flash {{ kind }}">{{ message }}</p>
     {% endfor %}

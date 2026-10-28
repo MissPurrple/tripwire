@@ -199,7 +199,8 @@ class Connection:
         """Run one SQL statement and save it. Use .fetchone() / .fetchall() on
         the result to read rows."""
         if self.postgres:
-            sql = sql.replace("?", "%s")
+            # psycopg uses % for its own placeholders, so a literal % (as in LIKE 'x%') is written %%.
+            sql = sql.replace("%", "%%").replace("?", "%s")
         try:
             cur = self.raw.execute(sql, params)
             rows = cur.fetchall() if cur.description else []

@@ -13,21 +13,21 @@
   <div class="monitor">
     <div class="bezel">
       <div class="screen" id="screen">
-        <div class="boot" id="boot">
-          <p class="screen-line dim">TRIPWIRE BIOS v1.0 &nbsp;·&nbsp; Edge City Buildathon, 2026</p>
-          <p class="screen-line dim">MEMORY TEST ........ 640K OK</p>
-          <p class="screen-line dim">LOADING THE RECORD OF THE WORLD ........ OK</p>
+        <div class="boot" id="boot" data-typewriter="14">
+          <p class="screen-line dim" data-speed="6">TRIPWIRE BIOS v1.0 &nbsp;·&nbsp; Edge City Buildathon, 2026</p>
+          <p class="screen-line dim" data-speed="6">MEMORY TEST ........ 640K OK</p>
+          <p class="screen-line dim" data-speed="8">LOADING THE RECORD OF THE WORLD ........ OK</p>
           <p class="screen-line">&nbsp;</p>
           {% if numbers %}
-            <p class="screen-line big">WELCOME BACK.</p>
-            <p class="screen-line soft">Here's what Tripwire is keeping an eye on for you.</p>
+            <p class="screen-line big" data-speed="70">WELCOME BACK.</p>
+            <p class="screen-line soft" data-speed="12">Here's what Tripwire is keeping an eye on for you.</p>
           {% else %}
-            <p class="screen-line big">TRIPWIRE</p>
-            <p class="screen-line soft">Pages vanish. Articles get rewritten. Books get quietly changed.</p>
-            <p class="screen-line soft">Tripwire watches what you care about, and keeps a copy when it changes.</p>
+            <p class="screen-line big" data-speed="80">TRIPWIRE</p>
+            <p class="screen-line soft" data-speed="13">Pages vanish. Articles get rewritten. Books get quietly changed.</p>
+            <p class="screen-line soft" data-speed="13">Tripwire watches what you care about, and keeps a copy when it changes.</p>
           {% endif %}
           <p class="screen-line">&nbsp;</p>
-          <ul class="screen-menu">
+          <ul class="screen-menu" data-speed="5">
             {% for key, label, href, note in menu %}
               <li class="screen-line"><a href="{{ href }}" data-key="{{ key|lower }}">[{{ key }}] {{ label }}</a>{% if note %}<span class="dots"></span><span class="note">{{ note }}</span>{% endif %}</li>
             {% endfor %}
@@ -58,14 +58,6 @@
 
 <script>
 (function () {
-  // Boot up: show the screen's lines one by one (skipped if the viewer prefers less motion).
-  var lines = document.querySelectorAll("#boot > .screen-line, #boot li");
-  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    lines.forEach(function (line, i) {
-      line.classList.add("pending");
-      setTimeout(function () { line.classList.remove("pending"); }, 120 + i * (i < 3 ? 260 : 110));
-    });
-  }
   // Keyboard shortcuts: the number or letter in [brackets].
   document.addEventListener("keydown", function (event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;

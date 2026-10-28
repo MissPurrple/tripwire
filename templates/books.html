@@ -1,6 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Books · Tripwire{% endblock %}
 {% block content %}
+{% if intro %}
+<div class="intro-overlay" id="intro" role="status" aria-live="polite">
+  <div class="screen intro-screen" data-typewriter-manual>
+    <p class="screen-line big intro-text" data-speed="28">YOU ARE NOW ENTERING UNRESTRICTED KNOWLEDGE PRESERVATION</p>
+  </div>
+</div>
+<noscript><style>.intro-overlay { display: none; }</style></noscript>
+<script>
+(function () {
+  // A forced pause: at least 2 seconds, and until the words have finished typing.
+  var overlay = document.getElementById("intro"), started = Date.now();
+  document.documentElement.classList.add("intro-lock");
+  function begin() {
+    window.Tripwire.type(overlay.querySelector(".screen"), 28).then(function () {
+      setTimeout(function () {
+        overlay.classList.add("leaving");
+        document.documentElement.classList.remove("intro-lock");
+        setTimeout(function () { overlay.remove(); }, 500);
+      }, Math.max(400, 2000 - (Date.now() - started)));
+    });
+  }
+  if (window.Tripwire && window.Tripwire.type) begin(); else document.addEventListener("DOMContentLoaded", begin);
+})();
+</script>
+{% endif %}
 <section class="intro">
   <h1>Books</h1>
   <p>Has a book been quietly changed? Give Tripwire two editions, an older one and a newer one, and it compares

@@ -3,9 +3,9 @@
 {% block content %}
 <section class="error-screen">
   <div class="crt crt-small">
-    <div class="screen" role="alert">
+    <div class="screen" role="alert" data-typewriter="22">
       <p class="screen-line dim">TRIPWIRE SYSTEM MESSAGE</p>
-      <p class="screen-line big">ERROR {{ code }}: {{ title }}</p>
+      <p class="screen-line big" data-speed="45">ERROR {{ code }}: {{ title }}</p>
       {% if setup_problem %}
         <p class="screen-line">TRIPWIRE NEEDS A SETTING FIXED.</p>
         <p class="screen-line soft">{{ setup_problem }}</p>

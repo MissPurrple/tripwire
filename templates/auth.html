@@ -16,7 +16,31 @@
       <input type="password" name="password" required minlength="{{ 8 if mode == 'signup' else 1 }}"
              autocomplete="{{ 'new-password' if mode == 'signup' else 'current-password' }}">
     </label>
-    <button>{{ 'Sign up' if mode == 'signup' else 'Log in' }}</button>
+    {% if mode == 'signup' %}
+    <div class="human-check" id="human-check" data-url="{{ url_for('human_check') }}"
+         data-salt="{{ challenge.salt if challenge else '' }}" data-bits="{{ challenge.bits if challenge else 0 }}"
+         data-passed="{{ 'yes' if human_ok else 'no' }}">
+      <div class="screen check-screen">
+        <p class="screen-line dim">MACHINE CHECK: PROVE YOU'RE HUMAN</p>
+        {% if human_ok %}
+          <p class="screen-line big check-status">DONE.</p>
+        {% else %}
+          <p class="screen-line question" data-typewriter="30">{{ challenge.question }}</p>
+          <p class="screen-line soft check-status" aria-live="polite">Type your answer (a number), then press Check.</p>
+        {% endif %}
+      </div>
+      {% if not human_ok %}
+      <div class="check-row">
+        <label class="sr-only" for="human-answer">Your answer</label>
+        <input id="human-answer" inputmode="numeric" autocomplete="off" placeholder="Your answer">
+        <button type="button" id="human-go" class="secondary-button">Check</button>
+      </div>
+      {# A field people never see. Bots that fill in every field give themselves away. #}
+      <div class="trap" aria-hidden="true"><label>Website <input id="human-website" tabindex="-1" autocomplete="off"></label></div>
+      {% endif %}
+    </div>
+    {% endif %}
+    <button id="auth-submit" {% if mode == 'signup' and not human_ok %}disabled{% endif %}>{{ 'Create account' if mode == 'signup' else 'Log in' }}</button>
   </form>
   <div class="switch">
   {% if mode == 'signup' %}
@@ -28,4 +52,62 @@
   {% endif %}
   </div>
 </section>
+{% if mode == 'signup' %}
+<script>
+(function () {
+  var box = document.getElementById("human-check");
+  if (!box || box.dataset.passed === "yes") return;
+  var input = document.getElementById("human-answer"), go = document.getElementById("human-go");
+  var status = box.querySelector(".check-status"), question = box.querySelector(".question");
+  var submit = document.getElementById("auth-submit");
+
+  function say(el, text, speed) { el.textContent = text; return window.Tripwire.type(el, speed || 22); }
+
+  function leadingZeroBits(bytes) {
+    var bits = 0;
+    for (var i = 0; i < bytes.length; i++) {
+      if (bytes[i] === 0) { bits += 8; continue; }
+      for (var b = 7; b >= 0 && !(bytes[i] & (1 << b)); b--) bits++;
+      break;
+    }
+    return bits;
+  }
+  // The background check: find a number whose hash starts with enough zero bits.
+  async function proofOfWork(salt, bits) {
+    var encoder = new TextEncoder();
+    for (var nonce = 0; ; nonce++) {
+      var hash = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(salt + ":" + nonce)));
+      if (leadingZeroBits(hash) >= bits) return nonce;
+    }
+  }
+
+  async function check() {
+    if (!input.value.trim()) { say(status, "Type your answer first."); input.focus(); return; }
+    go.disabled = true;
+    say(status, "CHECKING YOU ARE HUMAN…", 30);
+    var nonce = await proofOfWork(box.dataset.salt, +box.dataset.bits);
+    var response = await fetch(box.dataset.url, {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answer: input.value, nonce: nonce, website: document.getElementById("human-website").value })
+    });
+    var result = await response.json();
+    if (result.passed) {
+      box.querySelector(".check-row").remove();
+      submit.disabled = false;
+      status.classList.remove("soft"); status.classList.add("big");
+      await say(status, "DONE.", 120);
+      submit.focus();
+    } else {
+      box.dataset.salt = result.salt; box.dataset.bits = result.bits;
+      input.value = ""; go.disabled = false;
+      await say(status, result.message);
+      await say(question, result.question, 30);
+      input.focus();
+    }
+  }
+  go.addEventListener("click", check);
+  input.addEventListener("keydown", function (event) { if (event.key === "Enter") { event.preventDefault(); check(); } });
+})();
+</script>
+{% endif %}
 {% endblock %}

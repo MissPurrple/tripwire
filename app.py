@@ -12,11 +12,12 @@ import functools
 import hmac
 import os
 import time
+from urllib.parse import urlparse
 
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.exceptions import HTTPException
 
-from tripwire import books, changes, charts, db, sources, stats
+from tripwire import books, changes, charts, db, humancheck, sources, stats
 from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
@@ -114,18 +115,63 @@ def back_to(default="change_list"):
 
 # -- accounts ---------------------------------------------------------------
 
+HUMAN_CHECK_VALID_MINUTES = 15  # after passing the check, how long the sign-up form stays unlocked
+
+
+def _new_human_check():
+    session["human_check"] = humancheck.new_challenge(app.secret_key, app.config.get("HUMAN_CHECK_BITS",
+                                                                                   humancheck.DEFAULT_BITS))
+    session.pop("human_ok_at", None)
+    return session["human_check"]
+
+
+def _human_ok():
+    return time.time() - session.get("human_ok_at", 0) < HUMAN_CHECK_VALID_MINUTES * 60
+
+
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
-        try:
-            user_id = tw().create_user(request.form.get("email", ""), request.form.get("password", ""))
-        except ValueError as exc:
-            flash(str(exc), "error")
+        if not _human_ok():
+            flash("Please finish the human check first.", "error")
         else:
-            session.clear()
-            session["user_id"] = user_id
-            return redirect(url_for("home"))
-    return render_template("auth.html", mode="signup")
+            try:
+                user_id = tw().create_user(request.form.get("email", ""), request.form.get("password", ""))
+            except ValueError as exc:
+                flash(str(exc), "error")
+            else:
+                session.clear()
+                session["user_id"] = user_id
+                session["human_after_all"] = True
+                return redirect(url_for("welcome"))
+    challenge = session.get("human_check") if _human_ok() else None
+    if not _human_ok():
+        challenge = _new_human_check()
+    return render_template("auth.html", mode="signup", challenge=challenge, human_ok=_human_ok())
+
+
+@app.post("/human-check")
+def human_check():
+    """The sign-up page's machine check: answer + background proof of work."""
+    data = request.get_json(silent=True) or {}
+    passed, message = humancheck.check(session.get("human_check"), app.secret_key, data.get("answer"),
+                                       data.get("nonce"), data.get("website", ""),
+                                       min_seconds=app.config.get("HUMAN_CHECK_MIN_SECONDS",
+                                                                  humancheck.DEFAULT_MIN_SECONDS))
+    if passed:
+        session["human_ok_at"] = time.time()
+        return jsonify(passed=True, message=message)
+    challenge = _new_human_check()  # a wrong answer always gets a new question, so guessing doesn't help
+    return jsonify(passed=False, message=message, question=challenge["question"], salt=challenge["salt"],
+                   bits=challenge["bits"])
+
+
+@app.get("/welcome")
+def welcome():
+    """Shown once, straight after making an account."""
+    if g.user is None or not session.pop("human_after_all", False):
+        return redirect(url_for("home"))
+    return render_template("human_after_all.html")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -418,8 +464,12 @@ def book_list():
         else:
             return redirect(url_for("book_job", job_id=job))
     tw().delete_book_files(older_than_days=BOOK_FILE_DAYS)
+    # Arriving from elsewhere (not from within Books): show the "entering" screen first.
+    came_from = urlparse(request.referrer or "")
+    intro = request.method == "GET" and not (came_from.netloc == request.host and came_from.path.startswith("/books"))
     return render_template("books.html", comparisons=tw().book_comparisons(g.user["id"]),
-                           jobs=tw().book_jobs_in_progress(g.user["id"]), upload_limit_mb=UPLOAD_LIMIT_MB)
+                           jobs=tw().book_jobs_in_progress(g.user["id"]), upload_limit_mb=UPLOAD_LIMIT_MB,
+                           intro=intro)
 
 
 @app.get("/books/jobs/<int:job_id>")

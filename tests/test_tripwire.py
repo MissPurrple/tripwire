@@ -299,16 +299,85 @@ class WebAppTests(CheckerTests):
             self.assertEqual(response.status_code, 302)
             self.assertTrue(response.headers["Location"].endswith("/login"))
 
+    def pass_human_check(self):
+        """Do what the sign-up page does: answer, solve the background proof of work, send."""
+        from tripwire import humancheck
+        import app as webapp
+        webapp.app.config.update(HUMAN_CHECK_BITS=4, HUMAN_CHECK_MIN_SECONDS=0)
+        with mock.patch.object(humancheck, "_question", lambda: ("What is two plus two?", 4)):
+            self.assertIn(b"What is two plus two?", self.client.get("/signup").data)
+        with self.client.session_transaction() as sess:
+            salt = sess["human_check"]["salt"]
+        nonce = next(n for n in range(100000) if humancheck.pow_ok(salt, n, 4))
+        return self.client.post("/human-check", json={"answer": "four", "nonce": nonce, "website": ""}).json
+
     def test_signup_and_login(self):
         response = self.client.post("/signup", data={"email": "new@example.org", "password": "long enough"},
                                     follow_redirects=True)
-        self.assertIn(b"WELCOME BACK", response.data)  # lands on the computer
+        self.assertIn(b"Please finish the human check first", response.data)  # no account without the check
+        self.assertEqual(self.pass_human_check(), {"passed": True, "message": "DONE."})
+        response = self.client.post("/signup", data={"email": "new@example.org", "password": "long enough"},
+                                    follow_redirects=True)
+        self.assertIn(b"HUMAN AFTER ALL", response.data)  # shown once, straight after signing up
+        self.assertTrue(self.client.get("/welcome").headers["Location"].endswith("/"))  # not again
+        response = self.client.get("/")
+        self.assertIn(b"WELCOME BACK", response.data)  # then the computer
         self.assertIn(b"new@example.org", response.data)
         self.assertIn(b"Start with a theme", self.client.get("/watching").data)
         self.client.post("/logout")
         self.assertIn(b"don&#39;t match", self.log_in(password="wrong").data)
         self.log_in()
         self.assertIn(b"Indigenous communities", self.client.get("/watching").data)
+
+    def test_human_check_rejects_bots(self):
+        from tripwire import humancheck
+        import app as webapp
+        webapp.app.config.update(HUMAN_CHECK_BITS=4, HUMAN_CHECK_MIN_SECONDS=0)
+        with mock.patch.object(humancheck, "_question", lambda: ("What is two plus two?", 4)):
+            self.client.get("/signup")
+        with self.client.session_transaction() as sess:
+            salt = sess["human_check"]["salt"]
+        good = next(n for n in range(100000) if humancheck.pow_ok(salt, n, 4))
+        bad = next(n for n in range(100000) if not humancheck.pow_ok(salt, n, 4))
+        # Filled in the hidden trap field: refused, and the question changes.
+        result = self.client.post("/human-check", json={"answer": "4", "nonce": good, "website": "http://spam"}).json
+        self.assertFalse(result["passed"])
+        self.assertIn("question", result)
+        with self.client.session_transaction() as sess:
+            self.assertNotEqual(sess["human_check"]["salt"], salt)  # a new challenge, so guessing doesn't help
+            salt = sess["human_check"]["salt"]
+        self.assertFalse(self.client.post("/human-check", json={"answer": "4", "nonce": bad}).json["passed"])
+
+    def test_human_check_rules(self):
+        from tripwire import humancheck
+        with mock.patch.object(humancheck, "_question", lambda: ("What is seven plus five?", 12)):
+            c = humancheck.new_challenge("secret", bits=4)
+        nonce = next(n for n in range(100000) if humancheck.pow_ok(c["salt"], n, 4))
+        later = c["issued"] + 10
+        self.assertTrue(humancheck.check(c, "secret", "12", nonce, now=later)[0])
+        self.assertTrue(humancheck.check(c, "secret", "Twelve.", nonce, now=later)[0])
+        self.assertFalse(humancheck.check(c, "secret", "13", nonce, now=later)[0])
+        self.assertIn("quicker than a human", humancheck.check(c, "secret", "12", nonce, now=c["issued"] + 1)[1])
+        self.assertIn("expired", humancheck.check(c, "secret", "12", nonce, now=c["issued"] + 3600)[1])
+        self.assertFalse(humancheck.check(c, "other secret", "12", nonce, now=later)[0])
+        # The answer itself is never stored where a visitor could read it: only a signature of it.
+        self.assertNotIn(12, c.values())
+        self.assertNotIn("12", [c["answer"], c["question"]])
+        self.assertEqual(len(c["answer"]), 64)
+
+    def test_books_intro_screen(self):
+        self.log_in()
+        page = self.client.get("/books").data.decode()
+        self.assertIn("YOU ARE NOW ENTERING UNRESTRICTED KNOWLEDGE PRESERVATION", page)
+        page = self.client.get("/books", headers={"Referer": "http://localhost/books/1"}).data.decode()
+        self.assertNotIn("UNRESTRICTED KNOWLEDGE", page)  # not when moving around inside Books
+
+    def test_rabbit_on_every_page(self):
+        for path in ["/", "/login", "/signup", "/no-such-page"]:
+            self.assertIn(b"rabbit.png", self.client.get(path).data, path)
+        self.log_in()
+        for path in ["/watching", "/books", "/stats"]:
+            self.assertIn(b"rabbit.png", self.client.get(path).data, path)
 
     def test_home_computer(self):
         page = self.client.get("/").data.decode()  # logged out: offers to log in

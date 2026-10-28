@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Human after all · Tripwire{% endblock %}
+{% block body_class %}fullscreen-screen{% endblock %}
+{% block content %}
+<div class="intro-overlay static" id="human">
+  <div class="screen intro-screen" data-typewriter-manual>
+    <p class="screen-line big intro-text" data-speed="110">HUMAN AFTER ALL</p>
+    <p class="screen-line soft" data-speed="30">Your account is ready. Welcome to Tripwire.</p>
+    <p class="screen-line continue"><a href="{{ url_for('home') }}" id="continue">[ CONTINUE ]</a></p>
+  </div>
+</div>
+<script>
+(function () {
+  function begin() {
+    var screen = document.querySelector("#human .screen");
+    window.Tripwire.type(screen, 60).then(function () {
+      setTimeout(function () { document.body.classList.add("is-loading"); window.location = "{{ url_for('home') }}"; }, 2500);
+    });
+  }
+  if (window.Tripwire && window.Tripwire.type) begin(); else document.addEventListener("DOMContentLoaded", begin);
+})();
+</script>
+{% endblock %}

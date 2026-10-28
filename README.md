@@ -22,8 +22,8 @@ You need **Python 3.10 or newer**. To check, open a terminal and type `python3 -
 **1. Get the code.** If you have git:
 
 ```
-git clone https://github.com/MissPurrple/edge-buildathon.git
-cd edge-buildathon
+git clone https://github.com/MissPurrple/tripwire.git
+cd tripwire
 ```
 
 Without git: on the GitHub page, click the green **Code** button → **Download ZIP**, unzip it, and open a terminal inside the unzipped folder.

@@ -129,6 +129,19 @@ class Stats:
         self._put("openlibrary_problem", problem)
         return len(self.book_years_needed()[0]), total, problem
 
+    @staticmethod
+    def world_estimate():
+        """From Google's 2010 count to this year: a low-high range and its middle."""
+        this_year = datetime.now(timezone.utc).year
+        mid_new = (NEW_TITLES_PER_YEAR_LOW + NEW_TITLES_PER_YEAR_HIGH) // 2
+        years = list(range(GOOGLE_2010_YEAR, this_year + 1))
+        world = {"years": years,
+                 "low": [GOOGLE_2010_COUNT + NEW_TITLES_PER_YEAR_LOW * (y - GOOGLE_2010_YEAR) for y in years],
+                 "mid": [GOOGLE_2010_COUNT + mid_new * (y - GOOGLE_2010_YEAR) for y in years],
+                 "high": [GOOGLE_2010_COUNT + NEW_TITLES_PER_YEAR_HIGH * (y - GOOGLE_2010_YEAR) for y in years]}
+        world["now"] = {"year": this_year, "low": world["low"][-1], "mid": world["mid"][-1], "high": world["high"][-1]}
+        return world
+
     def books(self):
         """Per-year and running totals for the chart, plus peak and lowest years."""
         rows = {row["key"][6:]: json.loads(row["value"]) for row in
@@ -148,19 +161,7 @@ class Stats:
                 totals[key] += value          # a running total only ever goes up
                 running[key].append(totals[key])
 
-        # The world estimate, from Google's 2010 count onwards (as a low-high range and its middle).
-        world = {"low": [], "mid": [], "high": []}
-        for year in years:
-            for key, per_year_new in (("low", NEW_TITLES_PER_YEAR_LOW), ("high", NEW_TITLES_PER_YEAR_HIGH),
-                                      ("mid", (NEW_TITLES_PER_YEAR_LOW + NEW_TITLES_PER_YEAR_HIGH) // 2)):
-                world[key].append(GOOGLE_2010_COUNT + per_year_new * (year - GOOGLE_2010_YEAR)
-                                  if year >= GOOGLE_2010_YEAR else None)
-        this_year = datetime.now(timezone.utc).year
-        world["now"] = {key: GOOGLE_2010_COUNT + n * (this_year - GOOGLE_2010_YEAR) for key, n in
-                        (("low", NEW_TITLES_PER_YEAR_LOW), ("high", NEW_TITLES_PER_YEAR_HIGH))}
-        world["now"]["mid"] = (world["now"]["low"] + world["now"]["high"]) // 2
-        world["now"]["year"] = this_year
-
+        world = self.world_estimate()
         def extreme(key, pick):
             value = pick(per_year[key])
             return {"year": years[per_year[key].index(value)], "count": value}

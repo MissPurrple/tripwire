@@ -49,9 +49,12 @@ def short_number(value):
     return f"{value:g}"
 
 
-def line_chart(labels, series, width=640, height=260, y_suffix="", y_max=None, x_ticks=6, band=None, markers=()):
+def line_chart(labels, series, width=640, height=260, y_suffix="", y_max=None, x_ticks=6, band=None, markers=(),
+               series_offset=0, y_min=0):
     """A line chart with one y axis. labels: the x values (e.g. years);
-    series: [(key, label, values)] in a fixed order (colours follow that order).
+    series: [(key, label, values)] in a fixed order (colours follow that order,
+    starting after `series_offset`, so a series keeps its colour across charts).
+    y_min: where the y axis starts (0 unless the values are all far from zero).
     A value of None means "no data here", so a line can start part-way along.
     band: optional {"series": n, "low": [...], "high": [...], "label"} shaded range.
     markers: optional [{"index", "value", "label"}] highlighted points.
@@ -63,13 +66,15 @@ def line_chart(labels, series, width=640, height=260, y_suffix="", y_max=None, x
         everything += [v for v in band["high"] if v is not None]
     everything += [m["value"] for m in markers]
     top_value = y_max or nice_max(max(everything, default=1))
+    if y_min:
+        top_value = y_min + nice_max(top_value - y_min)
     count = len(labels)
 
     def x(i):
         return left + (plot_w * i / (count - 1) if count > 1 else plot_w / 2)
 
     def y(v):
-        return top + plot_h - plot_h * v / top_value
+        return top + plot_h - plot_h * (v - y_min) / (top_value - y_min)
 
     def path(values):
         parts, pen_down = [], False
@@ -82,7 +87,7 @@ def line_chart(labels, series, width=640, height=260, y_suffix="", y_max=None, x
         return " ".join(parts)
 
     lines = []
-    for n, (key, label, values) in enumerate(series, start=1):
+    for n, (key, label, values) in enumerate(series, start=1 + series_offset):
         known = [v for v in values if v is not None]
         lines.append({"key": key, "label": label, "series": n, "path": path(values),
                       "last": known[-1] if known else None})
@@ -96,7 +101,8 @@ def line_chart(labels, series, width=640, height=260, y_suffix="", y_max=None, x
     markers_out = [{"x": x(m["index"]), "y": y(m["value"]), "label": m["label"]} for m in markers]
     step = max(1, round((count - 1) / max(1, x_ticks - 1))) if count > 1 else 1
     x_ticks_out = [{"x": x(i), "label": labels[i]} for i in range(0, count, step)]
-    y_ticks = [{"y": y(top_value * f), "label": short_number(top_value * f) + y_suffix} for f in (0, .25, .5, .75, 1)]
+    y_ticks = [{"y": y(y_min + (top_value - y_min) * f), "label": short_number(y_min + (top_value - y_min) * f) + y_suffix}
+               for f in (0, .25, .5, .75, 1)]
     # One invisible column per x value, for hover tooltips listing every series' value.
     columns = [{"x": x(i) - (plot_w / max(count - 1, 1)) / 2, "w": plot_w / max(count - 1, 1), "label": labels[i],
                 "readings": [(label, values[i]) for _, label, values in series if values[i] is not None]}

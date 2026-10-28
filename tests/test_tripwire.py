@@ -293,7 +293,8 @@ class WebAppTests(CheckerTests):
         return self.client.post("/login", data={"email": email, "password": password}, follow_redirects=True)
 
     def test_pages_need_an_account(self):
-        for path in ["/", "/changes", "/archive", "/summary", "/entries/1", "/copy/entry/1"]:
+        for path in ["/watching", "/changes", "/archive", "/summary", "/entries/1", "/copy/entry/1",
+                     "/videos", "/books", "/stats"]:
             response = self.client.get(path)
             self.assertEqual(response.status_code, 302)
             self.assertTrue(response.headers["Location"].endswith("/login"))
@@ -301,11 +302,40 @@ class WebAppTests(CheckerTests):
     def test_signup_and_login(self):
         response = self.client.post("/signup", data={"email": "new@example.org", "password": "long enough"},
                                     follow_redirects=True)
+        self.assertIn(b"WELCOME BACK", response.data)  # lands on the computer
         self.assertIn(b"new@example.org", response.data)
-        self.assertIn(b"Start with a theme", response.data)
+        self.assertIn(b"Start with a theme", self.client.get("/watching").data)
         self.client.post("/logout")
         self.assertIn(b"don&#39;t match", self.log_in(password="wrong").data)
-        self.assertIn(b"Indigenous communities", self.log_in().data)
+        self.log_in()
+        self.assertIn(b"Indigenous communities", self.client.get("/watching").data)
+
+    def test_home_computer(self):
+        page = self.client.get("/").data.decode()  # logged out: offers to log in
+        self.assertIn("[L] LOG IN", page)
+        self.assertIn("[M] MAKE AN ACCOUNT", page)
+        self.assertNotIn("WATCHING", page)
+        self.log_in()
+        watch = self.tw.add_watch(self.theme, "Warli")
+        self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")
+        self.tw.check_watch(watch)
+        page = self.client.get("/").data.decode()
+        self.assertIn("WELCOME BACK", page)
+        self.assertIn("[1] WATCHING", page)
+        self.assertIn("1 item<", page)
+        self.assertIn("1 waiting", page)
+        self.assertIn('href="/watching"', page)
+
+    def test_error_pages_keep_the_site_style(self):
+        response = self.client.get("/no-such-page")
+        self.assertEqual(response.status_code, 404)
+        page = response.data.decode()
+        self.assertIn("ERROR 404: FILE NOT FOUND", page)
+        self.assertIn('class="brand"', page)  # same header as the rest of the site
+        self.assertIn("/static/style.css", page)
+        response = self.client.get("/logout")  # only accepts POST
+        self.assertEqual(response.status_code, 405)
+        self.assertIn("WRONG KIND OF REQUEST", response.data.decode())
 
     def test_pages_load(self):
         self.log_in()
@@ -318,6 +348,7 @@ class WebAppTests(CheckerTests):
         self.assertIn(b"Warlee", self.client.get("/entries/1").data)
         self.assertIn(b"1 change across 1", self.client.get("/summary").data)
         self.assertEqual(self.client.get("/").status_code, 200)
+        self.assertEqual(self.client.get("/watching").status_code, 200)
         with self.client.get("/static/style.css") as css:
             self.assertEqual(css.status_code, 200)
 
@@ -333,7 +364,7 @@ class WebAppTests(CheckerTests):
         self.tw.create_user("stranger@example.org", "stranger danger")
         self.log_in("stranger@example.org", "stranger danger")
 
-        self.assertNotIn(b"Warli", self.client.get("/").data)
+        self.assertNotIn(b"Warli", self.client.get("/watching").data)
         self.assertNotIn(b"Warli", self.client.get("/changes").data)
         self.assertNotIn(b"Warli", self.client.get("/archive").data)
         self.assertNotIn(b"Warlee", self.client.get(f"/entries/{entry}", follow_redirects=True).data)
@@ -814,7 +845,7 @@ class VideoWatchTests(CheckerTests):
         webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
         client = webapp.app.test_client()
         client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
-        self.assertNotIn("Warli painting", client.get("/").data.decode())
+        self.assertNotIn("Warli painting", client.get("/watching").data.decode())
         page = client.get("/videos").data.decode()
         self.assertIn("Warli painting: a living tradition", page)
         self.assertIn("Available", page)
@@ -887,16 +918,13 @@ class StatsTests(CheckerTests):
 
     def test_world_estimate_starts_at_googles_count(self):
         from tripwire import stats
-        with mock.patch.object(stats, "_open_library_year", fake_year):
-            self.stats().fill_book_years(seconds=30)
-        b = self.stats().books()
-        i2010 = b["years"].index(2010)
-        self.assertIsNone(b["world"]["mid"][i2010 - 1])  # no estimate before Google's count
-        self.assertEqual(b["world"]["mid"][i2010], 129_864_880)
-        self.assertEqual(b["world"]["low"][i2010 + 1], 129_864_880 + 2_200_000)
-        self.assertEqual(b["world"]["high"][i2010 + 1], 129_864_880 + 4_000_000)
-        mids = [v for v in b["world"]["mid"] if v is not None]
-        self.assertEqual(mids, sorted(mids))  # only goes up
+        w = stats.Stats.world_estimate()
+        self.assertEqual(w["years"][0], 2010)  # starts at Google's count
+        self.assertEqual(w["mid"][0], 129_864_880)
+        self.assertEqual(w["low"][1], 129_864_880 + 2_200_000)
+        self.assertEqual(w["high"][1], 129_864_880 + 4_000_000)
+        self.assertEqual(w["mid"], sorted(w["mid"]))  # only goes up
+        self.assertEqual(w["now"]["year"], w["years"][-1])
 
     def test_backs_off_when_open_library_is_busy(self):
         from tripwire import stats
@@ -932,6 +960,7 @@ class StatsPageTests(CheckerTests):
         page = self.client.get("/stats").data.decode()
         self.assertIn("Not connected yet", page)
         self.assertIn("Collecting book counts from Open Library: 0 of", page)
+        self.assertIn("The whole world (estimate)", page)  # shown even before Open Library's numbers arrive
         self.assertIn("No changes caught yet", page)
 
     def test_page_with_everything(self):
@@ -955,6 +984,7 @@ class StatsPageTests(CheckerTests):
     def test_menu(self):
         page = self.client.get("/stats").data.decode()
         self.assertIn('href="/stats" class="on" aria-current="page"', page)
+        self.assertIn('href="/watching"', page)
         self.assertIn("<summary >More</summary>", page.replace('<summary class="on">', "<summary >"))
         self.assertIn("Weekly summary", page)
 

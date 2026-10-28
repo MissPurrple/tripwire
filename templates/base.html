@@ -5,16 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Tripwire{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script defer src="{{ url_for('static', filename='app.js') }}"></script>
   <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
+  <div class="loading-bar" aria-hidden="true"></div>
   {% set main_links = [('index', 'Watching', ['index']), ('videos', 'Videos', ['videos']),
                         ('change_list', 'Changes', ['change_list', 'entry']),
                         ('book_list', 'Books', ['book_list', 'book_comparison', 'book_job']),
                         ('stats_page', 'Stats', ['stats_page'])] %}
   {% set more_links = [('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Weekly summary', ['summary'])] %}
   <header class="top {{ self.main_class() }}">
-    <a class="brand" href="{{ url_for('index') }}">Tripwire</a>
+    <a class="brand" href="{{ url_for('home') }}">Tripwire<span class="cursor" aria-hidden="true"></span></a>
     {% if g.user %}
     <nav class="nav-wide" aria-label="Main">
       {% for endpoint, label, active in main_links %}
@@ -51,6 +53,6 @@
     {% endfor %}
     {% block content %}{% endblock %}
   </main>
-  <footer>Tripwire keeps a copy when the information you care about changes.</footer>
+  <footer><span>TRIPWIRE</span> · keeps a copy when the information you care about changes · <span class="ready">READY.</span></footer>
 </body>
 </html>

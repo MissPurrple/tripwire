@@ -14,6 +14,7 @@ import os
 import time
 
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.exceptions import HTTPException
 
 from tripwire import books, changes, charts, db, sources, stats
 from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, Tripwire
@@ -57,6 +58,26 @@ def load_user():
     g.user = tw().user(session["user_id"]) if "user_id" in session else None
 
 
+# Plain-words pages for "not found" and other errors, in the site's own style.
+ERROR_PAGES = {
+    400: ("BAD REQUEST", "That request didn't make sense to Tripwire. Try going back and doing it again."),
+    403: ("ACCESS DENIED", "That isn't yours to see, or the link has expired."),
+    404: ("FILE NOT FOUND", "There's nothing at this address. It may have moved, been deleted, or never existed."),
+    405: ("WRONG KIND OF REQUEST", "That page can't be used like that. Try going back and using the buttons on the page."),
+    413: ("TOO BIG", "That upload is too big. For books, try a smaller file (an EPUB or text version), or paste a link instead."),
+}
+
+
+@app.errorhandler(HTTPException)
+def http_error(error):
+    if error.code >= 500:
+        return server_error(error)
+    title, message = ERROR_PAGES.get(error.code, ("SOMETHING WENT WRONG", error.description or ""))
+    if "user" not in g:
+        g.user = None
+    return render_template("error.html", code=error.code, title=title, message=message), error.code
+
+
 @app.errorhandler(500)
 def server_error(error):
     """Show a plain-words page instead of a bare 'Internal Server Error'.
@@ -65,7 +86,8 @@ def server_error(error):
     setup_problem = str(original) if isinstance(original, db.SetupError) else None
     if "user" not in g:
         g.user = None
-    return render_template("error.html", setup_problem=setup_problem), 500
+    return render_template("error.html", code=500, setup_problem=setup_problem, title="SYSTEM ERROR",
+                           message="Tripwire hit an unexpected problem. Nothing you did caused it."), 500
 
 
 def login_required(view):
@@ -102,7 +124,7 @@ def signup():
         else:
             session.clear()
             session["user_id"] = user_id
-            return redirect(url_for("index"))
+            return redirect(url_for("home"))
     return render_template("auth.html", mode="signup")
 
 
@@ -113,7 +135,7 @@ def login():
         if user:
             session.clear()
             session["user_id"] = user["id"]
-            return redirect(url_for("index"))
+            return redirect(url_for("home"))
         flash("That email and password don't match.", "error")
     return render_template("auth.html", mode="login")
 
@@ -127,6 +149,27 @@ def logout():
 # -- watching -----------------------------------------------------------------
 
 @app.get("/")
+def home():
+    """The front page: a box computer that boots up. Logged in, its screen
+    shows your numbers and a menu; logged out, it offers to log in."""
+    numbers = None
+    if g.user:
+        uid = g.user["id"]
+        conn = tw().conn
+        numbers = {
+            "watching": conn.execute("""SELECT COUNT(*) AS n FROM watches w JOIN themes t ON t.id = w.theme_id
+                                        WHERE t.user_id = ? AND w.kind != 'video'""", (uid,)).fetchone()["n"],
+            "videos": len(tw().videos(uid)),
+            "waiting": conn.execute("""SELECT COUNT(*) AS n FROM entries e JOIN watches w ON w.id = e.watch_id
+                                       JOIN themes t ON t.id = w.theme_id WHERE t.user_id = ? AND e.kept = 0""",
+                                    (uid,)).fetchone()["n"],
+            "books": len(tw().book_comparisons(uid)),
+            "copies": len(tw().copies(uid)),
+        }
+    return render_template("home.html", numbers=numbers)
+
+
+@app.get("/watching")
 @login_required
 def index():
     conn = tw().conn
@@ -532,17 +575,23 @@ def stats_page():
                                           y_suffix="%", y_max=100, x_ticks=7)
     books_chart = None
     if book_data:
-        world = book_data["world"]
         books_chart = charts.line_chart(book_data["years"], [
-            ("all", "Open Library: all books", book_data["running"]["all"]),
-            ("print", "Open Library: print only", book_data["running"]["print"]),
-            ("digital", "Open Library: with a digital copy", book_data["running"]["digital"]),
-            ("world", "World estimate (middle)", world["mid"])], width=520, height=300,
-            band={"series": 4, "low": world["low"], "high": world["high"], "label": "World estimate range"},
-            markers=[{"index": book_data["years"].index(stats.GOOGLE_2010_YEAR), "value": stats.GOOGLE_2010_COUNT,
-                      "label": "Google's 2010 count: 129,864,880"}] if stats.GOOGLE_2010_YEAR in book_data["years"] else [])
+            ("all", "All books", book_data["running"]["all"]),
+            ("print", "Print only", book_data["running"]["print"]),
+            ("digital", "With a digital copy", book_data["running"]["digital"])], width=520, height=280)
+    # The world estimate is in the hundreds of millions, so it gets its own chart
+    # (on Open Library's chart it would flatten those lines).
+    world = stats.Stats.world_estimate()
+    world_chart = charts.line_chart(world["years"], [("world", "World estimate (middle)", world["mid"])],
+                                    width=520, height=240, x_ticks=6,
+                                    band={"series": 4, "low": world["low"], "high": world["high"],
+                                          "label": "Range"},
+                                    markers=[{"index": 0, "value": stats.GOOGLE_2010_COUNT,
+                                              "label": "Google's 2010 count: 129,864,880"}],
+                                    series_offset=3, y_min=100_000_000)
     return render_template("stats.html", traffic=traffic, traffic_chart=traffic_chart, books=book_data,
-                           books_chart=books_chart, books_missing=len(missing), books_total=total_years,
+                           books_chart=books_chart, world=world, world_chart=world_chart,
+                           books_missing=len(missing), books_total=total_years,
                            world_sources=stats.WORLD_SOURCES, google_count=stats.GOOGLE_2010_COUNT,
                            per_year_low=stats.NEW_TITLES_PER_YEAR_LOW, per_year_high=stats.NEW_TITLES_PER_YEAR_HIGH,
                            mine=_my_numbers(g.user["id"]), groups=CHANGE_GROUPS)

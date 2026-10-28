@@ -48,14 +48,14 @@ pip install -r requirements.txt
 ```
 python app.py
 ```
-Then open **http://localhost:5000** in your browser and click **Make an account**. (On your laptop the account only exists on your laptop.) To stop it, go back to the terminal and press **Ctrl + C**.
+Then open **http://localhost:5000** in your browser. You'll see the Tripwire computer boot up; choose **[M] MAKE AN ACCOUNT**. (On your laptop the account only exists on your laptop.) To stop it, go back to the terminal and press **Ctrl + C**.
 
 Next time, you only need to open a terminal in the folder, run the `activate` line from step 2, then `python app.py`.
 
 ### Trying it out
-1. Add the theme **Indigenous communities**.
+1. On the computer's screen choose **[1] WATCHING**, then add the theme **Indigenous communities**.
 2. Add a Wikipedia article, e.g. `Adivasi` or `Warli`, and set **Start** to *"Changes in the last 30 days"*. That way you see real changes straight away, instead of waiting for someone to edit it.
-3. Press **Check everything now**, then open **Archive**.
+3. Press **Check everything now**, then open **Changes**.
 
 You can also paste links to **other-language Wikipedias** (e.g. Konkani: `https://gom.wikipedia.org/wiki/...`) or **any web page**.
 
@@ -79,7 +79,7 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/books.py` | Reads book files (EPUB, PDF, text, Project Gutenberg) for comparing two editions |
 | `tripwire/stats.py`, `tripwire/charts.py` | The Stats page's numbers (Cloudflare Radar, Open Library) and the charts |
 | `tripwire/db.py` | Storage: a `tripwire.db` file on your laptop, or a Postgres database online |
-| `templates/`, `public/static/` | Page layouts and styling |
+| `templates/`, `public/static/` | Page layouts, the retro styling, and the fonts (VT323 and IBM Plex, free under the SIL Open Font License, served by Tripwire itself) |
 | `vercel.json` | Tells Vercel this is a Flask app, and to run the daily check |
 | `tests/` | Automatic checks |
 | (`notes` branch) | Project notes and decisions, kept separate from the code |

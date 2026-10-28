@@ -35,19 +35,31 @@
 {# ---------------------------------------------------------------- books published #}
 <section class="theme" id="books">
   <h2>Books published</h2>
-  {% if books %}
+  <p class="meta">Running totals: they can only go up, because you can't unpublish a book.</p>
+
+  <h3>The whole world (estimate)</h3>
   <div class="stats-split">
     <div>
-      <p class="meta">Running totals: a running total can only go up, because you can't unpublish a book.
-        Open Library's lines start in {{ books.first_year }} (older books are counted in the starting value).
-        The world estimate starts from Google's 2010 count.</p>
-      {% set chart = books_chart %}{% set chart_title = "Running total of books: Open Library (all, print only, with a digital copy) and a world estimate from Google's 2010 count" %}{% set value_format = 'number' %}
+      {% set chart = world_chart %}{% set chart_title = "Estimated running total of all books in the world since Google's 2010 count, with a low to high range" %}{% set value_format = 'number' %}
       {% include "_line_chart.html" %}
     </div>
     <aside class="stat-side">
-      <div class="stat-tile"><span>World estimate, {{ books.world.now.year }}</span><strong>≈ {{ '{:,}'.format(books.world.now.mid) }}</strong>
-        <em>between {{ '{:,}'.format(books.world.now.low) }} and {{ '{:,}'.format(books.world.now.high) }}</em></div>
+      <div class="stat-tile"><span>Estimate for {{ world.now.year }}</span><strong>≈ {{ '{:,}'.format(world.now.mid) }}</strong>
+        <em>somewhere between {{ '{:,}'.format(world.now.low) }} and {{ '{:,}'.format(world.now.high) }}, plus books no one recorded</em></div>
       <div class="stat-tile"><span>Google's count, 2010</span><strong>{{ '{:,}'.format(google_count) }}</strong></div>
+    </aside>
+  </div>
+
+  <h3>Open Library's catalogue</h3>
+  {% if books %}
+  <div class="stats-split">
+    <div>
+      <p class="meta">Books Open Library knows about, by the year each was first published, since {{ books.first_year }}
+        (older books are counted in the starting value).</p>
+      {% set chart = books_chart %}{% set chart_title = "Running total of books in Open Library: all, print only, and with a digital copy" %}{% set value_format = 'number' %}
+      {% include "_line_chart.html" %}
+    </div>
+    <aside class="stat-side">
       <div class="stat-tile"><span>In Open Library</span><strong>{{ '{:,}'.format(books.totals.all) }}</strong></div>
       <div class="stat-tile"><span>Peak year, print only</span><strong>{{ books.peaks.print.year }}</strong><em>{{ '{:,}'.format(books.peaks.print.count) }} books</em></div>
       <div class="stat-tile"><span>Peak year, digital</span><strong>{{ books.peaks.digital.year }}</strong><em>{{ '{:,}'.format(books.peaks.digital.count) }} books</em></div>

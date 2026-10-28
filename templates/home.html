@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Tripwire{% endblock %}
+{% block body_class %}home{% endblock %}
+{% block content %}
+{% set menu = [('1', 'WATCHING', url_for('index'), (numbers.watching ~ (' item' if numbers.watching == 1 else ' items')) if numbers else ''),
+               ('2', 'VIDEOS', url_for('videos'), (numbers.videos ~ (' video' if numbers.videos == 1 else ' videos')) if numbers else ''),
+               ('3', 'CHANGES', url_for('change_list'), numbers.waiting ~ ' waiting' if numbers else ''),
+               ('4', 'BOOKS', url_for('book_list'), numbers.books ~ ' compared' if numbers else ''),
+               ('5', 'STATS', url_for('stats_page'), ''),
+               ('6', 'ARCHIVE', url_for('archive'), (numbers.copies ~ (' public copy' if numbers.copies == 1 else ' public copies')) if numbers else '')] if numbers else
+              [('L', 'LOG IN', url_for('login'), ''), ('M', 'MAKE AN ACCOUNT', url_for('signup'), '')] %}
+<div class="computer" aria-label="Tripwire, shown as an old box computer">
+  <div class="monitor">
+    <div class="bezel">
+      <div class="screen" id="screen">
+        <div class="boot" id="boot">
+          <p class="screen-line dim">TRIPWIRE BIOS v1.0 &nbsp;·&nbsp; Edge City Buildathon, 2026</p>
+          <p class="screen-line dim">MEMORY TEST ........ 640K OK</p>
+          <p class="screen-line dim">LOADING THE RECORD OF THE WORLD ........ OK</p>
+          <p class="screen-line">&nbsp;</p>
+          {% if numbers %}
+            <p class="screen-line big">WELCOME BACK.</p>
+            <p class="screen-line soft">Here's what Tripwire is keeping an eye on for you.</p>
+          {% else %}
+            <p class="screen-line big">TRIPWIRE</p>
+            <p class="screen-line soft">Pages vanish. Articles get rewritten. Books get quietly changed.</p>
+            <p class="screen-line soft">Tripwire watches what you care about, and keeps a copy when it changes.</p>
+          {% endif %}
+          <p class="screen-line">&nbsp;</p>
+          <ul class="screen-menu">
+            {% for key, label, href, note in menu %}
+              <li class="screen-line"><a href="{{ href }}" data-key="{{ key|lower }}">[{{ key }}] {{ label }}</a>{% if note %}<span class="dots"></span><span class="note">{{ note }}</span>{% endif %}</li>
+            {% endfor %}
+          </ul>
+          <p class="screen-line">&nbsp;</p>
+          <p class="screen-line">C:\TRIPWIRE&gt; <span class="cursor"></span></p>
+          <p class="screen-line dim hint">Press a key, or click a line above.</p>
+        </div>
+      </div>
+    </div>
+    <div class="monitor-chin">
+      <span class="badge-plate">TRIPWIRE</span>
+      <span class="vents" aria-hidden="true"></span>
+      <span class="power-led" aria-hidden="true"></span>
+    </div>
+  </div>
+  <div class="neck" aria-hidden="true"></div>
+  <div class="case" aria-hidden="true">
+    <span class="floppy"><span></span></span>
+    <span class="case-label">MODEL 1026</span>
+    <span class="case-buttons"><span></span><span></span></span>
+  </div>
+  <div class="keyboard" aria-hidden="true">
+    {% for row in [14, 14, 13, 12] %}<div class="keys">{% for k in range(row) %}<span></span>{% endfor %}</div>{% endfor %}
+    <div class="keys space"><span></span><span class="spacebar"></span><span></span></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Boot up: show the screen's lines one by one (skipped if the viewer prefers less motion).
+  var lines = document.querySelectorAll("#boot > .screen-line, #boot li");
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    lines.forEach(function (line, i) {
+      line.classList.add("pending");
+      setTimeout(function () { line.classList.remove("pending"); }, 120 + i * (i < 3 ? 260 : 110));
+    });
+  }
+  // Keyboard shortcuts: the number or letter in [brackets].
+  document.addEventListener("keydown", function (event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    var link = document.querySelector('.screen-menu a[data-key="' + event.key.toLowerCase() + '"]');
+    if (link) { document.body.classList.add("is-loading"); window.location = link.href; }
+  });
+})();
+</script>
+{% endblock %}

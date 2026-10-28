@@ -1,15 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Something went wrong · Tripwire{% endblock %}
+{% block title %}{{ code }} · {{ title|title }} · Tripwire{% endblock %}
 {% block content %}
-<section class="theme auth">
-  {% if setup_problem %}
-    <h1>Tripwire needs a setting fixed</h1>
-    <p>{{ setup_problem }}</p>
-  {% else %}
-    <h1>Something went wrong</h1>
-    <p>Tripwire hit an unexpected problem. Nothing you did caused it.</p>
-    <p class="meta">If you run this site: the details are in the logs (on Vercel, the project's <strong>Logs</strong> tab).</p>
-  {% endif %}
-  <p><a href="{{ url_for('index') }}">← Try again</a></p>
+<section class="error-screen">
+  <div class="crt crt-small">
+    <div class="screen" role="alert">
+      <p class="screen-line dim">TRIPWIRE SYSTEM MESSAGE</p>
+      <p class="screen-line big">ERROR {{ code }}: {{ title }}</p>
+      {% if setup_problem %}
+        <p class="screen-line">TRIPWIRE NEEDS A SETTING FIXED.</p>
+        <p class="screen-line soft">{{ setup_problem }}</p>
+      {% else %}
+        <p class="screen-line soft">{{ message }}</p>
+        {% if code == 500 %}<p class="screen-line dim">If you run this site: the details are in the logs (on Vercel, the project's Logs tab).</p>{% endif %}
+      {% endif %}
+      <p class="screen-line">C:\TRIPWIRE&gt; <span class="cursor"></span></p>
+    </div>
+  </div>
+  <p class="error-actions">
+    <a class="button" href="{{ url_for('home') }}">Go to the start</a>
+    <a class="button secondary" href="javascript:history.back()">Go back</a>
+  </p>
 </section>
 {% endblock %}

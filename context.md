@@ -185,3 +185,14 @@
 - Fixes: empty first visit shows "Try it with real examples"; daily checks ignore "updated 5 minutes ago" noise; long pages
   compared sentence by sentence (fast). 312 tests pass on SQLite and Postgres.
 - The other Claude session works in parallel on security (log-in pauses, email confirmation, cross-site form refusal).
+
+## Built 29 Oct: Your vault (suggestion 6), on branch `locked-shelf` ONLY (not live, not on main)
+- Purple: "build it with the full ethos of being a true cypherpunk site... the ultimate archive tool". Separate branch so
+  nothing breaks. Vercel makes a preview for it.
+- Shelf items locked in the browser (AES-256-GCM; passphrase -> PBKDF2-SHA256 600k; recovery code shown once).
+  Server stores only locked data; tested: no title/note/words/file name/passphrase/recovery code in the raw database.
+- Offline unlock page in the ZIP download. Locked items: not searchable/watchable/in Kiwix (server can't read them).
+- Honest limit (on the vault page): web-page encryption trusts the page the server sends.
+- Possible next: lock "Then and now" results and feedback (feedback locked to Purple's own key) the same way.
+- Gmail: Purple got "verification failed" making an app password on a brand-new Gmail account (Google often blocks
+  this on new accounts for a while). Paused.

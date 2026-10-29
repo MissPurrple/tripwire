@@ -151,3 +151,13 @@
   no errors on any page. Need the Vercel Logs error text to find the cause.
 - Wording (29 Oct, from Purple, live): home page and About intro + quote rewritten in Purple's words. Keep "Indigenous"
   with a capital I. Keep "No account needed." under About → Deliberate choices (important for the judges to see).
+
+## Security and privacy audit (29 Oct, cypherpunk lens; Purple: reading is fine, breaking things is not)
+- FIXED and live: links only http(s) and never into private networks (every redirect re-checked), 50 MB download
+  cap, passwords not passed between sites; safe "next" redirects; browser protection headers; guest flood limit
+  (GUESTS_PER_HOUR, default 300, site-wide, no tracking) and 10 MB guest shelf; "Your account" page with
+  delete-everything (password + tick box); honest warning about very personal documents (shelf, books, about, account).
+- SUGGESTED, not built (Purple to choose): slow down repeated wrong passwords; confirm email addresses before
+  sending summaries (a bot could sign up a stranger's email); form tokens against cross-site form tricks
+  (browsers' SameSite cookies already block most); keep ADMIN_EMAILS to Purple's own registered email; consider
+  removing the Vercel Analytics script (cookieless, but a third party sees visits); end-to-end encrypted shelf (big job).

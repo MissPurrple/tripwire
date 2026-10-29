@@ -12,6 +12,9 @@
     {% endfor %}
   </nav>
 </section>
+{% include "_summary.html" %}
+{% if not entries and not category %}{% include "_try_examples.html" %}{% endif %}
+<h2 class="list-heading">Every change</h2>
 {% for e in entries %}
   {% include "_entry_card.html" %}
 {% else %}

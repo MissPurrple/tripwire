@@ -1,14 +1,14 @@
-{% extends "base.html" %}
-{% block title %}Live watch · Tripwire{% endblock %}
-{% block content %}
-<section class="intro">
-  <h1>Live watch</h1>
+{# Live watch: one page, checked every few minutes while this page is open. Off until switched on. #}
+<section class="theme live-section" id="live">
+  <div class="theme-head">
+    <h2>Live watch</h2>
+    <button type="button" class="live-switch" id="live-switch" aria-pressed="{{ 'true' if live_on else 'false' }}" aria-controls="live-panel">
+      <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+      <span class="switch-label">{{ 'ON' if live_on else 'OFF' }}</span></button>
+  </div>
+<div id="live-panel" {% if not live_on %}hidden{% endif %}>
   <p>For pages that change by the minute, like a live news page. Keep this page open, and Tripwire checks for you,
      beeps when something new appears, and shows you what changed. Nothing is saved: it's just for now.</p>
-</section>
-
-<section class="theme">
-  <h2>Watch a page</h2>
   <form id="live-form" class="live-form" data-no-loading>
     <label>Link
       <input name="url" type="url" required placeholder="e.g. https://www.bbc.com/news/live/…">
@@ -35,16 +35,15 @@
       <button type="button" id="live-notify" class="link">Also show a notification</button>
     </div>
   </form>
-</section>
-
-<section class="live-screen-wrap">
+<div class="live-screen-wrap">
   <div class="screen live-screen" id="live-screen" aria-live="polite">
     <p class="screen-line dim" id="live-status">LIVE WATCH READY. Paste a link above and press Start.</p>
     <div id="live-log"></div>
   </div>
   <p class="meta">Tripwire ignores bits that change on every visit (like “5 minutes ago”), so it only beeps for real updates.
     It checks at most once a minute, to be kind to the websites it watches.</p>
-</section>
+</div>
+</div>
 
 <script>
 (function () {
@@ -145,4 +144,17 @@
   document.addEventListener("visibilitychange", function () { if (!document.hidden) { unseen = 0; document.title = baseTitle; } });
 })();
 </script>
-{% endblock %}
+</section>
+<script>
+(function () {
+  var sw = document.getElementById("live-switch"), panel = document.getElementById("live-panel");
+  sw.addEventListener("click", function () {
+    var on = sw.getAttribute("aria-pressed") !== "true";
+    if (!on) { var stop = document.getElementById("live-stop"); if (!stop.hidden) stop.click(); }
+    sw.setAttribute("aria-pressed", on ? "true" : "false");
+    sw.querySelector(".switch-label").textContent = on ? "ON" : "OFF";
+    panel.hidden = !on;
+    if (on) document.querySelector("#live-form input[name=url]").focus();
+  });
+})();
+</script>

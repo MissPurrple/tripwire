@@ -97,6 +97,25 @@
   <p class="meta">Using {{ '%.1f'|format(used_mb) }} MB of your {{ limit_mb }} MB shelf.</p>
 </section>
 
+<section id="public-copies">
+  <h2>Public copies at the Internet Archive</h2>
+  <p class="meta">Copies you chose to keep with the <a href="https://web.archive.org" target="_blank" rel="noopener">Internet Archive</a>:
+     public and permanent, for anyone to see. Tripwire offers one when something you watch changes a lot, and always asks twice.</p>
+  {% for c in copies %}
+  <article class="entry copy">
+    <div class="entry-head"><span class="badge">Internet Archive</span><span class="when">saved {{ c.created_at[:10] }}</span></div>
+    <h3><a href="{{ c.archive_url }}" target="_blank" rel="noopener">{{ c.label }}</a></h3>
+    <p class="meta">Original: <a href="{{ c.page_url }}" target="_blank" rel="noopener">{{ c.page_url }}</a></p>
+    <div class="actions">
+      <a href="{{ c.archive_url }}" target="_blank" rel="noopener">Open the copy</a>
+      {% if c.entry_id %}<a href="{{ url_for('entry', entry_id=c.entry_id) }}">See the change</a>{% endif %}
+    </div>
+  </article>
+  {% else %}
+  <p class="empty">None yet. Choose “Keep a public copy…” next to anything you're watching, or on a big change.</p>
+  {% endfor %}
+</section>
+
 <script>
   // Before sending: read a scanned PDF or a photo on this device, so its words can be kept and searched.
   var fileForm = document.getElementById("file-form"), ready = false;

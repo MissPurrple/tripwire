@@ -17,11 +17,12 @@ _NOISE = [
 ]
 
 
-def steady_text(text):
-    """The page's text without the bits that change on every visit."""
+def steady_text(text, limit=MAX_TEXT):
+    """The page's text without the bits that change on every visit (cut to `limit` characters, if given)."""
     for pattern in _NOISE:
         text = pattern.sub("", text)
-    return "\n".join(line.strip() for line in text.splitlines() if line.strip())[:MAX_TEXT]
+    text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+    return text[:limit] if limit else text
 
 
 def check(url, previous=None):

@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import books, changes, db, sources
+from . import books, changes, db, live, sources
 
 BOOK_FILE_DAYS = 7          # book files are deleted after this many days; results stay
 BOOK_JOB_STUCK_MINUTES = 6  # a comparison "running" longer than this was interrupted: try again
@@ -24,6 +24,7 @@ VIDEOS = "Videos"
 
 # Changes big enough that Tripwire offers to keep a public Internet Archive copy.
 # (Name spelling changes are only noted, never offered a copy.)
+LONG_PAGE_WORDS = 10_000    # more words than this (before and after together): compared sentence by sentence
 COPY_WORTHY = {"major", "removal", "page_removed"}
 
 
@@ -265,7 +266,7 @@ class Tripwire:
             parsed = urlparse(target)
             row = dict(kind="web", lang=None, target=target,
                        label=(parsed.netloc + parsed.path).rstrip("/"),
-                       baseline_ref=None, baseline_text=page["text"], baseline_at=db.now())
+                       baseline_ref=None, baseline_text=live.steady_text(page["text"], limit=None), baseline_at=db.now())
 
         return self.conn.insert(
             """INSERT INTO watches (theme_id, kind, label, lang, target, baseline_ref,
@@ -339,11 +340,12 @@ class Tripwire:
         page = sources.fetch_page(watch["target"])
         if page["status"] == "removed":
             return self._record_removal(watch, f"Page removed (answered {page['code']} not found)")
-        if page["text"] == watch["baseline_text"]:
+        # Leave out bits that change on every visit ("updated 5 minutes ago"), so they're never reported as changes.
+        text = live.steady_text(page["text"], limit=None)
+        if text == live.steady_text(watch["baseline_text"] or "", limit=None):
             self._set_status(watch["id"], "No changes")
             return None
-        return self._record_change(watch, page["text"], new_ref=None, new_at=db.now(),
-                                   compare_url=None, extra={})
+        return self._record_change(watch, text, new_ref=None, new_at=db.now(), compare_url=None, extra={})
 
     # How serious each kind of video change is, most serious first.
     VIDEO_SEVERITY = ["video_gone", "video_restricted", "video_retitled", "edit"]
@@ -393,7 +395,9 @@ class Tripwire:
         return entry_id
 
     def _record_change(self, watch, new_text, new_ref, new_at, compare_url, extra):
-        result = changes.compare(watch["baseline_text"], new_text)
+        # Long pages (a book at a link, say) are lined up sentence by sentence first: much faster, same result.
+        long_page = len(new_text.split()) + len((watch["baseline_text"] or "").split()) > LONG_PAGE_WORDS
+        result = (changes.compare_long if long_page else changes.compare)(watch["baseline_text"], new_text)
         entry_id = None
         if result["hunks"]:  # the readable text actually changed
             details = dict(extra, hunks=result["hunks"][:50], hunk_count=len(result["hunks"]),

@@ -1,14 +1,13 @@
-{% extends "base.html" %}
-{% block title %}Summary · Tripwire{% endblock %}
-{% block content %}
-<section class="intro">
-  <h1>{{ s.name }} summary</h1>
+{# The summary of recent changes, at the top of Changes (also sent by email, if chosen). #}
+
+<section class="theme" id="summary">
+  <h2>{{ s.name }} summary</h2>
   <p class="meta">{{ s.period }}</p>
   <blockquote class="digest">{{ s.text }}</blockquote>
-</section>
 
-<section class="theme email-box">
-  <h2>By email</h2>
+
+  <details class="email-box" {% if request.args.get('email') %}open{% endif %}>
+  <summary>Get this summary by email</summary>
   {% if not g.user or is_guest %}
     <p>Want this in your inbox, so you don't have to come and look? <a href="{{ url_for('signup') }}">Make an account</a>
        and choose daily, weekly or monthly. Everything you've added so far comes with you.</p>
@@ -39,24 +38,24 @@
     <p class="meta">Email isn't set up on this site yet. The site owner connects an email service in Vercel
        (see “Summary emails” in the README), and then this summary can arrive daily, weekly or monthly.</p>
   {% endif %}
-</section>
+  </details>
 {% if s.entries %}
-<section class="stats">
+<div class="stats">
   <div><strong>{{ s.entries|length }}</strong><span>changes</span></div>
   <div><strong>{{ s.changed_items }} / {{ s.tracked }}</strong><span>tracked items changed</span></div>
   <div><strong>{{ s.big|length }}</strong><span>big changes</span></div>
   <div><strong>{{ s.names|length }}</strong><span>name spelling changes</span></div>
-</section>
+</div>
 {% if s.offer_copy %}
-<section class="theme offer">
-  <h2>Important changes</h2>
+<div class="offer">
+  <h3>Important changes</h3>
   <p>These look like big changes. If any of them matter to you, consider keeping a public, permanent copy with the Internet Archive.</p>
   <ul>{% for e in s.offer_copy %}<li><a href="{{ url_for('entry', entry_id=e.id) }}">{{ e.label }}</a>: {{ CATEGORIES[e.category] }}</li>{% endfor %}</ul>
-</section>
+</div>
 {% endif %}
-<section>
-  <h2>By size</h2>
+<div>
+  <h3>By size</h3>
   <ul>{% for cat, n in s.counts.most_common() %}<li><a href="{{ url_for('change_list', category=cat) }}">{{ CATEGORIES[cat] }}</a>: {{ n }}</li>{% endfor %}</ul>
-</section>
+</div>
 {% endif %}
-{% endblock %}
+</section>

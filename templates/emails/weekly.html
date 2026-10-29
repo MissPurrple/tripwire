@@ -36,11 +36,11 @@
   </td></tr>
   {% endif %}
   <tr><td style="padding:8px 22px 22px;">
-    <a href="{{ site }}{{ url_for('summary') }}" style="display:inline-block;background:#1f6b3c;color:#f2fbf3;text-decoration:none;padding:10px 16px;border:2px solid #2a2620;font-size:14px;font-weight:bold;">See everything</a>
+    <a href="{{ site }}{{ url_for('change_list', _anchor='summary') }}" style="display:inline-block;background:#1f6b3c;color:#f2fbf3;text-decoration:none;padding:10px 16px;border:2px solid #2a2620;font-size:14px;font-weight:bold;">See everything</a>
   </td></tr>
   <tr><td style="padding:14px 22px;border-top:2px solid #2a2620;font-size:12px;color:#5d5649;">
     You get this {{ when }} because summary emails are switched on for {{ email }}.
-    <a href="{{ site }}{{ url_for('summary') }}" style="color:#5d5649;">Switch them off</a> any time. READY.
+    <a href="{{ site }}{{ url_for('change_list', _anchor='summary') }}" style="color:#5d5649;">Switch them off</a> any time. READY.
   </td></tr>
 </table>
 </td></tr></table>

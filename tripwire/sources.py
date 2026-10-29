@@ -252,8 +252,17 @@ def fetch_page(url):
         return {"status": "removed", "code": response.status_code}
     if response.status_code >= 400:
         raise SourceError(f"{urlparse(url).netloc} answered with error {response.status_code}")
-    if "pdf" in response.headers.get("Content-Type", "").lower() or response.content[:5] == b"%PDF-":
+    kind = response.headers.get("Content-Type", "").lower()
+    if "pdf" in kind or response.content[:5] == b"%PDF-":
         return {"status": "ok", "text": pdf_text(response.content)}
+    if "epub" in kind or (response.content[:2] == b"PK" and urlparse(url).path.lower().endswith(".epub")):
+        from . import books  # an e-book at a link (watched from Books & videos)
+        try:
+            return {"status": "ok", "text": books.read_book("book.epub", response.content)[0]}
+        except books.BookError as exc:
+            raise SourceError(str(exc)) from exc
+    if kind.startswith("text/plain"):
+        return {"status": "ok", "text": response.text.strip()}
     return {"status": "ok", "text": html_to_text(response.text)}
 
 

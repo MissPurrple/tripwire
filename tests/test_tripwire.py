@@ -262,6 +262,28 @@ class CheckerTests(unittest.TestCase):
         watched = self.tw.own_watch(self.user, watch)
         self.assertEqual(len(self.tw.copy_options(watch=watched)), 1)
 
+    def test_every_visit_noise_is_not_a_change(self):
+        """Bits like "updated 5 minutes ago" change on every visit; the daily check ignores them."""
+        pages = {"https://news.example.org/lesotho": {"status": "ok", "text": "Lesotho news\nUpdated 5 minutes ago\nThe dam opened."}}
+        with mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+            watch = self.tw.add_watch(self.theme, "https://news.example.org/lesotho")
+            pages["https://news.example.org/lesotho"]["text"] = "Lesotho news\nUpdated 2 hours ago\n1,204 people watching now\nThe dam opened."
+            self.assertIsNone(self.tw.check_watch(watch))
+            pages["https://news.example.org/lesotho"]["text"] = "Lesotho news\nUpdated just now\nThe dam closed."
+            entry = self.tw.check_watch(watch)
+        self.assertIsNotNone(entry)  # a real change still counts
+        details = self.tw.conn.execute("SELECT details FROM entries WHERE id = ?", (entry,)).fetchone()["details"]
+        self.assertNotIn("ago", details)
+        self.assertIn("closed", details)
+
+    def test_long_pages_are_compared_whole(self):
+        long_text = " ".join(f"Chapter {i} tells of the river and the old stone house." for i in range(4000)) + " The end."
+        pages = {"https://books.example.org/b.txt": {"status": "ok", "text": long_text}}
+        with mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+            watch = self.tw.add_watch(self.theme, "https://books.example.org/b.txt")
+            pages["https://books.example.org/b.txt"]["text"] = long_text.replace("The end.", "The new end.")
+            self.assertIsNotNone(self.tw.check_watch(watch))  # a change after the first 200,000 characters
+
     def test_removed_page_cannot_get_a_new_copy(self):
         watch = self.tw.add_watch(self.theme, "Warli")
         del FakeWikipedia.articles["Warli"]
@@ -296,8 +318,12 @@ class WebAppTests(CheckerTests):
         return self.client.post("/login", data={"email": email, "password": password}, follow_redirects=True)
 
     def test_pages_open_without_an_account(self):
-        for path in ["/watching", "/changes", "/archive", "/summary", "/videos", "/books", "/stats", "/live", "/about"]:
+        for path in ["/watching", "/changes", "/books", "/shelf", "/stats", "/about"]:
             self.assertEqual(self.client.get(path).status_code, 200, path)
+        # Old addresses lead to where those things are now.
+        for old, new in [("/archive", "/shelf#public-copies"), ("/summary", "/changes#summary"),
+                         ("/videos", "/books#videos"), ("/live", "/watching?live=1#live"), ("/before", "/watching")]:
+            self.assertTrue(self.client.get(old).headers["Location"].endswith(new), old)
         self.assertEqual(self.client.get("/entries/1").status_code, 302)  # someone else's: not shown
         self.assertEqual(self.client.get("/books/1").status_code, 404)
         self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"], 1)  # looking makes no guest
@@ -558,7 +584,7 @@ class WebAppTests(CheckerTests):
         response = self.client.post("/check", follow_redirects=True)
         self.assertIn(b"Name spelling changed", response.data)
         self.assertIn(b"Warlee", self.client.get("/entries/1").data)
-        self.assertIn(b"1 change across 1", self.client.get("/summary").data)
+        self.assertIn(b"1 change across 1", self.client.get("/changes").data)
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/watching").status_code, 200)
         with self.client.get("/static/style.css") as css:
@@ -612,7 +638,7 @@ class WebAppTests(CheckerTests):
             self.client.post(f"/copy/entry/{entry}", data={"option1": "1", "understood": "yes"})
         self.assertEqual(len(saved_urls), 1)
         self.assertTrue(saved_urls[0].endswith("oldid=2"))
-        archive_page = self.client.get("/archive").data
+        archive_page = self.client.get("/shelf").data
         self.assertIn(b"https://web.archive.org/web/2026/", archive_page)
         self.assertIn(b"Your public copies of this change", self.client.get(f"/entries/{entry}").data)
         self.assertEqual(self.tw.weekly_summary(self.user)["offer_copy"], [])  # no longer offered
@@ -1075,20 +1101,33 @@ class VideoWatchTests(CheckerTests):
         state = self.tw.own_watch(self.user, watch)["baseline_ref"]
         self.assertIn('"restricted": false', state)  # remembered from before
 
-    def test_videos_dont_show_on_watching_page(self):
+    def test_watched_videos_are_on_the_watching_page(self):
         self.add(player=youtube_player())
         import app as webapp
         webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
         client = webapp.app.test_client()
         client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
-        self.assertNotIn("Warli painting", client.get("/watching").data.decode())
-        page = client.get("/videos").data.decode()
+        page = client.get("/watching").data.decode()
+        self.assertIn('id="videos"', page)
         self.assertIn("Warli painting: a living tradition", page)
         self.assertIn("Available", page)
+        self.assertNotIn("Test against Internet Archive", page.split('id="videos"')[1])  # videos aren't pages to compare
+
+    def test_check_a_video_without_watching_it(self):
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        client = webapp.app.test_client()
+        with mock.patch.object(sources, "_get", fake_video_site(player=youtube_player(title="Konkani lullaby"), title="Konkani lullaby")):
+            page = client.post("/videos/check", data={"target": "https://www.youtube.com/watch?v=aaaaaaaaaaa"}).data.decode()
+        self.assertIn("Konkani lullaby", page)
+        self.assertIn("checked just now", page)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM watches WHERE kind = 'video'").fetchone()["n"], 0)
+        self.assertIn("Paste a YouTube or TikTok video link.",
+                      client.post("/videos/check", data={"target": "https://example.org/"}, follow_redirects=True).data.decode())
         with mock.patch.object(sources, "_get", fake_video_site(player=youtube_player(title="Second video"), title="Second video")):
             response = client.post("/single-links", data={"target": "https://youtu.be/aaaaaaaaaaa"}, follow_redirects=True)
         self.assertIn("Now watching that video", response.data.decode())  # pasted in the wrong place, still works
-        self.assertIn("Second video", client.get("/videos").data.decode())
+        self.assertIn("Second video", client.get("/watching").data.decode())
 
 
 def fake_cloudflare(status=200, human="48.7", bot="51.3"):
@@ -1219,10 +1258,12 @@ class StatsPageTests(CheckerTests):
 
     def test_menu(self):
         page = self.client.get("/stats").data.decode()
-        self.assertIn('href="/stats" class="on" aria-current="page"', page)
-        self.assertIn('href="/watching"', page)
-        self.assertIn("<summary >More</summary>", page.replace('<summary class="on">', "<summary >"))
-        self.assertIn('href="/summary" >Summary</a>', page)
+        nav = page.split('<nav class="nav-wide"')[1].split("</nav>")[0]
+        self.assertEqual([label for label in ["Watching", "My shelf", "Changes", "Books &amp; videos", "About"] if label in nav],
+                         ["Watching", "My shelf", "Changes", "Books &amp; videos", "About"])
+        for gone in ["Stats", "Then and now", "Live watch", "Archive", "Summary", ">More<"]:
+            self.assertNotIn(gone, nav)
+        self.assertIn('<p class="footer-stats"><a href="/stats">Stats</a>', page)  # at the bottom of every page
 
 
 class FakeSMTP:
@@ -1276,7 +1317,7 @@ class EmailAndAboutTests(CheckerTests):
         with mock.patch.dict(os.environ, {}, clear=False):
             for key in EMAIL_SETTINGS:
                 os.environ.pop(key, None)
-            self.assertIn("Email isn't set up on this site yet", self.client.get("/summary").data.decode())
+            self.assertIn("Email isn't set up on this site yet", self.client.get("/changes").data.decode())
             response = self.client.post("/summary/send", follow_redirects=True)
         self.assertIn("Email isn&#39;t set up on this site yet", response.data.decode())
         self.assertEqual(FakeSMTP.sent, [])
@@ -1325,17 +1366,17 @@ class EmailAndAboutTests(CheckerTests):
                 return len(self.tw.users_due_summary())
 
         with mock.patch.dict(os.environ, EMAIL_SETTINGS):
-            self.assertIn('value="weekly" checked', self.client.get("/summary").data.decode())  # the starting choice
+            self.assertIn('value="weekly" checked', self.client.get("/changes").data.decode())  # the starting choice
             self.assertEqual((due_on(monday_1st), due_on(tuesday_2nd)), (1, 0))
             self.client.post("/summary/email", data={"every": "off"})
-            self.assertIn('value="off" checked', self.client.get("/summary").data.decode())
+            self.assertIn('value="off" checked', self.client.get("/changes").data.decode())
             self.assertEqual((due_on(monday_1st), due_on(tuesday_2nd)), (0, 0))
             self.client.post("/summary/email", data={"every": "daily"})
-            page = self.client.get("/summary").data.decode()
+            page = self.client.get("/changes").data.decode()
             self.assertIn("Daily summary", page)
             self.assertEqual((due_on(monday_1st), due_on(tuesday_2nd)), (1, 1))
             self.client.post("/summary/email", data={"every": "monthly"})
-            self.assertIn("Monthly summary", self.client.get("/summary").data.decode())
+            self.assertIn("Monthly summary", self.client.get("/changes").data.decode())
             self.assertEqual((due_on(monday_1st), due_on(tuesday_2nd)), (1, 0))
             self.assertIn("Choose daily", self.client.post("/summary/email", data={"every": "hourly"},
                                                            follow_redirects=True).data.decode())
@@ -1361,7 +1402,7 @@ class EmailAndAboutTests(CheckerTests):
             # Signing up sends one "confirm your email" message, and no more for a while.
             visitor = webapp.app.test_client()
             visitor.post("/login", data={"email": "stranger@example.org", "password": "a long password"})
-            self.assertIn("First, confirm your email address", visitor.get("/summary").data.decode())
+            self.assertIn("First, confirm your email address", visitor.get("/changes").data.decode())
             self.assertIn("confirm your email", visitor.post("/summary/send", follow_redirects=True).data.decode())
             visitor.post("/confirm/send")
             visitor.post("/confirm/send")
@@ -1389,7 +1430,7 @@ class EmailAndAboutTests(CheckerTests):
                          "Purple, Tripwire&#39;s maker", "Send feedback", "A sign-up wall → try it first"]:
             self.assertIn(expected, page.replace("Who it's for", "Who it&#39;s for").replace("Purple, Tripwire's maker", "Purple, Tripwire&#39;s maker"))
         self.assertIn("Add the examples", page)  # no account needed to try the examples
-        self.assertIn("[9] ABOUT", self.client.get("/").data.decode())
+        self.assertIn("[5] ABOUT", self.client.get("/").data.decode())
 
     def test_feedback_reaches_only_the_owner(self):
         self.client.post("/feedback", data={"tried": "Books", "message": "Loved the Frankenstein comparison!"})
@@ -1471,13 +1512,16 @@ class LiveWatchTests(CheckerTests):
         self.assertEqual(response.status_code, 429)
         self.assertIn("too often", response.json["error"])
 
-    def test_live_page(self):
-        page = self.client.get("/live").data.decode()
+    def test_live_watch_is_a_switch_on_watching(self):
+        page = self.client.get("/watching").data.decode()
         self.assertIn("Live watch", page)
-        self.assertIn('href="/live"', page)  # in the menu
+        self.assertLess(page.index('id="live"'), page.index("What you're watching"))  # at the top
+        self.assertIn('id="live-switch" aria-pressed="false"', page)  # off until switched on
+        self.assertIn('<div id="live-panel" hidden>', page)
+        self.assertIn('id="live-switch" aria-pressed="true"', self.client.get("/watching?live=1").data.decode())
         self.assertEqual(self.client.post("/live/check", json={"url": "https://youtu.be/aaaaaaaaaaa"}).status_code, 400)
         self.client.post("/logout")
-        self.assertEqual(self.client.get("/live").status_code, 200)  # no account needed
+        self.assertEqual(self.client.get("/watching?live=1").status_code, 200)  # no account needed
 
 
 class AccessAndLanguageTests(CheckerTests):
@@ -1495,45 +1539,45 @@ class AccessAndLanguageTests(CheckerTests):
                 self.assertIn(expected, page, (path, expected))
         self.assertIn("your device's own voice", self.client.get("/").data.decode())
 
-    def test_switch_to_hindi_and_sesotho(self):
-        response = self.client.get("/language/hi?next=/about")
-        self.assertTrue(response.headers["Location"].endswith("/about"))
-        page = self.client.get("/about").data.decode()
-        self.assertIn('<html lang="hi">', page)
-        self.assertIn("Hindi: still being built", page)  # the pop-up, once
-        self.assertIn("send a pull request", page)
-        self.assertIn("github.com/MissPurrple/tripwire", page)
-        self.assertIn("यह हिंदी संस्करण अभी बन रहा है", page)  # the banner
-        again = self.client.get("/about").data.decode()
-        self.assertNotIn("Hindi: still being built", again)  # pop-up only right after switching
-        self.assertIn("यह हिंदी संस्करण अभी बन रहा है", again)  # banner stays
-        self.client.get("/language/st")
+    def test_only_english_until_a_translation_is_checked(self):
+        """The Hindi and Sesotho drafts aren't on the site until a native speaker has checked them."""
         page = self.client.get("/").data.decode()
-        self.assertIn("[L] KENA", page)
-        self.assertIn('<html lang="st">', page)
-        self.client.get("/language/en")
-        page = self.client.get("/").data.decode()
-        self.assertIn("[L] LOG IN", page)
-        self.assertNotIn("language-banner", page)
+        self.assertNotIn('class="languages"', page)
+        self.assertNotIn("access-languages", page)
+        self.assertEqual(self.client.get("/language/hi").status_code, 404)
+        self.assertEqual(self.client.get("/language/st").status_code, 404)
+
+    def checked_sesotho(self):
+        from tripwire import i18n
+        return mock.patch.dict(i18n.LANGUAGES, {"st": {
+            "_language": "Sesotho", "_english_name": "Sesotho", "Watching": "Ho shebella", "LOG IN": "KENA",
+            "language_notice": "Sesotho sena se ntse se ntlafatsoa."}})
+
+    def test_a_checked_translation_appears_and_works(self):
+        with self.checked_sesotho():
+            page = self.client.get("/").data.decode()
+            self.assertIn('lang="st"', page.split('class="languages"')[1])  # offered at the bottom of every page
+            response = self.client.get("/language/st?next=/about")
+            self.assertTrue(response.headers["Location"].endswith("/about"))
+            page = self.client.get("/").data.decode()
+            self.assertIn('<html lang="st">', page)
+            self.assertIn("[L] KENA", page)
+            self.assertIn("Sesotho sena se ntse se ntlafatsoa.", page)  # the language's own note
+            self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+            self.assertIn("Ho shebella", self.client.get("/watching").data.decode())
+            self.client.get("/language/en")
+            self.assertIn("[1] WATCHING", self.client.get("/").data.decode())
 
     def test_language_switch_is_safe(self):
-        self.assertEqual(self.client.get("/language/xx").status_code, 404)
-        self.assertTrue(self.client.get("/language/hi?next=//evil.example").headers["Location"].endswith("/"))
-
-    def test_translations_menus_after_login(self):
-        self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
-        self.client.get("/language/hi")
-        page = self.client.get("/watching").data.decode()
-        for word in ["निगरानी", "किताबें", "आँकड़े", "लॉग आउट"]:
-            self.assertIn(word, page)
+        with self.checked_sesotho():
+            self.assertEqual(self.client.get("/language/xx").status_code, 404)
+            self.assertTrue(self.client.get("/language/st?next=//evil.example").headers["Location"].endswith("/"))
 
     def test_every_translation_file_is_valid(self):
         from tripwire import i18n
-        english_keys = {"Watching", "Books", "language_notice"}
         for code, data in i18n.LANGUAGES.items():
             if code != "en":
-                self.assertTrue(english_keys <= set(data), code)
-                self.assertIn("Draft", data["_status"])
+                self.assertTrue({"_language", "_english_name", "language_notice"} <= set(data), code)
 
 
 KIWIX_CATALOG = """<?xml version="1.0" encoding="UTF-8"?>
@@ -1564,15 +1608,28 @@ def fake_kiwix_and_archive(kiwix_article=None, archive_text=None):
         if "/content/wikipedia_en_all_maxi_2024-01/" in url:
             if kiwix_article and url.endswith("/A/Warli"):
                 return fake_response(text=kiwix_article, url=url)
+            if kiwix_article and url.endswith("/A/Warli_people"):
+                return fake_response(text=kiwix_article.replace("Warli", "Warli people"), url=url)
             return fake_response(status=404)
+        if url.endswith("/suggest"):
+            return fake_response(data=[{"value": "Warli people", "label": "<b>Warli</b> people", "kind": "path", "path": "A/Warli_people"},
+                                       {"value": "warli ", "label": "containing 'warli'...", "kind": "pattern"}],
+                                 content_type="application/json")
+        if url == "https://web.archive.org/cdx/search/cdx":
+            return fake_response(data=[["original"], ["https://health.example.ls/clinic-hours"], ["https://health.example.ls/clinics"],
+                                       ["http://health.example.ls/clinic-hours/"]], content_type="application/json")
         if url == "https://archive.org/wayback/available":
+            if params["url"] == "https://health.example.ls/clinic-hours" and archive_text is None:
+                return fake_response(data={"archived_snapshots": {"closest": {
+                    "available": True, "timestamp": "20251020120000", "url": "https://web.archive.org/web/20251020120000/" + params["url"]}}},
+                    content_type="application/json")
             if archive_text is None:
                 return fake_response(data={"archived_snapshots": {}}, content_type="application/json")
             return fake_response(data={"archived_snapshots": {"closest": {
                 "available": True, "timestamp": "20251020120000", "url": "https://web.archive.org/web/20251020120000/" + params["url"]}}},
                 content_type="application/json")
         if url.startswith("https://web.archive.org/web/20251020120000id_/"):
-            return fake_response(text=archive_text)
+            return fake_response(text=archive_text or "<p>Clinic hours: every day.</p>")
         raise AssertionError("unexpected request: " + url)
     return get
 
@@ -1599,7 +1656,7 @@ class ShelfTests(CheckerTests):
     def test_pages_open_without_an_account(self):
         self.upload("gazette.txt", b"Notice 12.", title="Purple's gazette")
         self.client.post("/logout")
-        for path in ["/shelf", "/before"]:
+        for path in ["/shelf"]:
             page = self.client.get(path)
             self.assertEqual(page.status_code, 200, path)
             self.assertNotIn("Purple&#39;s gazette", page.data.decode())  # nobody else's things
@@ -1764,37 +1821,73 @@ class ShelfTests(CheckerTests):
                       .read("My-shelf/index.html").decode())
         self.assertEqual(self.client.get("/shelf/download.zim").status_code, 200)
 
-    def test_then_and_now_for_a_web_page(self):
+    def test_test_against_the_internet_archive(self):
         old = "<html><body><p>The clinic in Ha Mohale is open every day. Nurses: four.</p></body></html>"
         pages = {"https://health.example.ls/clinics": {"status": "ok", "text": "The clinic in Ha Mohale is open on Mondays. Nurses: one."}}
         with mock.patch.object(sources, "_get", fake_kiwix_and_archive(archive_text=old)), \
                 mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
-            page = self.client.post("/before", data={"url": "https://health.example.ls/clinics"}, follow_redirects=True).data.decode()
+            page = self.client.post("/before", data={"url": "https://health.example.ls/clinics", "source": "archive"},
+                                    follow_redirects=True).data.decode()
         self.assertIn("the Internet Archive&#39;s copy (October 2025)", page)
         self.assertIn("every day", page)
         self.assertIn("Mondays", page)
         self.assertIn("Keep today's copy on my shelf", page)
-        self.assertIn("health.example.ls/clinics", self.client.get("/before").data.decode())  # listed
 
-    def test_then_and_now_falls_back_to_the_internet_archive(self):
+    def test_internet_archive_offers_similar_saved_pages(self):
+        pages = {"https://health.example.ls/clinics": {"status": "ok", "text": "Clinic hours: on Mondays."}}
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive()), \
+                mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+            page = self.client.post("/before", data={"url": "https://health.example.ls/clinics", "source": "archive"}).data.decode()
+            self.assertIn("No exact copy in the Internet Archive", page)
+            self.assertIn('value="https://health.example.ls/clinic-hours"', page)  # a similar saved page
+            self.assertEqual(page.count('name="archive_url"'), 1)  # the same page twice (http, slash) is one choice
+            self.assertNotIn('name="archive_url" value="https://health.example.ls/clinics"', page)  # not the page itself
+            page = self.client.post("/before", data={"url": "https://health.example.ls/clinics", "source": "archive",
+                                                     "archive_url": "https://health.example.ls/clinic-hours"},
+                                    follow_redirects=True).data.decode()
+        self.assertIn("the Internet Archive&#39;s copy of https://health.example.ls/clinic-hours (October 2025)", page)
+        self.assertIn("every day", page)
+
+    def test_test_against_kiwix_offers_similar_articles(self):
+        kiwix_page = "<html><body><p>The Warli are an Adivasi people of Maharashtra.</p></body></html>"
+        self.edit_warli()
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive(kiwix_article=None)):
+            page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "kiwix"}).data.decode()
+        self.assertIn("No exact copy in Kiwix", page)
+        self.assertIn("has no article called “Warli”", page)
+        self.assertIn("Warli people", page)
+        self.assertIn('value="A/Warli_people"', page)
+        self.assertIn("Try the Internet Archive instead", page)
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive(kiwix_article=kiwix_page)):
+            page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "kiwix",
+                                                     "kiwix_path": "A/Warli_people"}, follow_redirects=True).data.decode()
+        self.assertIn("“Warli people” in Kiwix&#39;s offline English Wikipedia (January 2024)", page)
+
+    def test_kiwix_is_only_for_wikipedia(self):
+        pages = {"https://news.example.org/": {"status": "ok", "text": "Today's news."}}
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive()), \
+                mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+            page = self.client.post("/before", data={"url": "https://news.example.org/", "source": "kiwix"},
+                                    follow_redirects=True).data.decode()
+        self.assertIn("Kiwix keeps offline copies of whole collections", page)
+
+    def test_without_a_choice_kiwix_then_the_internet_archive(self):
         """A Wikipedia article Kiwix doesn't have (e.g. too new) uses the Internet Archive instead."""
         old = "<html><body><p>The Warli are an Adivasi people.</p></body></html>"
         with mock.patch.object(sources, "_get", fake_kiwix_and_archive(kiwix_article=None, archive_text=old)):
             page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli"}, follow_redirects=True).data.decode()
         self.assertIn("the Internet Archive&#39;s copy", page)
 
-    def test_then_and_now_with_no_older_copy(self):
-        pages = {"https://new.example.org/": {"status": "ok", "text": "Brand new page."}}
-        with mock.patch.object(sources, "_get", fake_kiwix_and_archive()), \
-                mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
-            page = self.client.post("/before", data={"url": "https://new.example.org/"}, follow_redirects=True).data.decode()
-        self.assertIn("couldn&#39;t find an older copy", page)
-
-    def test_then_and_now_button_on_watched_items(self):
+    def test_test_buttons_on_watched_items(self):
         self.tw.add_watch(self.theme, "Warli")
         page = self.client.get("/watching").data.decode()
-        self.assertIn("Then and now", page)
+        self.assertIn("Test against Kiwix", page)
+        self.assertIn("Test against Internet Archive", page)
         self.assertIn('value="https://en.wikipedia.org/wiki/Warli"', page)
+        old = "<html><body><p>The Warli are an Adivasi people.</p></body></html>"
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive(archive_text=old)):
+            self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "archive"})
+        self.assertIn("Last Internet Archive test", self.client.get("/watching").data.decode())  # the result, next to it
 
     def test_kiwix_catalogue(self):
         from tripwire import before
@@ -1808,6 +1901,36 @@ class ShelfTests(CheckerTests):
         # Older copies put the kind in the name, with no separate <flavour>.
         old_style = KIWIX_CATALOG.replace("<flavour>maxi</flavour>", "").replace("<flavour>mini</flavour>", "")
         self.assertEqual([c["flavour"] for c in before.parse_catalog(old_style.encode())], ["mini", "maxi", "maxi"])
+
+
+class BookLinkTests(CheckerTests):
+    """Watching the links a book came from."""
+
+    def test_watch_a_book_at_a_link(self):
+        """From Books & videos, the links a book came from can be watched (EPUB, plain text or a web page)."""
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        client = webapp.app.test_client()
+        client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+        responses = {"https://books.example.org/old.txt": mock.Mock(status_code=200, headers={"Content-Type": "text/plain; charset=utf-8"},
+                                                                    content=OLD_BOOK.encode(), text=OLD_BOOK, url="https://books.example.org/old.txt"),
+                     "https://books.example.org/new.txt": mock.Mock(status_code=200, headers={"Content-Type": "text/plain"},
+                                                                    content=NEW_BOOK.encode(), text=NEW_BOOK, url="https://books.example.org/new.txt")}
+        with mock.patch.object(sources, "_get", lambda url, **kw: responses[url]), \
+                mock.patch("tripwire.books.fetch_book", side_effect=lambda url: (url.rsplit("/", 1)[1], responses[url].content)):
+            page = client.post("/books", data={"title": "A book", "link_a": "https://books.example.org/old.txt",
+                                               "link_b": "https://books.example.org/new.txt", "watch_links": "on"},
+                               follow_redirects=True).data.decode()
+        self.assertIn("Watching https://books.example.org/old.txt too", page)
+        watched = self.tw.conn.execute("SELECT target, baseline_text FROM watches WHERE kind = 'web' ORDER BY id").fetchall()
+        self.assertEqual([w["target"] for w in watched], ["https://books.example.org/old.txt", "https://books.example.org/new.txt"])
+        self.assertIn(OLD_BOOK.split()[0], watched[0]["baseline_text"])
+
+    def test_an_epub_at_a_link_is_read_as_a_book(self):
+        epub = make_epub([OLD_BOOK])
+        response = mock.Mock(status_code=200, headers={"Content-Type": "application/epub+zip"}, content=epub, url="https://b.example.org/x.epub")
+        with mock.patch.object(sources, "_get", return_value=response):
+            self.assertIn("Augustus Gloop was enormously fat", sources.fetch_page("https://b.example.org/x.epub")["text"])
 
 
 class SetupTests(unittest.TestCase):

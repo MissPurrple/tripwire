@@ -1,0 +1,11 @@
+{# Shown when there's nothing to look at yet: real examples, one click away. #}
+<section class="theme try-examples">
+  <h2>New here? Try it with real examples</h2>
+  <p>One click fills this with real things to explore: Wikipedia articles about Indigenous peoples and languages,
+     with their real edits from the last 90 days, a famous video, and Mary Shelley's <em>Frankenstein</em>,
+     the 1818 edition against her 1831 rewrite.</p>
+  <form method="post" action="{{ url_for('demo_data') }}">
+    <button>Add the examples</button>
+  </form>
+  <p class="meta">This takes up to a minute, because Tripwire fetches everything live. Only your own {{ 'account' if g.user and not is_guest else 'visit' }} is changed.</p>
+</section>

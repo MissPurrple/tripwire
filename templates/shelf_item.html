@@ -17,16 +17,22 @@
       <a class="button" href="{{ url_for('shelf_file', item_id=item.id) }}" target="_blank" rel="noopener">Open the original file</a>
       <a class="link-button" href="{{ url_for('shelf_file', item_id=item.id, download=1) }}">Download it</a>
     {% endif %}
-    {% if item.source_url and not item.before_check_id %}
+    {% if item.source_url %}
+      {% if 'wikipedia.org/wiki/' in item.source_url %}
       <form method="post" action="{{ url_for('before_page') }}"><input type="hidden" name="url" value="{{ item.source_url }}">
-        <button class="secondary-button">Compare with an older copy</button></form>
+        <input type="hidden" name="source" value="kiwix"><input type="hidden" name="next" value="{{ request.path }}">
+        <button class="secondary-button">Test against Kiwix</button></form>
+      {% endif %}
+      <form method="post" action="{{ url_for('before_page') }}"><input type="hidden" name="url" value="{{ item.source_url }}">
+        <input type="hidden" name="source" value="archive"><input type="hidden" name="next" value="{{ request.path }}">
+        <button class="secondary-button">Test against Internet Archive</button></form>
     {% endif %}
   </div>
 </section>
 
 {% if check %}
 <section class="theme">
-  <h2>Then and now</h2>
+  <h2>Compared with an older copy</h2>
   <p>Compared with {{ check.source_name }}{% if check.before_date %}, from {{ check.before_date }}{% endif %}:
      <strong>{{ check.summary }}</strong></p>
   <p><a href="{{ url_for('before_result', check_id=check.id) }}">See the most interesting changes</a></p>

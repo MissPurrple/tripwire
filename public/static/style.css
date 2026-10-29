@@ -640,15 +640,32 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
 .intro-hint { margin: 12px 0 0; font-family: var(--font-mono); font-size: .85rem; color: var(--intro-green); opacity: 0; transition: opacity .6s .3s; }
 .tw-intro.landed .trip-button { opacity: 1; transform: none; pointer-events: auto; }
 .tw-intro.landed .intro-hint { opacity: .8; }
-.intro-skip {
-  position: absolute; top: 14px; right: 16px; background: transparent; color: var(--intro-green); border: 0; box-shadow: none;
-  font-family: var(--font-mono); font-weight: 400; font-size: .85rem; opacity: .75; padding: 6px 8px;
-}
-.intro-skip:hover, .intro-skip:focus-visible { opacity: 1; text-decoration: underline; }
-.tw-intro.tripped .intro-skip { display: none; }
-@media (prefers-reduced-motion: reduce) { .tw-intro, .trip-button, .intro-hint, .intro-stage { transition: none; } }
+.tw-intro.tripped @media (prefers-reduced-motion: reduce) { .tw-intro, .trip-button, .intro-hint, .intro-stage { transition: none; } }
 
 /* Privacy: the honest warning, and deleting an account */
 .privacy-note { font-size: .9rem; padding: 10px 14px; border-left: 4px solid var(--accent); background: var(--bg); margin: 12px 0 0; }
 .danger-zone { border-color: var(--removal); }
 .danger-button { background: var(--removal); color: #fff; }
+
+.footer-stats { margin: 6px 0 0; }
+
+.footer-stats { margin: 6px 0 0; }
+
+/* Books & videos side by side; one above the other on narrow screens. */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.split > .theme { margin: 0; min-width: 0; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+/* Live watch on/off switch */
+.live-switch { display: inline-flex; align-items: center; gap: 8px; background: none; color: var(--text); box-shadow: none; border: 0; padding: 4px; }
+.live-switch .switch-track { width: 44px; height: 24px; border: 2px solid var(--edge); border-radius: 999px; background: var(--bg); position: relative; }
+.live-switch .switch-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: left .15s; }
+.live-switch[aria-pressed="true"] .switch-track { background: var(--accent); }
+.live-switch[aria-pressed="true"] .switch-knob { left: 22px; background: var(--card); }
+.live-switch .switch-label { font-family: var(--font-mono); font-weight: 600; }
+.last-tests { margin: 4px 0 0; flex-basis: 100%; }
+.email-box { margin: 10px 0; } .email-box > summary { cursor: pointer; font-weight: 600; }
+.list-heading { margin-top: 24px; }
+
+.similar { list-style: none; padding: 0; } .similar li { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.similar form { align-items: center; justify-content: space-between; flex-wrap: wrap; } .similar-label { overflow-wrap: anywhere; }

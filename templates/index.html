@@ -7,21 +7,43 @@
     <li>
       <div>
         <span class="kind">{{ 'Wikipedia' if w.kind == 'wikipedia' else 'Web page' }}</span>
-        <a href="{{ w.target if w.kind == 'web' else 'https://' ~ (w.lang or 'en') ~ '.wikipedia.org/wiki/' ~ w.target|replace(' ', '_') }}" target="_blank" rel="noopener">{{ w.label }}</a>
+        <a href="{{ watch_link(w) }}" target="_blank" rel="noopener">{{ w.label }}</a>
         <span class="status">{{ w.last_status or '' }}{% if w.last_checked_at %} · checked {{ w.last_checked_at[:10] }}{% endif %}</span>
       </div>
       <div class="row-actions">
         <form method="post" action="{{ url_for('check_watch', watch_id=w.id) }}"><button class="link">Check</button></form>
-        <form method="post" action="{{ url_for('before_page') }}" title="Compare with {{ "Kiwix's offline copy" if w.kind == 'wikipedia' else "the Internet Archive's copy from a year ago" }}">
-          <input type="hidden" name="url" value="{{ w.target if w.kind == 'web' else 'https://' ~ (w.lang or 'en') ~ '.wikipedia.org/wiki/' ~ w.target|replace(' ', '_') }}">
-          <button class="link">Then and now</button></form>
+        {{ test_buttons(w) }}
         {% if w.last_status != 'Removed' %}<a class="link-button" href="{{ url_for('public_copy', kind='watch', item_id=w.id) }}">Keep a public copy…</a>{% endif %}
         <form method="post" action="{{ url_for('remove_watch', watch_id=w.id) }}"
-              onsubmit="return confirm('Stop watching this? Its changes will be deleted too. Public copies you made stay in your Archive.')"><button class="link danger">Stop watching</button></form>
+              onsubmit="return confirm('Stop watching this? Its changes will be deleted too. Public copies you made stay on My shelf.')"><button class="link danger">Stop watching</button></form>
       </div>
+      {{ last_tests(w) }}
     </li>
     {% endfor %}
   </ul>
+  {% endif %}
+{% endmacro %}
+
+{# Compare what's being watched with an older copy kept somewhere nobody can quietly edit it. #}
+{% macro test_buttons(w) %}
+  {% if w.kind == 'wikipedia' %}
+  <form method="post" action="{{ url_for('before_page') }}" title="Compare today's article with Kiwix's dated offline copy of Wikipedia">
+    <input type="hidden" name="url" value="{{ watch_link(w) }}"><input type="hidden" name="source" value="kiwix">
+    <input type="hidden" name="next" value="{{ url_for('index') }}"><button class="link">Test against Kiwix</button></form>
+  {% endif %}
+  <form method="post" action="{{ url_for('before_page') }}" title="Compare today's page with the Internet Archive's copy from about a year ago">
+    <input type="hidden" name="url" value="{{ watch_link(w) }}"><input type="hidden" name="source" value="archive">
+    <input type="hidden" name="next" value="{{ url_for('index') }}"><button class="link">Test against Internet Archive</button></form>
+{% endmacro %}
+
+{% macro last_tests(w) %}
+  {% set found = [] %}
+  {% for source, name in [('kiwix', 'Kiwix'), ('archive', 'Internet Archive')] %}
+    {% set t = tests.get((watch_link(w), source)) %}
+    {% if t %}{% set _ = found.append((name, t)) %}{% endif %}
+  {% endfor %}
+  {% if found %}
+  <p class="meta last-tests">{% for name, t in found %}<a href="{{ url_for('before_result', check_id=t.id) }}">Last {{ name }} test ({{ t.created_at[:10] }})</a>: {{ t.summary }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
   {% endif %}
 {% endmacro %}
 
@@ -47,16 +69,22 @@
 {% endmacro %}
 
 {% block content %}
+{% include "_live.html" %}
+
 <section class="intro">
   <h1>What you're watching</h1>
   <p>{% if g.user and not is_guest %}Tripwire checks these once a day by itself.{% else %}Press <strong>Check</strong> to look for changes now.
      With an account, Tripwire also checks them once a day by itself.{% endif %} When something changes, it saves the before and after
      in <a href="{{ url_for('change_list') }}">Changes</a>{% if new_count %} (<strong>{{ new_count }}</strong> waiting for you to look at){% endif %}.
-     No pings. Just a <a href="{{ url_for('summary') }}">summary</a>: daily, weekly or monthly.</p>
-  {% if themes or (single and watches[single.id]) %}
+     No pings. Just a <a href="{{ url_for('change_list', _anchor='summary') }}">summary</a>: daily, weekly or monthly.</p>
+  {% if themes or (single and watches[single.id]) or videos %}
     <form method="post" action="{{ url_for('check_all') }}"><button>Check everything now</button></form>
   {% endif %}
 </section>
+
+{% if not themes and not (single and watches[single.id]) and not videos %}
+{% include "_try_examples.html" %}
+{% endif %}
 
 <section class="theme single">
   <div class="theme-head"><h2>{{ single_name }}</h2></div>
@@ -70,7 +98,7 @@
   <div class="theme-head">
     <h2>{{ t.name }}</h2>
     <form method="post" action="{{ url_for('remove_theme', theme_id=t.id) }}"
-          onsubmit="return confirm('Remove the theme “{{ t.name }}” and everything in it, including its changes? Public copies you made stay in your Archive.')">
+          onsubmit="return confirm('Remove the theme “{{ t.name }}” and everything in it, including its changes? Public copies you made stay on My shelf.')">
       <button class="link danger">Remove theme</button>
     </form>
   </div>
@@ -78,6 +106,30 @@
   {{ add_form(url_for('add_watch', theme_id=t.id), "A Wikipedia article name, or paste any link") }}
 </section>
 {% endfor %}
+
+{% if videos %}
+<section class="theme" id="videos">
+  <div class="theme-head"><h2>Videos</h2></div>
+  <p class="meta">Checked once a day for removals, private videos, age restrictions and new titles.
+     <a href="{{ url_for('book_list', _anchor='videos') }}">Add or check a video</a></p>
+  <ul class="watches">
+    {% for v in videos %}
+    {% set st = video_state(v) %}
+    <li>
+      <div>
+        <span class="kind">{{ st.platform }}</span>
+        <a href="{{ v.target }}" target="_blank" rel="noopener">{{ v.label }}</a>
+        <span class="status">{% if not st.available %}Unavailable{% if st.reason %}: {{ st.reason }}{% endif %}{% elif st.restricted %}Restricted{% else %}Available{% endif %}{% if st.unlisted %} · unlisted{% endif %}{% if v.last_checked_at %} · checked {{ v.last_checked_at[:10] }}{% endif %}</span>
+      </div>
+      <div class="row-actions">
+        <form method="post" action="{{ url_for('check_watch', watch_id=v.id) }}"><button class="link">Check</button></form>
+        <form method="post" action="{{ url_for('remove_watch', watch_id=v.id) }}" onsubmit="return confirm('Stop watching this video? Its changes will be deleted too.')"><button class="link danger">Stop watching</button></form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 {% if themes|length < max_themes %}
 <section class="theme new-theme">

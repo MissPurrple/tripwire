@@ -5,7 +5,7 @@
 Pick up to three themes (starting with *Indigenous communities*). Add the Wikipedia articles and web pages that matter to each one. Tripwire checks them for changes. When something changes, it doesn't ping you. Instead it:
 
 - saves the **before** and **after** text into your own archive,
-- asks the **Internet Archive** to keep a public copy too,
+- offers to keep a public copy with the **Internet Archive** too (only if you say yes, twice),
 - tells you how big the change was (punctuation only, a tiny spelling fix, an edit, a major change, a large removal, or the page disappearing),
 - **flags names whose spelling changed**, because that can be a sign of a language spreading or fading.
 
@@ -80,10 +80,10 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/stats.py`, `tripwire/charts.py` | The Stats page's numbers (Cloudflare Radar, Open Library) and the charts |
 | `tripwire/mailer.py`, `templates/emails/` | The summary email (daily, weekly or monthly) |
 | `tripwire/humancheck.py` | The sign-up page's own "are you human?" check |
-| `tripwire/live.py`, `templates/live.html` | Live watch: checks a page every few minutes while it's open |
+| `tripwire/live.py`, `templates/_live.html` | Live watch (top of the Watching page): checks a page every few minutes while it's open |
 | `tripwire/shelf.py`, `templates/export/` | My shelf, and "Take my shelf with me": the ZIP and Kiwix (ZIM) downloads |
-| `tripwire/before.py` | Then and now: compares a page with Kiwix's offline Wikipedia or the Internet Archive |
-| `tripwire/i18n.py`, `translations/` | Languages (English, plus draft Hindi and Sesotho) |
+| `tripwire/before.py` | The “Test against Kiwix” and “Test against Internet Archive” buttons: compare a page with an older copy |
+| `tripwire/i18n.py`, `translations/` | Languages: English for now; checked translations go in `translations/` |
 | `templates/_intro.html`, `public/static/intro.js` | The opening: binary rain, the purple rabbit, "Trip the wires" |
 | `public/static/audio/` | Purple's welcome recording (`welcome.mp3`), played on "Trip the wires" |
 | `public/static/scan-reader.js`, `public/static/ocr/` | Reads scanned PDFs in the visitor's own browser (Tesseract and pdf.js, served by Tripwire itself) |
@@ -135,15 +135,15 @@ New accounts get a "confirm your email" link first: Tripwire never emails an add
 
 Summaries go out during the daily run: daily ones every day, weekly ones on Mondays, monthly ones on the 1st. Each person chooses on the Summary page (daily, weekly, monthly or off), which also has an **Email it to me now** button. Visitors without an account don't get emails. Optional: `SITE_URL` (e.g. `https://tripwire.vercel.app`) sets the address used in email links.
 
-**Languages:** English, plus draft Hindi and Sesotho, chosen at the bottom of every page or in the Access panel. Translations live in `translations/`; see `CONTRIBUTING.md` to help.
+**Languages:** English for now. A language is added once a native speaker has checked it: drafts of Hindi and Sesotho wait on the `notes` branch. See `CONTRIBUTING.md` to help.
 
-**Feedback inbox (optional):** add `ADMIN_EMAILS` with your own account's email. Then **More → Feedback inbox** shows what testers wrote in the About page's feedback box. Nobody else can see it.
+**Feedback inbox (optional):** add `ADMIN_EMAILS` with your own account's email. Then **Account → Feedback inbox** shows what testers wrote in the About page's feedback box. Nobody else can see it.
 
 **Visitors without an account (optional setting):** anyone can try Tripwire without signing up. To stop bots flooding the database, at most 300 new guest visits a hour are allowed across the whole site (nobody is tracked to do this); after that, visitors are asked to make an account. Change the number with a `GUESTS_PER_HOUR` setting. Guests' shelves hold 10 MB, and their things are deleted 3 days after their visit.
 
 **Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
 
-**My shelf and Kiwix:** no setup needed. My shelf keeps people's own copies (up to 60 MB each, in the database). "Take my shelf with me" downloads it as a ZIP (open `index.html` in any browser) or a ZIM file for **[Kiwix](https://kiwix.org/en/)**, the free app that reads whole libraries offline. Then and now reads older Wikipedia articles from library.kiwix.org and older web pages from the Internet Archive.
+**My shelf and Kiwix:** no setup needed. My shelf keeps people's own copies (up to 60 MB each, in the database). "Take my shelf with me" downloads it as a ZIP (open `index.html` in any browser) or a ZIM file for **[Kiwix](https://kiwix.org/en/)**, the free app that reads whole libraries offline. The “Test against Kiwix” and “Test against Internet Archive” buttons (next to everything you watch) read older Wikipedia articles from library.kiwix.org and older web pages from the Internet Archive, and offer similar ones when there's no exact copy.
 
 ## Next up
 - **"Watch this with Tripwire" browser extension:** one click to add the page you're on.

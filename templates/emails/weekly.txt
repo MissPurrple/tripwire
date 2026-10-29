@@ -18,7 +18,7 @@ IMPORTANT CHANGES WITHOUT A PUBLIC COPY YET
 If any of these matter to you, consider keeping a public, permanent copy with the Internet Archive.
 {% for e in s.offer_copy %}- {{ e.label }}: {{ site }}{{ url_for('entry', entry_id=e.id) }}
 {% endfor %}{% endif %}
-See everything: {{ site }}{{ url_for('summary') }}
+See everything: {{ site }}{{ url_for('change_list', _anchor='summary') }}
 
 You get this {{ when }} because summary emails are switched on for {{ email }}.
-To switch them off, go to {{ site }}{{ url_for('summary') }}
+To switch them off, go to {{ site }}{{ url_for('change_list', _anchor='summary') }}

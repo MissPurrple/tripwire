@@ -209,7 +209,8 @@ def helpers():
     return {"is_guest": g.get("guest", False),
             "CATEGORIES": changes.CATEGORIES, "details": db.entry_details, "donut": charts.donut,
             "CHANGE_KINDS": changes.CHANGE_KINDS, "kind_counts": changes.kind_counts,
-            "KIND_SERIES": {key: n for n, key in enumerate(changes.CHANGE_KINDS, start=1)}}
+            "KIND_SERIES": {key: n for n, key in enumerate(changes.CHANGE_KINDS, start=1)},
+            "watch_link": watch_link}
 
 
 def back_to(default="change_list"):
@@ -381,7 +382,18 @@ def index():
                              (uid(),)).fetchone()["n"]
     return render_template("index.html", themes=themes, watches=watches, single=single,
                            single_name=SINGLE_LINKS, new_count=new_count,
-                           max_themes=MAX_THEMES, lookback=LOOKBACK_CHOICES)
+                           max_themes=MAX_THEMES, lookback=LOOKBACK_CHOICES,
+                           videos=tw().videos(uid()), video_state=_video_state,
+                           tests=before.latest_by_url(conn, uid()), live_on="live" in request.args,
+                           min_seconds=live.MIN_SECONDS_BETWEEN)
+
+
+def watch_link(watch):
+    """The address of something being watched, as a link."""
+    if watch["kind"] == "wikipedia":
+        from urllib.parse import quote
+        return f"https://{watch['lang'] or 'en'}.wikipedia.org/wiki/{quote(watch['target'].replace(' ', '_'))}"
+    return watch["target"]
 
 
 @app.post("/themes")
@@ -458,7 +470,22 @@ def check_all():
 
 @app.get("/videos")
 def videos():
-    return render_template("videos.html", videos=tw().videos(uid()), state=_video_state)
+    """Videos are on the Books & videos page now."""
+    return redirect(url_for("book_list", _anchor="videos"))
+
+
+@app.post("/videos/check")
+def check_video():
+    """Look at a video once, right now, without watching it."""
+    url = request.form.get("target", "").strip()
+    try:
+        if not sources.video_platform(url):
+            raise ValueError("Paste a YouTube or TikTok video link.")
+        result = sources.video_status(url)
+    except (ValueError, sources.SourceError) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("book_list", _anchor="videos"))
+    return _books_page(video_result=result, video_url=url)
 
 
 def _video_state(watch):
@@ -471,17 +498,19 @@ def _video_state(watch):
 def add_video():
     try:
         tw().add_video(uid(), request.form.get("target", ""))
-        flash("Now watching that video. Find it on the Videos page.")
+        flash("Now watching that video. It's on this page, under Videos.")
     except (ValueError, sources.SourceError) as exc:
         flash(str(exc), "error")
-    return redirect(url_for("videos"))
+        return redirect(url_for("book_list", _anchor="videos"))
+    return redirect(url_for("index", _anchor="videos"))
 
 
 # -- live watching: one page, every few minutes, while the page is open -------
 
 @app.get("/live")
 def live_watch():
-    return render_template("live.html", min_seconds=live.MIN_SECONDS_BETWEEN)
+    """Live watch is at the top of the Watching page now."""
+    return redirect(url_for("index", live=1, _anchor="live"))
 
 
 @app.post("/live/check")
@@ -515,7 +544,10 @@ def change_list():
         query += " AND e.category = ?"
         params.append(category)
     entries = tw().conn.execute(query + " ORDER BY e.detected_at DESC, e.id DESC", params).fetchall()
-    return render_template("changes.html", entries=entries, category=category)
+    every = Tripwire.summary_every(g.user) if g.user and not g.guest else "off"
+    return render_template("changes.html", entries=entries, category=category,
+                           s=tw().weekly_summary(uid(), _summary_period(g.user)),
+                           email_ready=mailer.configured(), every=every, when=SUMMARY_WHEN)
 
 
 @app.get("/entries/<int:entry_id>")
@@ -593,7 +625,7 @@ def public_copy(kind, item_id):
                 flash(f"Couldn't save “{option['label']}”: {exc}", "error")
         if saved:
             flash(f"Saved {saved} public cop{'y' if saved == 1 else 'ies'} with the Internet Archive. "
-                  "You'll find them in the Archive tab.")
+                  "You'll find them on My shelf.")
         return redirect(back)
 
     return render_template("copy_confirm.html", item=item, kind=kind, options=options, back=back)
@@ -601,8 +633,8 @@ def public_copy(kind, item_id):
 
 @app.get("/archive")
 def archive():
-    """Every public Internet Archive copy this person chose to make."""
-    return render_template("archive.html", copies=tw().copies(uid()))
+    """Public Internet Archive copies are listed on My shelf now."""
+    return redirect(url_for("shelf_page", _anchor="public-copies"))
 
 
 # -- books: compare two editions, only when asked ---------------------------
@@ -623,20 +655,38 @@ def _edition(which):
 @app.route("/books", methods=["GET", "POST"])
 @saves_things
 def book_list():
+    """Books & videos: compare two editions of a book, and check a video."""
     if request.method == "POST":
+        edition_a, edition_b = _edition("a"), _edition("b")
         try:
-            job = tw().start_book_job(uid(), request.form.get("title", ""), _edition("a"), _edition("b"))
+            job = tw().start_book_job(uid(), request.form.get("title", ""), edition_a, edition_b)
         except books.BookError as exc:
             flash(str(exc), "error")
         else:
+            if request.form.get("watch_links"):
+                _watch_book_links([e["link"] for e in (edition_a, edition_b) if e.get("link")])
             return redirect(url_for("book_job", job_id=job))
+    return _books_page()
+
+
+def _watch_book_links(links):
+    """Keep watching the links a book came from (uploaded files can't be watched)."""
+    for link in links:
+        try:
+            tw().add_watch(tw().single_links(uid()), link, kind="web")
+            flash(f"Watching {link} too: it's on your Watching page.")
+        except (ValueError, sources.SourceError) as exc:
+            flash(f"Couldn't watch {link}: {exc}", "error")
+
+
+def _books_page(**extra):
     tw().delete_book_files(older_than_days=BOOK_FILE_DAYS)
-    # Arriving from elsewhere (not from within Books): show the "entering" screen first.
+    # Arriving from elsewhere (not from within Books & videos): show the "entering" screen first.
     came_from = urlparse(request.referrer or "")
     intro = request.method == "GET" and not (came_from.netloc == request.host and came_from.path.startswith("/books"))
     return render_template("books.html", comparisons=tw().book_comparisons(uid()),
                            jobs=tw().book_jobs_in_progress(uid()), upload_limit_mb=UPLOAD_LIMIT_MB,
-                           intro=intro)
+                           intro=intro, **extra)
 
 
 @app.get("/books/jobs/<int:job_id>")
@@ -736,7 +786,8 @@ def shelf_page():
     search = request.args.get("q", "")
     return render_template("shelf.html", items=_shelf().items(uid(), search), search=search,
                            used_mb=_shelf().used_bytes(uid()) / 1048576,
-                           limit_mb=shelf.MAX_SHELF_BYTES // 1048576, upload_limit_mb=UPLOAD_LIMIT_MB)
+                           limit_mb=shelf.MAX_SHELF_BYTES // 1048576, upload_limit_mb=UPLOAD_LIMIT_MB,
+                           copies=tw().copies(uid()))
 
 
 @app.post("/shelf/file")
@@ -892,15 +943,22 @@ def shelf_download(kind):
 @app.route("/before", methods=["GET", "POST"])
 @saves_things
 def before_page():
-    if request.method == "POST":
-        try:
-            check_id = before.save(tw().conn, uid(), before.compare_with_before(request.form.get("url", "")))
-        except sources.SourceError as exc:
-            flash(str(exc), "error")
-        else:
-            return redirect(url_for("before_result", check_id=check_id))
-    return render_template("before.html", checks=before.checks(tw().conn, uid()),
-                           url=request.values.get("url", ""))
+    """The "Test against Kiwix" and "Test against Internet Archive" buttons."""
+    if request.method == "GET":
+        return redirect(url_for("index"))
+    url, source = request.form.get("url", ""), request.form.get("source", "auto")
+    back = safe_next(request.form.get("next", ""), url_for("index"))
+    try:
+        result = before.compare_with_before(url, source if source in ("kiwix", "archive") else "auto",
+                                            kiwix_path=request.form.get("kiwix_path") or None,
+                                            archive_url=request.form.get("archive_url") or None)
+    except before.NotFound as exc:
+        return render_template("before_similar.html", url=url, problem=str(exc), source=exc.source,
+                               suggestions=exc.suggestions, back=back)
+    except sources.SourceError as exc:
+        flash(str(exc), "error")
+        return redirect(back)
+    return redirect(url_for("before_result", check_id=before.save(tw().conn, uid(), result)))
 
 
 @app.get("/before/<int:check_id>")
@@ -934,7 +992,7 @@ def before_delete(check_id):
     if not before.own(tw().conn, uid(), check_id):
         abort(404)
     tw().conn.execute("DELETE FROM before_checks WHERE id = ?", (check_id,))
-    return redirect(url_for("before_page"))
+    return redirect(url_for("index"))
 
 # What people see when they choose how often the summary is emailed.
 SUMMARY_WHEN = {"daily": "every day", "weekly": "every Monday", "monthly": "on the 1st of each month"}
@@ -947,9 +1005,8 @@ def _summary_period(user):
 
 @app.get("/summary")
 def summary():
-    every = Tripwire.summary_every(g.user) if g.user and not g.guest else "off"
-    return render_template("summary.html", s=tw().weekly_summary(uid(), _summary_period(g.user)),
-                           email_ready=mailer.configured(), every=every, when=SUMMARY_WHEN)
+    """The summary is at the top of the Changes page now (emails still link here)."""
+    return redirect(url_for("change_list", _anchor="summary"))
 
 
 def site_url():
@@ -1007,7 +1064,7 @@ def send_confirmation(user, quietly=False):
 @account_required("get summaries by email")
 def send_confirmation_again():
     send_confirmation(g.user)
-    return redirect(url_for("summary"))
+    return redirect(url_for("change_list", _anchor="summary"))
 
 
 @app.route("/confirm/<token>", methods=["GET", "POST"])
@@ -1021,7 +1078,7 @@ def confirm_email(token):
     if request.method == "POST":
         if tw().confirm_email(data.get("id"), data.get("email")):
             flash("Thank you: your email address is confirmed. Summary emails can now reach you.")
-            return redirect(url_for("summary") if g.user and g.user["id"] == data.get("id") else url_for("home"))
+            return redirect(url_for("change_list", _anchor="summary") if g.user and g.user["id"] == data.get("id") else url_for("home"))
         return render_template("confirm.html", state="bad", days=CONFIRM_DAYS)
     return render_template("confirm.html", state="ask", email=data.get("email", ""), token=token)
 
@@ -1036,7 +1093,7 @@ def summary_email_setting():
         flash(str(exc), "error")
     else:
         flash(f"Summary emails are on: one {SUMMARY_WHEN[every]}." if every != "off" else "Summary emails are off.")
-    return redirect(url_for("summary"))
+    return redirect(url_for("change_list", _anchor="summary"))
 
 
 @app.post("/summary/send")
@@ -1045,10 +1102,10 @@ def summary_send_now():
     """Send the summary straight away (handy for a demo). At most once every 2 minutes."""
     if not g.user["email_confirmed_at"]:
         flash("Confirm your email address first (the button is on this page).", "error")
-        return redirect(url_for("summary"))
+        return redirect(url_for("change_list", _anchor="summary"))
     if time.time() - session.get("summary_sent_now", 0) < 120:
         flash("One just went out. Give it a couple of minutes before sending another.", "error")
-        return redirect(url_for("summary"))
+        return redirect(url_for("change_list", _anchor="summary"))
     try:
         send_weekly_summary(g.user)
     except mailer.MailError as exc:
@@ -1056,7 +1113,7 @@ def summary_send_now():
     else:
         session["summary_sent_now"] = time.time()
         flash(f"Sent to {g.user['email']}. It can take a minute to arrive (check spam the first time).")
-    return redirect(url_for("summary"))
+    return redirect(url_for("change_list", _anchor="summary"))
 
 
 # -- about, feedback, and demo data ------------------------------------------

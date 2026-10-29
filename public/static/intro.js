@@ -9,7 +9,6 @@
                 document.documentElement.classList.contains("a11y-calm");   // calm mode: nothing moves
   var canvas = intro.querySelector(".rain"), ctx = canvas.getContext("2d");
   var bunny = intro.querySelector(".bunny"), trip = document.getElementById("trip");
-  var skip = document.getElementById("intro-skip");
   var ending = false;
 
   function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
@@ -173,18 +172,9 @@
     bootComputer();
     finish();
   }
-  function skipIntro() {
-    ending = true;
-    bootComputer();
-    finish();
-  }
-
+  // No skip, on purpose: the opening is meant to be experienced in full (Purple's choice).
+  // The way in is the "Trip the wires" button, which works by mouse, touch and keyboard.
   trip.addEventListener("click", tripTheWires);
-  skip.addEventListener("click", skipIntro);
-  document.addEventListener("keydown", function (event) {
-    if (!document.body.contains(intro)) return;
-    if (event.key === "Escape") skipIntro();
-  });
   addEventListener("resize", function () { if (!ending) setUp(); });
 
   function begin() {

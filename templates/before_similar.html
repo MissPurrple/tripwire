@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}No exact copy · Tripwire{% endblock %}
+{% block content %}
+<p class="meta"><a href="{{ back }}">← Back</a></p>
+<section class="intro">
+  <h1>No exact copy in {{ 'Kiwix' if source == 'kiwix' else 'the Internet Archive' }}</h1>
+  <p>{{ problem }}</p>
+  <p class="meta">Looking for: <a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a></p>
+</section>
+
+<section class="theme">
+  {% if suggestions %}
+  <h2>Similar {{ 'articles' if source == 'kiwix' else 'saved pages' }}</h2>
+  <p>{% if source == 'kiwix' %}These have similar names in Kiwix's offline copy. The article may have been called something else then.
+     {% else %}The Internet Archive saved these pages from the same place on the same website.{% endif %}
+     Choose one to compare it with the page as it is today.</p>
+  <ul class="similar">
+    {% for s in suggestions %}
+    <li>
+      <form method="post" action="{{ url_for('before_page') }}" class="inline">
+        <input type="hidden" name="url" value="{{ url }}"><input type="hidden" name="source" value="{{ source }}">
+        <input type="hidden" name="next" value="{{ back }}">
+        {% if source == 'kiwix' %}<input type="hidden" name="kiwix_path" value="{{ s.kiwix_path }}">
+        {% else %}<input type="hidden" name="archive_url" value="{{ s.archive_url }}">{% endif %}
+        <span class="similar-label">{{ s.label }}</span>
+        <button class="secondary-button">Compare with this</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Nothing similar was found either.</p>
+  {% endif %}
+  {% if source == 'kiwix' %}
+  <form method="post" action="{{ url_for('before_page') }}"><input type="hidden" name="url" value="{{ url }}">
+    <input type="hidden" name="source" value="archive"><input type="hidden" name="next" value="{{ back }}">
+    <button class="link">Try the Internet Archive instead</button></form>
+  {% endif %}
+</section>
+{% endblock %}

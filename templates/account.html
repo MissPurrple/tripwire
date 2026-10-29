@@ -14,7 +14,7 @@
     <li>{{ counts.watching }} watched item{{ 's' if counts.watching != 1 }} (pages and videos), with {{ counts.changes }} saved change{{ 's' if counts.changes != 1 }}</li>
     <li>{{ counts.shelf }} item{{ 's' if counts.shelf != 1 }} on your shelf</li>
     <li>{{ counts.books }} book comparison{{ 's' if counts.books != 1 }}</li>
-    <li>Summary emails: {{ every }} (<a href="{{ url_for('summary') }}">change</a>)</li>
+    <li>Summary emails: {{ every }} (<a href="{{ url_for('change_list', _anchor='summary') }}">change</a>)</li>
   </ul>
   <p class="meta">No tracking cookies, no advertising, no selling data. Tripwire doesn't record your IP address with your account.</p>
   {% include "_privacy_note.html" %}

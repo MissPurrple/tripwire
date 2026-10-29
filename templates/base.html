@@ -18,23 +18,22 @@
 <body class="{% block body_class %}{% endblock %}">
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="loading-bar" aria-hidden="true"></div>
-  {% set main_links = [('index', 'Watching', ['index']), ('videos', 'Videos', ['videos']),
+  {% set main_links = [('index', 'Watching', ['index', 'before_result']),
+                        ('shelf_page', 'My shelf', ['shelf_page', 'shelf_item', 'public_copy']),
                         ('change_list', 'Changes', ['change_list', 'entry']),
-                        ('book_list', 'Books', ['book_list', 'book_comparison', 'book_job']),
-                        ('shelf_page', 'My shelf', ['shelf_page', 'shelf_item']),
-                        ('stats_page', 'Stats', ['stats_page'])] %}
+                        ('book_list', 'Books & videos', ['book_list', 'book_comparison', 'book_job', 'check_video']),
+                        ('about', 'About', ['about'])] %}
   {% macro account_links() %}
     {% if g.user and not is_guest %}
       <span class="who">{{ g.user.email }}</span>
       <a href="{{ url_for('account') }}">{{ t('Your account') }}</a>
+      {% if is_admin %}<a href="{{ url_for('feedback_inbox') }}">Feedback inbox</a>{% endif %}
       <form method="post" action="{{ url_for('logout') }}"><button class="link">{{ t('Log out') }}</button></form>
     {% else %}
       <a href="{{ url_for('signup') }}">{{ t('Make an account') }}</a>
       <a href="{{ url_for('login') }}">{{ t('Log in') }}</a>
     {% endif %}
   {% endmacro %}
-  {% set more_links = [('before_page', 'Then and now', ['before_page', 'before_result']), ('live_watch', 'Live watch', ['live_watch']), ('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Summary', ['summary']),
-                        ('about', 'About Tripwire', ['about'])] + ([('feedback_inbox', 'Feedback inbox', ['feedback_inbox'])] if is_admin else []) %}
   <header class="top {{ self.main_class() }}">
     <a class="brand" href="{{ url_for('home') }}">Tripwire<span class="cursor" aria-hidden="true"></span></a>
     <nav class="nav-wide" aria-label="Main">
@@ -42,12 +41,8 @@
         <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ t(label) }}</a>
       {% endfor %}
       <details class="more">
-        <summary {% if request.endpoint in (more_links|map(attribute=2)|sum(start=[])) %}class="on"{% endif %}>{{ t('More') }}</summary>
+        <summary {% if request.endpoint in ('account', 'feedback_inbox', 'login', 'signup') %}class="on"{% endif %}>{{ 'Account' if g.user and not is_guest else 'Log in' }}</summary>
         <div class="menu">
-          {% for endpoint, label, active in more_links %}
-            <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ t(label) }}</a>
-          {% endfor %}
-          <hr>
           {{ account_links() }}
         </div>
       </details>
@@ -55,7 +50,7 @@
     <details class="nav-narrow">
       <summary>{{ t('Menu') }}</summary>
       <div class="menu">
-        {% for endpoint, label, active in main_links + more_links %}
+        {% for endpoint, label, active in main_links %}
           <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ t(label) }}</a>
         {% endfor %}
         <hr>
@@ -101,8 +96,10 @@
     <label class="check"><input type="checkbox" data-setting="calm"> <span><strong>Calm mode.</strong> No typing effects or pauses: everything appears at once.</span></label>
     <label class="check"><input type="checkbox" data-setting="big"> <span><strong>Bigger text.</strong></span></label>
     <label class="check"><input type="checkbox" data-setting="contrast"> <span><strong>Strong contrast.</strong> Black on white, no textures.</span></label>
+    {% if languages|length > 1 %}
     <p class="access-languages">Language:
       {% for code, name in languages %}<a href="{{ url_for('set_language', code=code, next=request.full_path) }}" lang="{{ code }}" {% if code == lang %}aria-current="true"{% endif %}>{{ name }}</a>{% endfor %}</p>
+    {% endif %}
     <p class="meta">Using a screen reader (VoiceOver, TalkBack, NVDA)? Tripwire works with it as it is; you don't need Read aloud.</p>
     <form method="dialog" class="actions"><button>Done</button></form>
   </dialog>
@@ -118,11 +115,14 @@
   </dialog>
   <img class="signature" src="{{ url_for('static', filename='rabbit.png') }}" alt="" aria-hidden="true" width="26" height="41">
   <footer><span>TRIPWIRE</span> · keeps a copy when the information you care about changes · <a href="{{ url_for('about') }}">about</a> · <span class="ready">READY.</span>
+    <p class="footer-stats"><a href="{{ url_for('stats_page') }}">Stats</a>: humans vs bots on the internet right now, and how many books the world has published.</p>
+    {% if languages|length > 1 %}
     <nav class="languages" aria-label="Language">
       {% for code, name in languages %}
         <a href="{{ url_for('set_language', code=code, next=request.full_path) }}" lang="{{ code }}" {% if code == lang %}aria-current="true" class="on"{% endif %}>{{ name }}</a>
       {% endfor %}
     </nav>
+    {% endif %}
   </footer>
 </body>
 </html>

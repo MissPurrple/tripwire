@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Books · Tripwire{% endblock %}
+{% block title %}Books & videos · Tripwire{% endblock %}
 {% block content %}
 <script defer src="{{ url_for('static', filename='scan-reader.js') }}"></script>
 {% if intro %}
@@ -31,15 +31,17 @@
 </script>
 {% endif %}
 <section class="intro">
-  <h1>Books</h1>
-  <p>Has a book been quietly changed? Give Tripwire two editions, an older one and a newer one, and it compares
-     them word by word: swapped words (like “killed” → “unalived”), renamed people and places, and removed passages.
-     Books are only compared when you ask, and Tripwire never keeps the books themselves, just what changed.</p>
-  {% include "_privacy_note.html" %}
+  <h1>Books &amp; videos</h1>
+  <p>Has a book been quietly changed, or a video taken down? Check them here, whenever you need to.</p>
 </section>
 
-<section class="theme">
-  <h2>Compare two editions</h2>
+<div class="split">
+<section class="theme" id="books">
+  <h2>Books</h2>
+  <p>Give Tripwire two editions, an older one and a newer one, and it compares them word by word: swapped words
+     (like “killed” → “unalived”), renamed people and places, and removed passages. Tripwire never keeps the books
+     themselves, just what changed.</p>
+  {% include "_privacy_note.html" %}
   <form method="post" enctype="multipart/form-data" class="book-form" id="book-form">
     <label>Book title (optional)
       <input name="title" placeholder="e.g. Charlie and the Chocolate Factory">
@@ -65,10 +67,47 @@
       <div class="progress"><span id="scan-bar" style="width: 0%"></span></div>
       <p class="screen-line dim scan-note">Keep this page open. Reading takes a few seconds per page.</p>
     </div>
+    <label class="check"><input type="checkbox" name="watch_links"> <span>Keep watching the links for changes
+      <span class="meta">(only links can be watched: an uploaded file is compared once)</span></span></label>
     <button id="book-compare">Compare</button>
     <p class="meta" id="book-wait" hidden>Uploading…</p>
   </form>
 </section>
+
+<section class="theme" id="videos">
+  <h2>Videos</h2>
+  <p>Paste a YouTube or TikTok link. <strong>Check it now</strong> to see if it's still up, or <strong>watch it</strong>,
+     and Tripwire checks it once a day: you'll see in <a href="{{ url_for('change_list') }}">Changes</a> if it's removed,
+     made private, age-restricted or retitled.</p>
+  <form method="post" action="{{ url_for('check_video') }}" class="book-form" data-no-loading>
+    <label>Video link
+      <input name="target" type="url" required value="{{ video_url or '' }}" placeholder="https://www.youtube.com/watch?v=…">
+    </label>
+    <div class="actions">
+      <button>Check it now</button>
+      <button formaction="{{ url_for('add_video') }}" class="secondary-button">Watch it</button>
+    </div>
+  </form>
+  {% if video_result %}
+  {% set st = video_result %}
+  <article class="entry video {{ 'cat-video_gone' if not st.available else ('cat-video_restricted' if st.restricted else '') }}" aria-live="polite">
+    <div class="entry-head">
+      <span class="badge">{{ st.platform }}</span>
+      {% if not st.available %}<span class="badge cat-video_gone">Unavailable</span>
+      {% elif st.restricted %}<span class="badge cat-video_restricted">Restricted</span>
+      {% else %}<span class="badge cat-ok">Available</span>{% endif %}
+      {% if st.unlisted %}<span class="badge">Unlisted</span>{% endif %}
+      <span class="when">checked just now</span>
+    </div>
+    <h3>{{ st.title or st.url }}</h3>
+    <p class="meta">{{ st.author or '' }}{% if not st.available and st.reason %} · {{ st.reason }}{% endif %}</p>
+  </article>
+  {% endif %}
+  <p class="meta">Videos you watch are listed on your <a href="{{ url_for('index', _anchor='videos') }}">Watching</a> page.
+     TikTok doesn't say publicly whether a video was marked sensitive, so for TikTok Tripwire can notice removals,
+     private videos and caption changes, but not sensitivity labels.</p>
+</section>
+</div>
 
 {% if jobs %}
 <section>

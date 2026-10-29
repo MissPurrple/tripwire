@@ -12,7 +12,7 @@
     <p class="meta">Not you? Just close this page. Nothing will be sent to this address.</p>
   {% else %}
     <h1>That link doesn't work</h1>
-    <p>It may be more than {{ days }} days old, or copied only partly. Log in, open <a href="{{ url_for('summary') }}">Summary</a>,
+    <p>It may be more than {{ days }} days old, or copied only partly. Log in, open <a href="{{ url_for('change_list', _anchor='summary') }}">Changes</a>,
        and ask for a new one.</p>
   {% endif %}
 </section>

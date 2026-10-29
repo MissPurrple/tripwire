@@ -33,23 +33,41 @@
 </section>
 
 <section class="theme">
+  <h2>Why not just use what already exists?</h2>
+  <ul class="about-list">
+    <li><strong>Other tools tell you that something changed. Tripwire keeps your own copy.</strong>
+        Wikipedia already has watchlists and email alerts, and services like Visualping and changedetection.io already watch
+        web pages for changes. They watch something change. Tripwire keeps your own copy of what it said before, notices
+        what kind of change it was (down to a person's or a place's name spelled differently), and lets you carry it all
+        offline, in one file that's yours.</li>
+    <li><strong>For communities that aren't fully online, it can be the preservation tool.</strong>
+        Scanned PDFs that circulate from phone to phone, gazettes and memos that are never publicly documented or archived,
+        and places where archiving isn't done well to begin with: Tripwire reads them, keeps them, and lets a community hold
+        its own record, on its own devices, even with no internet.</li>
+  </ul>
+</section>
+
+<section class="theme">
   <h2>What it does</h2>
   <ul class="about-list">
-    <li><strong>Watches</strong> Wikipedia articles (in any language) and any web page, grouped into themes or as single links, once a day.</li>
+    <li><strong>Watches</strong> Wikipedia articles (in any language), any web page and videos, grouped into themes or as single links, once a day.
+        <strong>Live watch</strong>, at the top of the Watching page, keeps an eye on a fast-moving page, like a live news page,
+        while you have it open, and beeps when something new appears.</li>
     <li><strong>Keeps the before and after</strong> of every change, sorts it from a tiny typo to a large removal, and flags names spelled differently.</li>
-    <li><strong>Watches videos</strong> on YouTube and TikTok for removals, private videos, age restrictions and new titles.</li>
-    <li><strong>Compares two editions of a book or document</strong> word by word: swapped words, renamed people and places, removed passages, plus facts about both editions.
-        <strong>Scanned PDFs</strong>, like gazettes and memos, are read on your own device: the document never leaves it.</li>
+    <li><strong>Books &amp; videos:</strong> compares two editions of a book or document word by word (swapped words, renamed people
+        and places, removed passages, plus facts about both editions), and checks YouTube and TikTok videos for removals, private
+        videos, age restrictions and new titles. <strong>Scanned PDFs</strong>, like gazettes and memos, are read on your own device:
+        the document never leaves it. A book's link, or a video, can then be watched.</li>
     <li><strong>My shelf:</strong> your own copies of gazettes, memos, photos of documents and web pages, searchable,
         and <strong>Take my shelf with me</strong>: download the whole shelf as one file, a ZIP for any browser or a
-        file for <a href="https://kiwix.org/en/" target="_blank" rel="noopener">Kiwix</a>, the free app that reads whole libraries with no internet.</li>
-    <li><strong>Then and now:</strong> compares a Wikipedia article today with Kiwix's dated offline copy of Wikipedia, and any other page
-        with the Internet Archive's copy from about a year ago.</li>
-    <li><strong>Live watch:</strong> keeps an eye on a fast-moving page, like a live news page, while you have it open, and beeps when something new appears.</li>
-    <li><strong>Keeps public copies</strong> with the Internet Archive, only when you choose.</li>
-    <li><strong>Sends one calm summary</strong> (daily, weekly or monthly, by email if you like) instead of a ping for every change.</li>
+        file for <a href="https://kiwix.org/en/" target="_blank" rel="noopener">Kiwix</a>, the free app that reads whole libraries with no internet.
+        Your public copies at the Internet Archive are listed there too: made only when you choose.</li>
+    <li><strong>Test against Kiwix, and against the Internet Archive:</strong> two buttons next to anything you watch. They compare it
+        today with an older copy nobody can quietly edit: Kiwix's dated offline copy of Wikipedia, or the Internet Archive's copy from
+        about a year ago. If there's no exact copy, Tripwire offers similar ones (an article under an older name, or nearby pages on the same site).</li>
+    <li><strong>One calm summary</strong> (daily, weekly or monthly, by email if you like) at the top of Changes, instead of a ping for every change.</li>
     <li><strong>For everyone:</strong> works with screen readers, can read every page aloud (for people who can't see well or can't read),
-        has a calm mode, bigger text and strong contrast, and is starting to speak Hindi and Sesotho (drafts, with help welcome).</li>
+        and has a calm mode, bigger text and strong contrast.</li>
   </ul>
 </section>
 
@@ -81,7 +99,10 @@
     <dd>The Stats page says what it can't count: books printed locally without an ISBN or a library record, as often happens
         in Lesotho and many other places, aren't in anyone's totals.</dd>
     <dt>Slow on purpose.</dt>
-    <dd>Text types itself out, and Books pauses for a moment before it opens. Preservation is patient work.</dd>
+    <dd>Text types itself out, the opening takes its time, and Books &amp; videos pauses for a moment before it opens. Preservation is patient work.</dd>
+    <dt>Languages only once they're checked.</dt>
+    <dd>A translation goes on the site only after a native speaker has checked it. A wrong translation, on a tool about keeping the
+        record honest, would be its own small rewrite.</dd>
   </dl>
 </section>
 
@@ -95,7 +116,18 @@
     <li>Scanned pages are read with an English (Latin-alphabet) reader, so Sesotho and other languages work, but letters with accents or special marks may sometimes be misread.</li>
     <li>The Internet Archive can only save a page as it is now. Once a page has changed, the old version can only be saved if it still exists somewhere (Wikipedia keeps every version; most websites don't).</li>
   </ul>
-  <p class="meta">Next: a “Watch this with Tripwire” browser button, and a voice that can read Sesotho aloud.</p>
+</section>
+
+<section class="theme">
+  <h2>What we'd like to see next</h2>
+  <ul class="about-list">
+    <li><strong>Tripwire in Hindi and Sesotho.</strong> First drafts exist, but they stay off the site until a native speaker has
+        checked them. If you speak Hindi or Sesotho and would like to help, please <a href="#feedback">get in touch</a> or send a pull
+        request on <a href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>. Other languages are welcome too.</li>
+    <li><strong>A voice that can read Sesotho aloud</strong>, and a reader for scanned pages that knows Sesotho's spelling, so
+        people who can't read, or can't see well, can use Tripwire in their own language.</li>
+    <li><strong>A “Watch this with Tripwire” browser button:</strong> one click to watch the page you're on.</li>
+  </ul>
 </section>
 
 <section class="theme">
@@ -115,15 +147,19 @@
     <li><strong>A plain look → a retro computer</strong> that slows you down a little, on purpose. Then all green, so it feels like one place.</li>
     <li><strong>Scanned PDFs → read on your own device,</strong> because so much official paperwork (gazettes, memos) is scanned, and some of it quietly disappears from government websites.</li>
     <li><strong>Live watching</strong> for pages that change by the minute.</li>
-    <li><strong>Built for sighted readers of English → for everyone:</strong> read aloud, screen-reader support, calm mode, and the first Hindi and Sesotho drafts, open for others to translate.</li>
+    <li><strong>Built for sighted readers of English → for everyone:</strong> read aloud, screen-reader support and calm mode. First Hindi and Sesotho drafts were written too,
+        then taken off the site until native speakers can check them.</li>
     <li><strong>Copies you keep yourself:</strong> My shelf, downloadable as a ZIP or a Kiwix file, because a copy on a
-        government website, or on Tripwire, isn't the same as a copy in your own hands. And Then and now, comparing
-        Wikipedia with Kiwix's offline copy.</li>
+        government website, or on Tripwire, isn't the same as a copy in your own hands. And buttons to test what you watch
+        against Kiwix's offline copy of Wikipedia and the Internet Archive.</li>
     <li><strong>A sign-up wall → try it first.</strong> Being made to create an account before seeing anything makes most people leave.
         Now anyone can use Tripwire straight away; an account is only for keeping things after you close the browser, and for email summaries.</li>
     <li><strong>One summary a week → you choose:</strong> daily, weekly or monthly.</li>
     <li><strong>A front door.</strong> Opening Tripwire should feel like discovering a world, the way libraries and the early internet did.
         So it opens with falling binary and a purple rabbit to follow.</li>
+    <li><strong>Eleven pages → five.</strong> An honest review said there was too much to take in. Now: Watching (with Live watch
+        and videos inside it), My shelf (with public copies), Changes (with the summary), Books &amp; videos side by side, and About.
+        Stats moved to the bottom of every page, as a fun extra.</li>
     <li><strong>Next: what testers tell us.</strong> {% if totals.feedback %}{{ totals.feedback }} piece{{ 's' if totals.feedback != 1 }} of feedback so far.{% else %}Leave yours below.{% endif %}</li>
   </ol>
   <p>Tripwire is young, and built in the open. If you can see how to make it better (code, design, archiving, or knowing a community's needs),

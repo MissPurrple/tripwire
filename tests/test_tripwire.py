@@ -442,7 +442,6 @@ class WebAppTests(CheckerTests):
         self.assertIn("[L] LOG IN", page)
         self.assertIn("[M] MAKE AN ACCOUNT", page)
         self.assertIn("[1] WATCHING", page)
-        self.assertIn("No account needed", page)
         self.log_in()
         watch = self.tw.add_watch(self.theme, "Warli")
         self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")

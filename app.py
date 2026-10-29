@@ -94,6 +94,9 @@ def server_error(error):
     The full details still go to the logs (Vercel: the Logs tab)."""
     original = getattr(error, "original_exception", None)
     setup_problem = str(original) if isinstance(original, db.SetupError) else None
+    # One short line, so the cause shows in Vercel's log list without opening the full traceback.
+    app.logger.error("TRIPWIRE PROBLEM: %s", setup_problem or
+                     (f"{type(original).__name__}: {str(original)[:300]}" if original else "unknown error"))
     if "user" not in g:
         g.user = None
     return render_template("error.html", code=500, setup_problem=setup_problem, title="SYSTEM ERROR",

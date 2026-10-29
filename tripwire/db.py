@@ -236,8 +236,9 @@ class Connection:
 
     def _columns(self, table):
         if self.postgres:
+            # Only Tripwire's own tables: other schemas in the same database may have a "users" table too.
             rows = self.raw.execute("SELECT column_name AS name FROM information_schema.columns "
-                                    "WHERE table_name = %s", (table,)).fetchall()
+                                    "WHERE table_name = %s AND table_schema = current_schema()", (table,)).fetchall()
         else:
             rows = self.raw.execute(f"PRAGMA table_info({table})").fetchall()
         return {row["name"] for row in rows}

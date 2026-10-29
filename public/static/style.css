@@ -540,3 +540,45 @@ textarea { font: inherit; width: 100%; padding: 8px 10px; border: 2px solid var(
 .scan-progress .progress { border-color: var(--phosphor-dim); background: transparent; }
 .scan-progress .progress span { background: repeating-linear-gradient(90deg, var(--phosphor) 0 10px, transparent 10px 13px); }
 .scan-note { font-size: .95rem; }
+
+/* Languages */
+.language-banner { margin: 0; padding: 8px 24px; background: var(--screen); color: var(--phosphor-soft); font-family: var(--font-mono); font-size: .82rem; border-bottom: 2px solid var(--edge); }
+.language-banner a { color: var(--phosphor); }
+.language-popup { max-width: 520px; border: 2px solid var(--edge); border-radius: 6px; box-shadow: 6px 6px 0 var(--shadow); background: var(--card); color: var(--text); padding: 20px 24px; }
+.language-popup::backdrop { background: rgba(5, 11, 6, .7); }
+.languages { display: flex; gap: 12px; justify-content: center; margin-top: 8px; }
+.languages a { color: var(--muted); }
+.languages a.on { color: var(--text); font-weight: 600; text-decoration: none; }
+
+/* ---------------------------------------------------------------- access */
+.skip-link { position: absolute; left: 12px; top: -60px; z-index: 200; background: var(--accent); color: var(--accent-text);
+  padding: 8px 14px; border: 2px solid var(--edge); font-family: var(--font-mono); }
+.skip-link:focus { top: 12px; }
+.access-button { position: fixed; left: 12px; bottom: 10px; z-index: 16; padding: 6px 10px; font-size: .78rem;
+  background: var(--card); color: var(--text); }
+.read-page-button { position: fixed; left: 12px; bottom: 52px; z-index: 16; font-size: .9rem; padding: 10px 14px; }
+.access-panel { max-width: 480px; border: 2px solid var(--edge); border-radius: 6px; box-shadow: 6px 6px 0 var(--shadow);
+  background: var(--card); color: var(--text); padding: 20px 24px; }
+.access-panel::backdrop { background: rgba(5, 11, 6, .7); }
+.access-panel .check { margin: 12px 0; align-items: flex-start; }
+.access-panel h2 { margin-top: 0; }
+.access-languages a { margin-left: 10px; }
+.access-languages a[aria-current] { font-weight: 600; color: var(--text); }
+footer { padding-left: 110px; padding-right: 60px; }
+
+/* Bigger text */
+html.a11y-big { font-size: 120%; }
+html.a11y-big .screen { font-size: 1.6rem; }
+
+/* Strong contrast: black on white, no textures or glow */
+html.a11y-contrast {
+  --bg: #ffffff; --card: #ffffff; --text: #000000; --muted: #222222; --line: #000000; --edge: #000000; --shadow: #000000;
+  --accent: #005c1f; --accent-text: #ffffff; --screen: #000000; --phosphor: #8dffaa; --phosphor-dim: #8dffaa; --phosphor-soft: #ffffff;
+}
+html.a11y-contrast body { background-image: none; }
+html.a11y-contrast .screen::after, html.a11y-contrast .theme::before { display: none; }
+html.a11y-contrast .screen { text-shadow: none; background: #000; }
+html.a11y-contrast a { text-decoration-thickness: 2px; }
+
+/* Calm mode: nothing moves */
+html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation: none !important; transition: none !important; }

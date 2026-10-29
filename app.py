@@ -14,10 +14,10 @@ import os
 import time
 from urllib.parse import urlparse
 
-from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.exceptions import HTTPException
 
-from tripwire import books, changes, charts, db, humancheck, live, mailer, sources, stats
+from tripwire import books, changes, charts, db, humancheck, i18n, live, mailer, sources, speech, stats
 from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
@@ -98,6 +98,57 @@ def login_required(view):
             return redirect(url_for("login"))
         return view(*args, **kwargs)
     return wrapped
+
+
+GITHUB_URL = "https://github.com/MissPurrple/tripwire"
+
+
+def current_language():
+    lang = request.cookies.get("lang", i18n.DEFAULT)
+    return lang if lang in i18n.LANGUAGES else i18n.DEFAULT
+
+
+@app.context_processor
+def language_helpers():
+    lang = current_language()
+    return {"lang": lang, "t": lambda text: i18n.translate(lang, text), "languages": i18n.choices(),
+            "language_name": i18n.LANGUAGES[lang]["_english_name"], "github_url": GITHUB_URL,
+            "voice": "purple" if os.environ.get("ELEVENLABS_API_KEY") and os.environ.get("ELEVENLABS_VOICE_ID") else "device"}
+
+
+SPEECH_PER_VISITOR = 4000      # characters per visitor per 10 minutes in Purple's voice
+
+
+@app.post("/speak")
+def speak():
+    """Audio of a piece of text in Purple's voice (ElevenLabs). If it can't be made, the
+    browser reads it with the device's own voice instead, so this never blocks anyone."""
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "")[:speech.MAX_CHARACTERS]
+    window = session.get("speech_window") or [time.time(), 0]
+    if time.time() - window[0] > 600:
+        window = [time.time(), 0]
+    if window[1] + len(text) > SPEECH_PER_VISITOR:
+        return jsonify(error="That's a lot of reading in a short time; your device's voice will carry on."), 429
+    try:
+        audio = speech.Speech(tw().conn).audio(text, current_language())
+    except speech.SpeechError as exc:
+        return jsonify(error=str(exc)), 503
+    session["speech_window"] = [window[0], window[1] + len(text)]
+    return Response(audio, mimetype="audio/mpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.get("/language/<code>")
+def set_language(code):
+    """Switch language (remembered in this browser). Non-English languages are drafts: say so."""
+    if code not in i18n.LANGUAGES:
+        abort(404)
+    target = request.args.get("next", "")
+    response = redirect(target if target.startswith("/") and not target.startswith("//") else url_for("home"))
+    response.set_cookie("lang", code, max_age=365 * 86400, samesite="Lax", secure=ON_VERCEL)
+    if code != i18n.DEFAULT:
+        session["language_popup"] = code
+    return response
 
 
 @app.context_processor

@@ -31,7 +31,7 @@
           <p class="screen-line">&nbsp;</p>
           <ul class="screen-menu" data-speed="5">
             {% for key, label, href, note in menu %}
-              <li class="screen-line"><a href="{{ href }}" data-key="{{ key|lower }}">[{{ key }}] {{ label }}</a>{% if note %}<span class="dots"></span><span class="note">{{ note }}</span>{% endif %}</li>
+              <li class="screen-line"><a href="{{ href }}" data-key="{{ key|lower }}">[{{ key }}] {{ t(label) }}</a>{% if note %}<span class="dots"></span><span class="note">{{ note }}</span>{% endif %}</li>
             {% endfor %}
           </ul>
           <p class="screen-line">&nbsp;</p>

@@ -15,6 +15,9 @@
   var overlay = document.getElementById("intro"), started = Date.now();
   document.documentElement.classList.add("intro-lock");
   function begin() {
+    if (document.documentElement.classList.contains("a11y-calm")) {  // calm mode: no pause
+      document.documentElement.classList.remove("intro-lock"); overlay.remove(); return;
+    }
     window.Tripwire.type(overlay.querySelector(".screen"), 28).then(function () {
       setTimeout(function () {
         overlay.classList.add("leaving");

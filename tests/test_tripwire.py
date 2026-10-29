@@ -115,7 +115,7 @@ class CheckerTests(unittest.TestCase):
         if self.db_path.startswith("postgres"):
             import psycopg
             with psycopg.connect(self.db_path, autocommit=True) as conn:
-                conn.execute("DROP TABLE IF EXISTS feedback, stats_cache, book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
+                conn.execute("DROP TABLE IF EXISTS speech_cache, speech_usage, feedback, stats_cache, book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
         self.tw = Tripwire(self.db_path)
         self.user = self.tw.create_user("purple@example.org", "correct horse")
         FakeWikipedia.articles = {"Warli": [
@@ -1275,6 +1275,100 @@ class LiveWatchTests(CheckerTests):
         self.assertEqual(self.client.post("/live/check", json={"url": "https://youtu.be/aaaaaaaaaaa"}).status_code, 400)
         self.client.post("/logout")
         self.assertEqual(self.client.get("/live").status_code, 302)
+
+
+class AccessAndLanguageTests(CheckerTests):
+    def setUp(self):
+        super().setUp()
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        self.client = webapp.app.test_client()
+
+    def test_access_tools_on_every_page(self):
+        for path in ["/", "/login", "/about", "/no-such-page"]:
+            page = self.client.get(path).data.decode()
+            for expected in ['class="skip-link" href="#main"', 'id="main"', 'id="access-button"', "Welcome to Tripwire",
+                             "Would you like Tripwire to read things aloud to you?", "Calm mode", "Strong contrast"]:
+                self.assertIn(expected, page, (path, expected))
+        self.assertIn("your device&#39;s voice", self.client.get("/").data.decode())
+        with mock.patch.dict(os.environ, {"ELEVENLABS_API_KEY": "k", "ELEVENLABS_VOICE_ID": "v"}):
+            page = self.client.get("/").data.decode()
+        self.assertIn('data-voice="purple"', page)
+        self.assertIn("Purple&#39;s voice", page)
+
+    def test_switch_to_hindi_and_sesotho(self):
+        response = self.client.get("/language/hi?next=/about")
+        self.assertTrue(response.headers["Location"].endswith("/about"))
+        page = self.client.get("/about").data.decode()
+        self.assertIn('<html lang="hi">', page)
+        self.assertIn("Hindi: still being built", page)  # the pop-up, once
+        self.assertIn("send a pull request", page)
+        self.assertIn("github.com/MissPurrple/tripwire", page)
+        self.assertIn("यह हिंदी संस्करण अभी बन रहा है", page)  # the banner
+        again = self.client.get("/about").data.decode()
+        self.assertNotIn("Hindi: still being built", again)  # pop-up only right after switching
+        self.assertIn("यह हिंदी संस्करण अभी बन रहा है", again)  # banner stays
+        self.client.get("/language/st")
+        page = self.client.get("/").data.decode()
+        self.assertIn("[L] KENA", page)
+        self.assertIn('<html lang="st">', page)
+        self.client.get("/language/en")
+        page = self.client.get("/").data.decode()
+        self.assertIn("[L] LOG IN", page)
+        self.assertNotIn("language-banner", page)
+
+    def test_language_switch_is_safe(self):
+        self.assertEqual(self.client.get("/language/xx").status_code, 404)
+        self.assertTrue(self.client.get("/language/hi?next=//evil.example").headers["Location"].endswith("/"))
+
+    def test_translations_menus_after_login(self):
+        self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+        self.client.get("/language/hi")
+        page = self.client.get("/watching").data.decode()
+        for word in ["निगरानी", "किताबें", "आँकड़े", "लॉग आउट"]:
+            self.assertIn(word, page)
+
+    def test_every_translation_file_is_valid(self):
+        from tripwire import i18n
+        english_keys = {"Watching", "Books", "language_notice"}
+        for code, data in i18n.LANGUAGES.items():
+            if code != "en":
+                self.assertTrue(english_keys <= set(data), code)
+                self.assertIn("Draft", data["_status"])
+
+    def test_purple_voice(self):
+        calls = []
+
+        def fake_post(url, **kwargs):
+            calls.append((url, kwargs["json"]))
+            return mock.Mock(status_code=200, content=b"ID3 fake mp3")
+
+        self.assertEqual(self.client.post("/speak", json={"text": "Hello"}).status_code, 503)  # not connected
+        env = {"ELEVENLABS_API_KEY": "key", "ELEVENLABS_VOICE_ID": "purplevoice"}
+        with mock.patch.dict(os.environ, env), mock.patch("requests.post", fake_post):
+            response = self.client.post("/speak", json={"text": "Pages vanish. Tripwire notices."})
+            self.assertEqual((response.status_code, response.mimetype, response.data), (200, "audio/mpeg", b"ID3 fake mp3"))
+            self.client.post("/speak", json={"text": "Pages vanish. Tripwire notices."})
+        self.assertEqual(len(calls), 1)  # the second time came from memory: no credits used
+        self.assertIn("purplevoice", calls[0][0])
+        self.assertEqual(calls[0][1]["model_id"], "eleven_multilingual_v2")
+
+    def test_purple_voice_limits(self):
+        env = {"ELEVENLABS_API_KEY": "key", "ELEVENLABS_VOICE_ID": "v", "ELEVENLABS_DAILY_CHARACTERS": "50"}
+        with mock.patch.dict(os.environ, env), mock.patch("requests.post", return_value=mock.Mock(status_code=200, content=b"mp3")):
+            self.assertEqual(self.client.post("/speak", json={"text": "x" * 40}).status_code, 200)
+            response = self.client.post("/speak", json={"text": "y" * 40})  # over the site's daily allowance
+            self.assertEqual(response.status_code, 503)
+            self.assertIn("allowance", response.json["error"])
+        with self.client.session_transaction() as sess:
+            sess["speech_window"] = [time.time(), 3990]
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(self.client.post("/speak", json={"text": "z" * 40}).status_code, 429)  # this visitor: too much, too fast
+        with mock.patch.dict(os.environ, {"ELEVENLABS_API_KEY": "bad", "ELEVENLABS_VOICE_ID": "v"}), \
+                mock.patch("requests.post", return_value=mock.Mock(status_code=401, content=b"")):
+            with self.client.session_transaction() as sess:
+                sess.pop("speech_window", None)
+            self.assertIn("API key", self.client.post("/speak", json={"text": "hello there"}).json["error"])
 
 
 class SetupTests(unittest.TestCase):

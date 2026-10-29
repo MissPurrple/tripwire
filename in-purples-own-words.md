@@ -241,3 +241,25 @@ Purple's answers to Claude's questions: humans vs bots = **live from Cloudflare*
 > point of correction: I cannot get people to try it on the train. The hackathon ends before the train, so those two don't go together. The Telemon project was to build something before the train happens so that when we're on the train, the app is ready for the train.
 >
 > I'm going to try to get some people to try it in a few hours, I guess, but it will not be on the train.
+
+---
+
+## 13. Scanned PDFs, local archives, Kiwix, green, purple rabbit (29 Oct 2026)
+
+> The scanned PDFs thing: I would like those to be done expeditiously ... a lot of documentation, specifically in Lesotho, for instance, tends to focus on scanned PDFs
+>
+> I'm thinking of the scanned PDF documents that tend to get sent around at home, like ... memos and gazettes, stuff like that. They're stored somewhere on the government websites of the country, but what tends to happen is those government websites are either so hard to navigate, or I just don't trust them because I feel like they're being run by external people. That means they may not resonate with a lot of preservation ideals for the sake of the people of Lesotho
+>
+> Is there a way for us to get, or to allow for one to create, their own local archive? I'm not sure where it would live ... for someone who's a local and cares and wants to be able to go back to them without needing to go to the site. Then you find that, on the site, the thing was deleted or whatever.
+>
+> I used to make fun of the fact that we do these scanned PDF things, but now I'm kind of thinking, wait, maybe it's kind of cool of us to be a little backwards in that way because it's very difficult for you to edit a scanned PDF ... it tends to become very obvious because the fonts may differ
+>
+> what I'd like to make sure that we add is the ability to read and compare scanned PDF documents. The short live watching for news page that has to go in. Please help me brainstorm the offline copies with Kiwix.
+>
+> On the email thing, I do not want to touch Gmail with a barge pole. Can we do Proton, please?
+>
+> There's some of the copy that I would like to edit because it's too AI-facing or whatever, but I'll fix that later.
+>
+> fix ... all the oranges. Those should be green ... Formatting needs to be consistent. It can't look like two different pages kind of trying to force themselves to live together.
+>
+> what if we turn it into a purple rabbit?

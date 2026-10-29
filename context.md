@@ -97,3 +97,12 @@
 - About page, feedback box + owner-only inbox (ADMIN_EMAILS), demo data button, weekly summary email (SMTP settings). See rubric-suggestions.md and demo-script.md.
 - Correction from Purple: testers can't be on the train (the buildathon ends before the train). Purple will find testers in the hours before the deadline.
 - Purple's to-do: set SMTP settings + ADMIN_EMAILS in Vercel; press the demo button on the pitch account; share About page with testers.
+
+## Built 29 Oct (Purple awake)
+- All green (no orange); chart palette re-chosen without orange/yellow and re-checked for colourblind safety; purple rabbit (white kept as rabbit-white.png).
+- Email: Proton Mail SMTP token instructions (Purple won't use Gmail).
+- Live watch (More menu): a page checked every 1-5 min while open; beeps; ignores "x minutes ago" noise.
+- Scanned PDFs: read in the visitor's browser (Tesseract + pdf.js served by Tripwire); only text uploaded. Tested with two scanned "gazettes": 4 pages read in 6.5 s, changes found.
+- Watching PDF links: text PDFs compared by words; scanned PDFs by fingerprint (replaced/removed noticed).
+- Brainstorm saved: archive-and-kiwix-ideas.md ("My shelf" + Kiwix ZIM export). Not built yet; Purple to choose.
+- Purple will edit some wording herself later ("too AI-facing").

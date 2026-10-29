@@ -149,3 +149,5 @@
   question now appears after the opening. 261 tests pass (SQLite and Postgres).
 - OPEN: Purple saw 500 errors on the preview (database settings ARE enabled for Preview). A simulated-Vercel run showed
   no errors on any page. Need the Vercel Logs error text to find the cause.
+- Wording (29 Oct, from Purple, live): home page and About intro + quote rewritten in Purple's words. Keep "Indigenous"
+  with a capital I. Keep "No account needed." under About → Deliberate choices (important for the judges to see).

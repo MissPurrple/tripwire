@@ -100,7 +100,7 @@ def login_required(view):
     return wrapped
 
 
-GITHUB_URL = "https://github.com/MissPurrple/tripwire"
+GITHUB_URL = "https://github.com/MissPurrple/edge-buildathon"
 
 
 def current_language():

@@ -293,3 +293,31 @@ Purple's answers to Claude's questions: humans vs bots = **live from Cloudflare*
 > I don't know if downloading the file should download both as a zip file and a zim file, both of them, just in case people have different purposes for it. I would absolutely love the comparison of [Kiwix] and Wikipedia copy. When somebody shares a link, say from Wikipedia, it can also share some interesting changes based off of the old or the before copy of that site, article, or blog on [Kiwix].
 >
 > it's literally just you and I against the world at this point.
+
+---
+
+## 16. The opening, no forced sign-ups, summaries, audio, the About page (29 Oct 2026)
+
+> Okay. As of now, when you open the site, it just opens straight up to the create account section, right?
+>
+> A few things:
+>
+> 1. I would like it to be more visually enticing and inviting. We want this to be an experience, right, not just a boring site. The point of the old internet, and just the idea of things like libraries, is that it was fun, it was exciting, and it felt like you could learn something. It was a world for you to discover. I would like this to open that way. When you open Tripwire, the site, I would like for it to type the word Tripwire, right?
+> 2. Ideally, I'm thinking still with the Matrix aesthetic: it's raining binary code, and then "Remember Everything" is green, right? It's green on a black background in dark mode, and then green on cream. I don't know, actually, what colour the light mode would be. In light mode, it would still be green on the cream background or whatever.
+> 3. The purple bunny kind of just walks in or hops in. Think Pixar: you know how the little lamp jumps in, walks in, then jumps on the eye and replaces the eye? I want that kind of nostalgic feel. The bunny or the rabbit essentially walks in or hops in until eventually it stands in the position of the original logo of this purple bunny, which is just the bunny with the star, standing right on its hind legs. That's the position we wanted to end up in, right in the middle of the screen. It would walk in off-screen onto the screen, etc.
+> 4. I think that could be fun, a fun thing for you to open up, see, and experience. Under that rabbit, it could be "Follow the purple rabbit," "Enter the Tripwire," or "Trip the wires." Ooh, I like "Trip the wires." That's fun. You can click the "Trip the wires" button, and then it's as if the screen goes black, where the binary rains across the entire screen. Then it goes up to the sign-up page, where this is point number 2 now: I am wondering if we want to force signups all the time or if we want to allow people to also view the site without having to sign up, because there's the stats page, right? You can access the stats without you needing to upload anything yourself. But I don't want to force people, because that way most people tend to kind of disappear. I know I'm one of them. If I open a site and it forces me to create an account, I'm kind of like, "I do not want to do this. There's an account for every single thing in the world."
+>
+> One should be able to use the site without needing to create an account. The creation of an account can be prompted for one to save their tracked items, watched items, or the data that they have drawn from, like, say, the different changes and stuff. To store that after closing the web page, they need to have an account so it can store that specifically to their account, right?
+>
+> That should not be the first page that they see at all. It will only come up, though, when we prompt them to say, "If you would like to store your data or whatever kind of thing" (that kind of wording), then you need to create an account so you can watch items, or if you can watch articles, blogs, whatever, videos, and you can receive updates.
+>
+> They should also be able to change or select if they want to receive these updates weekly or monthly. Daily is possible, but that's a bit much. We can include it. I'm doubtful that people would use that, but we can include it as an option. The options would be daily, weekly, monthly. We can do that.
+>
+> What else? I would really like to have some audio when you open the site, like my voice. I want to welcome them. When the bunny is running in, I would like to say something cheeky, like "Welcome, purple rabbit," or "You found me," or something like that. Something matrix-coded. I can't think of that right now, but something very matrix-coded, something that makes people feel like they've entered a new world: a slower world, but a world that values and cares about truth above all else.
+>
+> Also, in the About section, this is, I guess, the next point. I am unsure if we want to put all of that publicly, specifically the "how Tripwire has changed. Maybe we can keep it in for the hackathon. For this buildathon, do you think? I'm just not sure if we want to necessarily put every single bit of that detail in there. I'm not going to lie to you: I'm a bit concerned about being judged by the super technical people looking at how it changed and stuff, and judging me for it. Maybe we can keep it in anyway. This is how I can get super smart people to come and help me with it. Who knows?
+>
+> Anyway, I guess that's all for now. Thank you. Remember to read the notes in the repo. They should give you more context on what we've done so far, how I'm working on this, and my preferences, etc., and do's and don'ts, and all of that good stuff. All right.
+
+Purple's answers to Claude's questions: without an account = **try everything** (things last until the browser
+closes; an account keeps them); the opening plays **once per visit**; the voice plays **on "Trip the wires"**.

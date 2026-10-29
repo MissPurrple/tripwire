@@ -123,3 +123,28 @@
 - Email: Proton needs a paid plan + custom domain. Advice given: skip email for the buildathon (the Weekly summary page works without it). Purple's open question: Gmail and an Indian phone number.
 - Future (pitch): a Sesotho voice and Sesotho-trained scan reading. Meta's open MMS voices likely include Sesotho (not confirmed; licence to check).
 - Ask Purple about going public (licence + public repo) AFTER these steps, as Purple asked.
+
+## Built 29 Oct (opening, no forced sign-up, summary choice)
+- **Opening ("front door")** on the home page, once per visit (`/?intro` replays it): binary rain; TRIPWIRE typed;
+  REMEMBER EVERYTHING. in green (green on black in dark mode, green on cream in light mode); the purple rabbit hops in
+  from the right (it faces left) Pixar-lamp style (crouch, stretch, land, squash, a head tilt "looking at you"), ends
+  centred in the logo pose; then **[ TRIP THE WIRES ]** + "Follow the purple rabbit." Clicking it turns the screen
+  black, binary rains across all of it, then the box computer boots. Skip button and Escape; still version for
+  people who turn animations off. Files: templates/_intro.html, public/static/intro.js.
+- **Purple's voice:** browsers block sound until the visitor clicks, so it plays on "Trip the wires" (Purple chose
+  this). Recording goes in public/static/audio/welcome.mp3 (not recorded yet; until then the opening is silent, plus
+  a small synth chirp on click).
+- **No forced sign-up (Purple chose "try everything"):** visitors use everything without an account. The first time
+  they save something, Tripwire starts a "guest" visit (lasts until the browser closes; deleted after 3 days by the
+  daily run). A one-line note invites them to make an account to keep things. Signing up keeps everything; logging
+  in moves a guest's things into the account. Still need an account: public Internet Archive copies, emails.
+  Guests' items aren't in the daily check (they press Check). Feedback works without an account (hidden bot trap).
+- **Summary emails: daily, weekly (Mondays) or monthly (the 1st), or off.** Older accounts keep their old on/off.
+- About: "How Tripwire changed" kept (Purple was unsure; Claude recommended keeping it: iteration is 15% of the
+  rubric, and it invites help). Added a "help is very welcome" line and the three changes above to the timeline.
+- Open: Purple to record the welcome line; Purple to send a bigger version of the rabbit drawing (the current file is
+  76x120 pixels, a little soft when enlarged in the opening).
+- Status: on branch `intro-and-guests` (NOT on main / the live site yet), merged with the parallel session's My shelf,
+  Then and now, access mode and languages. My shelf and Then and now also work without an account. The read-aloud
+  question now appears after the opening. 261 tests pass (SQLite and Postgres). Waiting for Purple to try the
+  Vercel preview before merging to main.

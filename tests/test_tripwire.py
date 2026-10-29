@@ -1203,6 +1203,56 @@ class EmailAndAboutTests(CheckerTests):
         self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM themes WHERE user_id = ?", (other,)).fetchone()["n"], 0)
 
 
+class LiveWatchTests(CheckerTests):
+    def setUp(self):
+        super().setUp()
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        self.client = webapp.app.test_client()
+        self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+        self.pages = {"https://news.example.org/live": {"status": "ok", "text": "Live: election day\nPolls opened at 7am. Updated 2 minutes ago"}}
+        fetch = mock.patch.object(sources, "fetch_page", lambda url: self.pages[url])
+        fetch.start()
+        self.addCleanup(fetch.stop)
+
+    def live_check(self, previous=None):
+        with self.client.session_transaction() as sess:
+            sess.pop("live_last_check", None)  # pretend a minute has passed
+        return self.client.post("/live/check", json={"url": "news.example.org/live", "previous": previous}).json
+
+    def test_noise_is_ignored(self):
+        from tripwire import live
+        self.assertEqual(live.steady_text("Breaking\nPosted 5 minutes ago\n12,301 people watching now\nUpdated just now"),
+                         "Breaking\nPosted")
+
+    def test_live_updates(self):
+        first = self.live_check()
+        self.assertFalse(first["changed"])
+        self.pages["https://news.example.org/live"]["text"] = "Live: election day\nPolls opened at 7am. Updated 9 minutes ago"
+        self.assertFalse(self.live_check(first["text"])["changed"])  # only the "ago" changed
+        self.pages["https://news.example.org/live"]["text"] = ("Live: election day\nTurnout is high in Maseru.\n"
+                                                              "Polls opened at 7am. Updated just now")
+        update = self.live_check(first["text"])
+        self.assertTrue(update["changed"])
+        self.assertIn("Turnout is high in Maseru", update["hunks"][0]["added"])
+        self.pages["https://news.example.org/live"] = {"status": "removed", "code": 404}
+        self.assertTrue(self.live_check(update["text"])["gone"])
+
+    def test_not_too_often(self):
+        self.assertNotIn("error", self.client.post("/live/check", json={"url": "news.example.org/live"}).json)
+        response = self.client.post("/live/check", json={"url": "news.example.org/live"})
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("too often", response.json["error"])
+
+    def test_live_page(self):
+        page = self.client.get("/live").data.decode()
+        self.assertIn("Live watch", page)
+        self.assertIn('href="/live"', page)  # in the menu
+        self.assertEqual(self.client.post("/live/check", json={"url": "https://youtu.be/aaaaaaaaaaa"}).status_code, 400)
+        self.client.post("/logout")
+        self.assertEqual(self.client.get("/live").status_code, 302)
+
+
 class SetupTests(unittest.TestCase):
     """What happens when Tripwire's online settings are missing or named differently."""
 

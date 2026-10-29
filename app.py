@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.exceptions import HTTPException
 
-from tripwire import books, changes, charts, db, humancheck, mailer, sources, stats
+from tripwire import books, changes, charts, db, humancheck, live, mailer, sources, stats
 from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
@@ -328,6 +328,33 @@ def add_video():
     except (ValueError, sources.SourceError) as exc:
         flash(str(exc), "error")
     return redirect(url_for("videos"))
+
+
+# -- live watching: one page, every few minutes, while the page is open -------
+
+@app.get("/live")
+@login_required
+def live_watch():
+    return render_template("live.html", min_seconds=live.MIN_SECONDS_BETWEEN)
+
+
+@app.post("/live/check")
+@login_required
+def live_check():
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if "://" not in url:
+        url = "https://" + url
+    if not urlparse(url).netloc or sources.video_platform(url):
+        return jsonify(error="Paste a link to a web page (videos belong on the Videos page)."), 400
+    last = session.get("live_last_check", 0)
+    if time.time() - last < live.MIN_SECONDS_BETWEEN - 5:  # a little slack for slow networks
+        return jsonify(error="Checking too often. Tripwire waits at least a minute between checks."), 429
+    session["live_last_check"] = time.time()
+    try:
+        return jsonify(live.check(url, data.get("previous")))
+    except sources.SourceError as exc:
+        return jsonify(error=str(exc)), 502
 
 
 # -- changes ------------------------------------------------------------------

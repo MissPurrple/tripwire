@@ -14,7 +14,7 @@
                         ('change_list', 'Changes', ['change_list', 'entry']),
                         ('book_list', 'Books', ['book_list', 'book_comparison', 'book_job']),
                         ('stats_page', 'Stats', ['stats_page'])] %}
-  {% set more_links = [('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Weekly summary', ['summary']),
+  {% set more_links = [('live_watch', 'Live watch', ['live_watch']), ('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Weekly summary', ['summary']),
                         ('about', 'About Tripwire', ['about'])] + ([('feedback_inbox', 'Feedback inbox', ['feedback_inbox'])] if is_admin else []) %}
   <header class="top {{ self.main_class() }}">
     <a class="brand" href="{{ url_for('home') }}">Tripwire<span class="cursor" aria-hidden="true"></span></a>

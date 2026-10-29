@@ -526,3 +526,13 @@ textarea { font: inherit; width: 100%; padding: 8px 10px; border: 2px solid var(
 .inline-rabbit { vertical-align: -4px; }
 .stats > div strong { font-family: var(--font-pixel); font-weight: 400; font-size: 2.2rem; }
 .stats > div span { font-family: var(--font-mono); font-size: .8rem; }
+
+/* Live watch */
+.live-form { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; align-items: end; }
+.live-form .check, .live-form .actions { grid-column: 1 / -1; }
+@media (max-width: 640px) { .live-form { grid-template-columns: 1fr; } }
+.live-screen-wrap { margin: 16px 0; }
+.live-screen { min-height: 260px; max-height: 520px; overflow-y: auto; border-radius: 12px; font-size: 1.15rem; }
+.live-entry { border-top: 1px dashed var(--phosphor-dim); padding: 8px 0; }
+.live-entry .added { color: var(--phosphor-soft); }
+.live-entry .removed { text-decoration: line-through; }

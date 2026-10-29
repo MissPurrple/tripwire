@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Live watch · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>Live watch</h1>
+  <p>For pages that change by the minute, like a live news page. Keep this page open, and Tripwire checks for you,
+     beeps when something new appears, and shows you what changed. Nothing is saved: it's just for now.</p>
+</section>
+
+<section class="theme">
+  <h2>Watch a page</h2>
+  <form id="live-form" class="live-form" data-no-loading>
+    <label>Link
+      <input name="url" type="url" required placeholder="e.g. https://www.bbc.com/news/live/…">
+    </label>
+    <label>Check every
+      <select name="every">
+        <option value="60">1 minute</option>
+        <option value="120" selected>2 minutes</option>
+        <option value="300">5 minutes</option>
+      </select>
+    </label>
+    <label>For
+      <select name="for">
+        <option value="30">30 minutes</option>
+        <option value="60" selected>1 hour</option>
+        <option value="120">2 hours</option>
+        <option value="180">3 hours</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" name="sound" checked> Beep when it changes</label>
+    <div class="actions">
+      <button id="live-start">Start watching</button>
+      <button type="button" id="live-stop" class="secondary-button" hidden>Stop</button>
+      <button type="button" id="live-notify" class="link">Also show a notification</button>
+    </div>
+  </form>
+</section>
+
+<section class="live-screen-wrap">
+  <div class="screen live-screen" id="live-screen" aria-live="polite">
+    <p class="screen-line dim" id="live-status">LIVE WATCH READY. Paste a link above and press Start.</p>
+    <div id="live-log"></div>
+  </div>
+  <p class="meta">Tripwire ignores bits that change on every visit (like “5 minutes ago”), so it only beeps for real updates.
+    It checks at most once a minute, to be kind to the websites it watches.</p>
+</section>
+
+<script>
+(function () {
+  var form = document.getElementById("live-form"), log = document.getElementById("live-log");
+  var status = document.getElementById("live-status"), start = document.getElementById("live-start");
+  var stop = document.getElementById("live-stop"), notifyButton = document.getElementById("live-notify");
+  var timer = null, countdown = null, previous = null, url = "", every = 120, endsAt = 0, unseen = 0;
+  var baseTitle = document.title;
+
+  function now() { return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+  function setStatus(text) { status.textContent = text; }
+
+  function beep() {  // a short, old-computer square-wave beep
+    if (!form.elements.sound.checked) return;
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)(), osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = "square"; osc.frequency.value = 880; gain.gain.value = 0.06;
+      osc.connect(gain); gain.connect(ctx.destination); osc.start();
+      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.12); osc.stop(ctx.currentTime + 0.25);
+    } catch (e) {}
+  }
+
+  function addEntry(lines, kind) {
+    var entry = document.createElement("div");
+    entry.className = "live-entry " + (kind || "");
+    lines.forEach(function (line) { entry.appendChild(line); });
+    log.insertBefore(entry, log.firstChild);
+    return entry;
+  }
+  function line(text, cls) { var p = document.createElement("p"); p.className = "screen-line " + (cls || ""); p.textContent = text; return p; }
+
+  function showChange(result) {
+    var lines = [line("[" + now() + "] UPDATE: " + result.added + " words added, " + result.removed + " removed", "")];
+    result.hunks.slice(0, 8).forEach(function (h) {
+      if (h.added) lines.push(line("+ " + h.added, "soft added"));
+      else if (h.removed) lines.push(line("- " + h.removed, "dim removed"));
+    });
+    var entry = addEntry(lines, "changed");
+    window.Tripwire.type(entry, 12);
+    beep();
+    unseen++;
+    if (document.hidden) document.title = "(" + unseen + ") Update · " + baseTitle;
+    if (window.Notification && Notification.permission === "granted") {
+      new Notification("Tripwire: the page changed", { body: (result.hunks[0] && (result.hunks[0].added || result.hunks[0].removed) || "").slice(0, 140) });
+    }
+  }
+
+  function check() {
+    if (Date.now() > endsAt) { finish("TIME'S UP. Live watch ended."); return; }
+    setStatus("CHECKING " + url + " …");
+    fetch("{{ url_for('live_check') }}", {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: url, previous: previous })
+    }).then(function (r) { return r.json(); }).then(function (result) {
+      if (result.error) { addEntry([line("[" + now() + "] " + result.error, "dim")]); }
+      else if (result.gone) { addEntry([line("[" + now() + "] THE PAGE IS GONE (not found).", "big")]); beep(); finish("Live watch ended: the page no longer exists."); return; }
+      else {
+        if (previous === null) addEntry([line("[" + now() + "] Watching. First copy taken: " + result.text.split(/\s+/).length + " words.", "dim")]);
+        else if (result.changed) showChange(result);
+        previous = result.text;
+      }
+      schedule();
+    }).catch(function () { addEntry([line("[" + now() + "] Couldn't reach Tripwire. Trying again next time.", "dim")]); schedule(); });
+  }
+
+  function schedule() {
+    var next = Date.now() + every * 1000;
+    clearInterval(countdown);
+    countdown = setInterval(function () {
+      var left = Math.max(0, Math.round((next - Date.now()) / 1000));
+      var mins = Math.max(0, Math.round((endsAt - Date.now()) / 60000));
+      setStatus("WATCHING " + url + " · next check in " + left + "s · " + mins + " min left");
+    }, 1000);
+    timer = setTimeout(check, every * 1000);
+  }
+
+  function finish(message) {
+    clearTimeout(timer); clearInterval(countdown); timer = null;
+    setStatus(message); start.hidden = false; stop.hidden = true;
+    form.querySelectorAll("input, select").forEach(function (el) { el.disabled = false; });
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    url = form.elements.url.value.trim(); every = +form.elements.every.value;
+    endsAt = Date.now() + form.elements["for"].value * 60000; previous = null; log.innerHTML = "";
+    start.hidden = true; stop.hidden = false;
+    form.querySelectorAll("input:not([name=sound]), select").forEach(function (el) { el.disabled = true; });
+    check();
+  });
+  stop.addEventListener("click", function () { finish("STOPPED. Live watch ended."); });
+  notifyButton.addEventListener("click", function () {
+    if (!window.Notification) { notifyButton.textContent = "This browser can't show notifications"; return; }
+    Notification.requestPermission().then(function (p) {
+      notifyButton.textContent = p === "granted" ? "Notifications are on" : "Notifications are off (allow them in your browser)";
+    });
+  });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { unseen = 0; document.title = baseTitle; } });
+})();
+</script>
+{% endblock %}

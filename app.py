@@ -16,10 +16,11 @@ import time
 from urllib.parse import urlparse
 
 from flask import Flask, Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.exceptions import HTTPException
 
 from tripwire import before, books, changes, charts, db, humancheck, i18n, live, mailer, shelf, sources, stats
-from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, Tripwire
+from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, TooManyTries, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
 
@@ -50,6 +51,23 @@ def tw():
 def close_db(_exc):
     if "tw" in g:
         g.tw.conn.close()
+
+
+@app.before_request
+def same_site_forms_only():
+    """Refuse forms sent from another website. Otherwise a page elsewhere could quietly send a
+    Tripwire form on a visitor's behalf (log them out, delete things...). Browsers stamp every
+    form they send with where it came from (Sec-Fetch-Site and Origin); Tripwire checks the stamp."""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    fetch_site = request.headers.get("Sec-Fetch-Site")
+    if fetch_site:  # every modern browser: its own verdict, nothing to compare
+        if fetch_site not in ("same-origin", "none"):
+            abort(403)
+        return
+    origin = request.headers.get("Origin")  # older browsers: compare where the form came from
+    if origin and (origin == "null" or urlparse(origin).netloc != request.host):
+        abort(403)
 
 
 @app.before_request
@@ -231,6 +249,7 @@ def signup():
             else:
                 session.clear()
                 session.update(user_id=user_id, human_after_all=True, intro_seen=True)
+                send_confirmation(tw().user(user_id), quietly=True)
                 return redirect(url_for("welcome"))
     challenge = session.get("human_check") if _human_ok() else None
     if not _human_ok():
@@ -275,7 +294,12 @@ def account():
 def delete_account():
     """The right to leave: the account and everything in it, gone. The password is asked
     again so nobody can do this with a borrowed, still-open browser."""
-    if request.form.get("sure") != "yes" or not tw().log_in(g.user["email"], request.form.get("password", "")):
+    try:
+        right_password = tw().log_in(g.user["email"], request.form.get("password", ""))
+    except TooManyTries as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("account"))
+    if request.form.get("sure") != "yes" or not right_password:
         flash("That password doesn't match, so nothing was deleted.", "error")
         return redirect(url_for("account"))
     tw().delete_user(uid())
@@ -296,7 +320,11 @@ def welcome():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        user = tw().log_in(request.form.get("email", ""), request.form.get("password", ""))
+        try:
+            user = tw().log_in(request.form.get("email", ""), request.form.get("password", ""))
+        except TooManyTries as exc:
+            flash(str(exc), "error")
+            return render_template("auth.html", mode="login")
         if user:
             if g.guest:  # things added before logging in move into the account
                 tw().merge_guest(uid(), user["id"])
@@ -943,6 +971,61 @@ def send_weekly_summary(user):
     tw().mark_summary_sent(user["id"])
 
 
+# -- confirming an email address: nothing is ever emailed to an address its owner hasn't confirmed,
+#    so nobody can sign a stranger up and have Tripwire fill their inbox.
+
+CONFIRM_DAYS = 3
+
+
+def _confirm_signer():
+    return URLSafeTimedSerializer(app.secret_key, salt="confirm-email")
+
+
+def send_confirmation(user, quietly=False):
+    """Email a "confirm your address" link. At most once every few minutes per account."""
+    if not mailer.configured() or user["email_confirmed_at"]:
+        return
+    if not tw().can_send_confirmation(user):
+        if not quietly:
+            flash(f"One was sent in the last {Tripwire.CONFIRM_RESEND_MINUTES} minutes. Check your inbox (and spam).", "error")
+        return
+    link = site_url() + url_for("confirm_email", token=_confirm_signer().dumps({"id": user["id"], "email": user["email"]}))
+    try:
+        mailer.send(user["email"], "Tripwire: please confirm your email address",
+                    render_template("emails/confirm.txt", link=link, days=CONFIRM_DAYS),
+                    render_template("emails/confirm.html", link=link, days=CONFIRM_DAYS))
+    except mailer.MailError as exc:
+        if not quietly:
+            flash(str(exc), "error")
+        return
+    tw().mark_confirmation_sent(user["id"])
+    if not quietly:
+        flash(f"Sent to {user['email']}. Open the link in it to confirm (check spam if it doesn't arrive).")
+
+
+@app.post("/confirm/send")
+@account_required("get summaries by email")
+def send_confirmation_again():
+    send_confirmation(g.user)
+    return redirect(url_for("summary"))
+
+
+@app.route("/confirm/<token>", methods=["GET", "POST"])
+def confirm_email(token):
+    """The link from the email. It opens a page with a button (rather than confirming straight
+    away), because some email services open links by themselves to check them."""
+    try:
+        data = _confirm_signer().loads(token, max_age=CONFIRM_DAYS * 86400)
+    except BadSignature:
+        return render_template("confirm.html", state="bad", days=CONFIRM_DAYS)
+    if request.method == "POST":
+        if tw().confirm_email(data.get("id"), data.get("email")):
+            flash("Thank you: your email address is confirmed. Summary emails can now reach you.")
+            return redirect(url_for("summary") if g.user and g.user["id"] == data.get("id") else url_for("home"))
+        return render_template("confirm.html", state="bad", days=CONFIRM_DAYS)
+    return render_template("confirm.html", state="ask", email=data.get("email", ""), token=token)
+
+
 @app.post("/summary/email")
 @account_required("get summaries by email")
 def summary_email_setting():
@@ -960,6 +1043,9 @@ def summary_email_setting():
 @account_required("get summaries by email")
 def summary_send_now():
     """Send the summary straight away (handy for a demo). At most once every 2 minutes."""
+    if not g.user["email_confirmed_at"]:
+        flash("Confirm your email address first (the button is on this page).", "error")
+        return redirect(url_for("summary"))
     if time.time() - session.get("summary_sent_now", 0) < 120:
         flash("One just went out. Give it a couple of minutes before sending another.", "error")
         return redirect(url_for("summary"))

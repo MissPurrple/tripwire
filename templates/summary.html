@@ -12,6 +12,14 @@
   {% if not g.user or is_guest %}
     <p>Want this in your inbox, so you don't have to come and look? <a href="{{ url_for('signup') }}">Make an account</a>
        and choose daily, weekly or monthly. Everything you've added so far comes with you.</p>
+  {% elif email_ready and not g.user.email_confirmed_at %}
+    <p class="privacy-note"><strong>First, confirm your email address.</strong> Tripwire never emails an address its owner
+      hasn't confirmed, so nobody can sign a stranger up and fill their inbox. We sent a link when you made your account;
+      if it didn't arrive (check spam) or has expired, ask for a new one.</p>
+    <form method="post" action="{{ url_for('send_confirmation_again') }}">
+      <button>Send me the confirmation email</button>
+    </form>
+    <p class="meta">You can choose daily, weekly or monthly once it's confirmed.</p>
   {% elif email_ready %}
     <p>Tripwire can email you this summary, so you don't have to come and look. You choose how often; never more than that.</p>
     <form method="post" action="{{ url_for('summary_email_setting') }}" class="email-toggle">

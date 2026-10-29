@@ -1,0 +1,11 @@
+TRIPWIRE · PLEASE CONFIRM YOUR EMAIL ADDRESS
+
+Someone (hopefully you) made a Tripwire account with this email address.
+To let Tripwire send you summaries, open this link and press Confirm:
+
+{{ link }}
+
+The link works for {{ days }} days.
+
+Didn't make a Tripwire account? Ignore this email. Nothing more will be sent
+to this address unless it's confirmed.

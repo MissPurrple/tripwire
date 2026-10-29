@@ -127,6 +127,10 @@ The books-published numbers need no setup. They come from Open Library and fill 
 
 *With Proton Mail (needs a Proton address on your own custom domain):* in Proton Mail, go to **Settings → All settings → Proton Mail → IMAP/SMTP → SMTP tokens → Generate token**. Name it `Tripwire`, choose your custom-domain address, click **Generate**, enter your Proton password, and copy the token (it's only shown once). Then use `SMTP_HOST` = `smtp.protonmail.ch`, `SMTP_PORT` = `587`, `SMTP_USER` = that address (e.g. `you@yourdomain.org`), `SMTP_PASSWORD` = the token, `MAIL_FROM` = `Tripwire <you@yourdomain.org>`. To stop Tripwire sending, delete the token in Proton.
 
+*Or with Gmail (free, no domain needed):* best with a new Gmail address just for Tripwire. In that Google account, turn on **2-Step Verification** (myaccount.google.com → Security), then open **myaccount.google.com/apppasswords**, name it `Tripwire`, click **Create**, and copy the 16-letter password (only shown once; leave out the spaces). Use `SMTP_HOST` = `smtp.gmail.com`, `SMTP_PORT` = `587`, `SMTP_USER` = the Gmail address, `SMTP_PASSWORD` = the 16-letter app password, `MAIL_FROM` = `Tripwire <that address>`. Gmail sends up to about 500 emails a day. To stop Tripwire sending, delete the app password.
+
+New accounts get a "confirm your email" link first: Tripwire never emails an address its owner hasn't confirmed.
+
 *Or with Resend (resend.com, free tier):* create an API key; use `SMTP_HOST` = `smtp.resend.com`, `SMTP_USER` = `resend`, `SMTP_PASSWORD` = the API key. To email anyone, verify your own domain in Resend and send from it.
 
 Summaries go out during the daily run: daily ones every day, weekly ones on Mondays, monthly ones on the 1st. Each person chooses on the Summary page (daily, weekly, monthly or off), which also has an **Email it to me now** button. Visitors without an account don't get emails. Optional: `SITE_URL` (e.g. `https://tripwire.vercel.app`) sets the address used in email links.

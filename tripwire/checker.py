@@ -27,6 +27,13 @@ VIDEOS = "Videos"
 COPY_WORTHY = {"major", "removal", "page_removed"}
 
 
+class TooManyTries(ValueError):
+    """Logging in to an account is paused for a while after too many wrong passwords."""
+
+
+_DUMMY_HASH = generate_password_hash("not a real password")
+
+
 class Tripwire:
     def __init__(self, db_url=None):
         """db_url: a SQLite file path or a Postgres address (see db.py)."""
@@ -50,13 +57,50 @@ class Tripwire:
         return self.conn.insert("INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
                                 (email, password_hash, db.now()))
 
+    LOGIN_TRIES = 5            # wrong passwords in a row before an account's log-in pauses
+    LOGIN_PAUSE_MINUTES = 15
+
     def log_in(self, email, password):
-        """Returns the user if the email and password match, otherwise None."""
+        """Returns the user if the email and password match, otherwise None. After
+        LOGIN_TRIES wrong passwords, the account's log-in pauses (even for the right
+        password) so a bot can't keep guessing: raises TooManyTries."""
         user = self.conn.execute("SELECT * FROM users WHERE email = ? AND guest = 0",
                                  (email.strip().lower(),)).fetchone()
-        if user and check_password_hash(user["password_hash"], password):
+        if not user:
+            check_password_hash(_DUMMY_HASH, password)  # same time taken, so nobody learns which emails exist
+            return None
+        recent = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - self.LOGIN_PAUSE_MINUTES * 60))
+        recently_failed = bool(user["failed_login_at"]) and user["failed_login_at"] >= recent
+        if recently_failed and user["failed_logins"] >= self.LOGIN_TRIES:
+            raise TooManyTries(f"Too many wrong passwords for this account, so Tripwire has paused logging in to it "
+                               f"for {self.LOGIN_PAUSE_MINUTES} minutes to keep it safe. Please try again later.")
+        if check_password_hash(user["password_hash"], password):
+            if user["failed_logins"]:
+                self.conn.execute("UPDATE users SET failed_logins = 0, failed_login_at = NULL WHERE id = ?", (user["id"],))
             return user
+        self.conn.execute("UPDATE users SET failed_logins = ?, failed_login_at = ? WHERE id = ?",
+                          ((user["failed_logins"] if recently_failed else 0) + 1, db.now(), user["id"]))
         return None
+
+    # -- confirming an email address -----------------------------------------
+
+    CONFIRM_RESEND_MINUTES = 10  # so nobody can use Tripwire to flood a stranger's inbox
+
+    def can_send_confirmation(self, user):
+        since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - self.CONFIRM_RESEND_MINUTES * 60))
+        return not user["confirm_sent_at"] or user["confirm_sent_at"] < since
+
+    def mark_confirmation_sent(self, user_id):
+        self.conn.execute("UPDATE users SET confirm_sent_at = ? WHERE id = ?", (db.now(), user_id))
+
+    def confirm_email(self, user_id, email):
+        """True if this is still the account's address (and it's now confirmed)."""
+        user = self.user(user_id)
+        if not user or user["email"] != email or user["guest"]:
+            return False
+        if not user["email_confirmed_at"]:
+            self.conn.execute("UPDATE users SET email_confirmed_at = ? WHERE id = ?", (db.now(), user_id))
+        return True
 
     # -- guests: trying Tripwire without an account --------------------------
 
@@ -599,7 +643,8 @@ class Tripwire:
         monthly ones on the 1st (all times UTC)."""
         today = time.gmtime()
         due = []
-        for user in self.conn.execute("SELECT * FROM users WHERE guest = 0 ORDER BY id").fetchall():
+        for user in self.conn.execute("""SELECT * FROM users WHERE guest = 0 AND email_confirmed_at IS NOT NULL
+                                         ORDER BY id""").fetchall():
             every = self.summary_every(user)
             if every == "off" or (every == "weekly" and today.tm_wday != 0) or (every == "monthly" and today.tm_mday != 1):
                 continue

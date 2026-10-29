@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Confirm your email · Tripwire{% endblock %}
+{% block content %}
+<section class="theme auth">
+  {% if state == 'ask' %}
+    <h1>Confirm your email</h1>
+    <p>Is <strong>{{ email }}</strong> your email address, and are you happy for Tripwire to send summaries to it?
+       (You choose how often, and can switch them off any time.)</p>
+    <form method="post" action="{{ url_for('confirm_email', token=token) }}">
+      <button>Yes, confirm it</button>
+    </form>
+    <p class="meta">Not you? Just close this page. Nothing will be sent to this address.</p>
+  {% else %}
+    <h1>That link doesn't work</h1>
+    <p>It may be more than {{ days }} days old, or copied only partly. Log in, open <a href="{{ url_for('summary') }}">Summary</a>,
+       and ask for a new one.</p>
+  {% endif %}
+</section>
+{% endblock %}

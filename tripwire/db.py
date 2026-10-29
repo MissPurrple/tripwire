@@ -167,6 +167,10 @@ ADDED_COLUMNS = [
     ("users", "guest", "INTEGER NOT NULL DEFAULT 0"),           # 1 = a visitor without an account (yet)
     ("users", "summary_every", "TEXT"),                         # 'daily', 'weekly', 'monthly' or 'off';
                                                                 # empty = older accounts: follow weekly_email
+    ("users", "failed_logins", "INTEGER NOT NULL DEFAULT 0"),   # wrong passwords in a row (see log_in)
+    ("users", "failed_login_at", "TEXT"),                       # when the last wrong one was
+    ("users", "email_confirmed_at", "TEXT"),                    # no summary emails until the address is confirmed
+    ("users", "confirm_sent_at", "TEXT"),                       # when the last "confirm your email" went out
 ]
 
 

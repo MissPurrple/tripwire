@@ -4,6 +4,7 @@ These never touch the internet: Wikipedia and web pages are replaced by small
 pretend versions whose content the tests control."""
 
 import os
+import re
 import time
 import tempfile
 import unittest
@@ -406,6 +407,26 @@ class WebAppTests(CheckerTests):
         page = self.client.post("/live/check", json={"url": "http://127.0.0.1:5000/"})
         self.assertEqual(page.status_code, 502)
         self.assertIn("private network", page.json["error"])
+
+    def test_too_many_wrong_passwords_pause_logging_in(self):
+        for _ in range(5):
+            self.assertIn(b"don&#39;t match", self.log_in(password="wrong guess").data)
+        page = self.log_in().data.decode()  # even the right password waits
+        self.assertIn("paused logging in", page)
+        self.tw.conn.execute("UPDATE users SET failed_login_at = '2020-01-01T00:00:00Z'")  # 15 minutes later
+        self.assertIn("WELCOME BACK", self.log_in().data.decode())
+        self.assertEqual(self.tw.user(self.user)["failed_logins"], 0)
+
+    def test_forms_from_other_websites_are_refused(self):
+        self.log_in()
+        self.assertEqual(self.client.post("/themes", data={"name": "X"}, headers={"Sec-Fetch-Site": "cross-site"}).status_code, 403)
+        self.assertEqual(self.client.post("/logout", headers={"Origin": "https://evil.example"}).status_code, 403)
+        self.assertEqual(self.client.post("/logout", headers={"Origin": "null"}).status_code, 403)
+        self.assertIn("WELCOME BACK", self.client.get("/").data.decode())  # still logged in
+        ok = self.client.post("/themes", data={"name": "Language"}, headers={"Sec-Fetch-Site": "same-origin"})
+        self.assertEqual(ok.status_code, 302)
+        ok = self.client.post("/themes", data={"name": "Memory"}, headers={"Origin": "http://localhost"})
+        self.assertEqual(ok.status_code, 302)
 
     def test_old_guests_are_tidied_away(self):
         self.client.post("/single-links", data={"target": "Warli"})
@@ -1240,6 +1261,7 @@ class EmailAndAboutTests(CheckerTests):
         webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
         self.client = webapp.app.test_client()
         self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+        self.tw.confirm_email(self.user, "purple@example.org")  # most email tests start with a confirmed address
         FakeSMTP.sent = []
         smtp = mock.patch("smtplib.SMTP", FakeSMTP)
         smtp.start()
@@ -1327,6 +1349,32 @@ class EmailAndAboutTests(CheckerTests):
         body = FakeSMTP.sent[-1].get_body(("plain",)).get_content()
         self.assertIn("TRIPWIRE · DAILY SUMMARY", body)
         self.assertIn("You get this every day", body)
+
+    def test_nothing_is_emailed_until_the_address_is_confirmed(self):
+        import app as webapp
+        self.make_a_change()
+        stranger = self.tw.create_user("stranger@example.org", "a long password")
+        with mock.patch.dict(os.environ, EMAIL_SETTINGS):
+            monday = time.struct_time((2026, 11, 2, 3, 17, 0, 0, 306, 0))
+            with mock.patch("time.gmtime", side_effect=lambda *a: monday if not a else time.struct_time(time.localtime(a[0]))):
+                self.assertNotIn(stranger, [u["id"] for u in self.tw.users_due_summary()])  # never confirmed
+            # Signing up sends one "confirm your email" message, and no more for a while.
+            visitor = webapp.app.test_client()
+            visitor.post("/login", data={"email": "stranger@example.org", "password": "a long password"})
+            self.assertIn("First, confirm your email address", visitor.get("/summary").data.decode())
+            self.assertIn("confirm your email", visitor.post("/summary/send", follow_redirects=True).data.decode())
+            visitor.post("/confirm/send")
+            visitor.post("/confirm/send")
+            confirmations = [m for m in FakeSMTP.sent if m["To"] == "stranger@example.org"]
+            self.assertEqual(len(confirmations), 1)
+            link = re.search(r"https?://\S+/confirm/\S+", confirmations[0].get_body(("plain",)).get_content()).group(0)
+            path = link.split("localhost", 1)[1]
+            # Opening the link only asks; nothing is confirmed until the button is pressed.
+            self.assertIn("Yes, confirm it", visitor.get(path).data.decode())
+            self.assertIsNone(self.tw.user(stranger)["email_confirmed_at"])
+            visitor.post(path)
+            self.assertIsNotNone(self.tw.user(stranger)["email_confirmed_at"])
+            self.assertIn("That link doesn't work", visitor.get(path[:-3] + "xyz").data.decode())  # a tampered link
 
     def test_older_accounts_keep_their_weekly_switch(self):
         self.tw.conn.execute("UPDATE users SET summary_every = NULL, weekly_email = 0")

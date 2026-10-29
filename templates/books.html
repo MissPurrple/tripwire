@@ -11,7 +11,7 @@
 <noscript><style>.intro-overlay { display: none; }</style></noscript>
 <script>
 (function () {
-  // A forced pause: at least 2 seconds, and until the words have finished typing.
+  // A forced pause: the words type out, then stay for 3 full seconds (at least 5 seconds in all).
   var overlay = document.getElementById("intro"), started = Date.now();
   document.documentElement.classList.add("intro-lock");
   function begin() {
@@ -23,7 +23,7 @@
         overlay.classList.add("leaving");
         document.documentElement.classList.remove("intro-lock");
         setTimeout(function () { overlay.remove(); }, 500);
-      }, Math.max(400, 2000 - (Date.now() - started)));
+      }, Math.max(3000, 5000 - (Date.now() - started)));
     });
   }
   if (window.Tripwire && window.Tripwire.type) begin(); else document.addEventListener("DOMContentLoaded", begin);

@@ -263,3 +263,17 @@ Purple's answers to Claude's questions: humans vs bots = **live from Cloudflare*
 > fix ... all the oranges. Those should be green ... Formatting needs to be consistent. It can't look like two different pages kind of trying to force themselves to live together.
 >
 > what if we turn it into a purple rabbit?
+
+## 14. Blind and visually impaired visitors, people who can't read, Hindi and Sesotho (29 Oct 2026)
+
+> How we've built this right now is with the assumption that everybody can see and read. I would like to have a blind person version or a visually impaired person version of this. Maybe when it comes on, it can prompt them to use visual impairment assistance, an audio assistant, or something like that.
+>
+> What I can do is incorporate access to an 11 Labs account. Maybe we can create a voice profile there using my voice, and it can read all the text on the site as needed and help a visually impaired person be able to get around. It will also be able to help, of course, people who cannot read.
+>
+> Since we're in India and Hindi has more information on it online, it could be cool if we can add a Hindi language option to it. By clicking that, it should give an alert that says, "This is still in building form. If you'd like to contribute to the Hindi translation of this site, please reach out or submit a pull request."
+>
+> This way, we can open source it and allow people to build on it and adapt it however is most useful, because I, as a singular individual from my own small community, cannot fully and truly know what other people in other communities need to preserve in terms of information and data, etc.
+>
+> I cannot speak Hindi, so I'm not sure if, with Eleven Labs, I can get it to be my voice but speaking Hindi ... We can just say that it's a work in progress ... For now, we need to finish our main tasks.
+>
+> I would like to be able to have a button where you can click and say "Hindi version" or "Sesotho version." This way, we open it up to more people.

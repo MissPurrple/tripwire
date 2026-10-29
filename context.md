@@ -105,4 +105,11 @@
 - Scanned PDFs: read in the visitor's browser (Tesseract + pdf.js served by Tripwire); only text uploaded. Tested with two scanned "gazettes": 4 pages read in 6.5 s, changes found.
 - Watching PDF links: text PDFs compared by words; scanned PDFs by fingerprint (replaced/removed noticed).
 - Brainstorm saved: archive-and-kiwix-ideas.md ("My shelf" + Kiwix ZIM export). Not built yet; Purple to choose.
-- Purple will edit some wording herself later ("too AI-facing").
+- Purple will edit some wording later ("too AI-facing").
+
+## Built 29 Oct (afternoon): access and languages
+- Access button (bottom-left of every page): read aloud, calm mode (no typing or flashing), bigger text, strong contrast. Saved per browser.
+- First visit asks: "Would you like Tripwire to read things aloud to you?" Screen readers get the full text even while it types.
+- Read aloud uses Purple's cloned ElevenLabs voice once ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID are set in Vercel (audio cached; per-visitor and daily caps); otherwise the device's own voice.
+- Language choice: English, draft Hindi, draft Sesotho (footer and Access panel). Choosing one shows Purple's "still in building form" notice. Drafts written by Claude, not yet checked by native speakers. Hindi audio: work in progress.
+- CONTRIBUTING.md explains how to translate. Open questions for Purple: which open-source licence, and making the repo public.

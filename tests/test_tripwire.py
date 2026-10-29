@@ -1643,7 +1643,8 @@ class ShelfTests(CheckerTests):
         self.assertTrue(zim.has_illustration(48))
         self.assertIn("Ha Mohale is renamed", bytes(zim.get_entry_by_path("items/0001-Gazette-12.html").get_item().content).decode())
         self.assertEqual(bytes(zim.get_entry_by_path("files/0002-scan.pdf").get_item().content)[:5], b"%PDF-")
-        found = list(Searcher(zim).search(Query().set_query("Semonkong")).getResults(0, 10))
+        search = Searcher(zim).search(Query().set_query("Semonkong"))
+        found = list((getattr(search, "get_results", None) or search.getResults)(0, 10))  # libzim 4 / libzim 3
         self.assertEqual(found, ["items/0002-scan.html"])  # searchable inside Kiwix
 
     def test_empty_shelf_still_downloads(self):

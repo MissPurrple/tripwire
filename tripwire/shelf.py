@@ -263,7 +263,10 @@ class Shelf:
             icon = f.read()
         with Creator(path).config_indexing(True, ZIM_LANGUAGES.get(lang, "eng")) as creator:
             creator.set_mainpath("index.html")
-            creator.add_illustration(48, icon)
+            try:
+                creator.add_illustration(icon, 48)   # libzim 4 and newer: the picture, then its size
+            except TypeError:
+                creator.add_illustration(48, icon)   # libzim 3: the size, then the picture
             for key, value in {"Name": f"tripwire_shelf_{safe_name(name, 'my-shelf').lower()}",
                                "Title": name[:30], "Language": ZIM_LANGUAGES.get(lang, "eng"),
                                "Description": f"{len(items)} documents and pages, kept with Tripwire"[:80],

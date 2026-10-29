@@ -1,4 +1,4 @@
-// The opening (templates/_intro.html): falling binary, TRIPWIRE typed out, REMEMBER EVERYTHING,
+// The opening (templates/_intro.html): falling binary, TRIPWIRE typed out, ARCHIVE & PRESERVE,
 // and the purple rabbit hopping in like Pixar's lamp: crouch, stretch, land, squash, look at you.
 // "Trip the wires" floods the screen with binary, plays Purple's welcome (if there is a
 // recording at public/static/audio/welcome.mp3; without one it stays quiet), then fades away to show the computer.

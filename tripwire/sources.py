@@ -5,11 +5,13 @@ Everything that touches the network lives here, so the rest of Tripwire can be
 tested without an internet connection.
 """
 
+import ipaddress
 import json
 import re
+import socket
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import quote, unquote, urljoin, urlparse
 
 import requests
 
@@ -22,13 +24,83 @@ class SourceError(Exception):
     """Something went wrong fetching a source (offline, blocked, not found...)."""
 
 
+MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024  # one download; anything bigger is refused, not read
+MAX_REDIRECTS = 5
+
+
+def _check_public(url):
+    """Only ordinary web links to the public internet. Links that point inside a private
+    network (the server itself, Vercel's machinery, a home router) are refused, so nobody
+    can use Tripwire to reach places they couldn't reach themselves."""
+    parts = urlparse(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise SourceError("Tripwire only opens ordinary web links (starting with http:// or https://).")
+    try:
+        found = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80),
+                                   proto=socket.IPPROTO_TCP)
+    except (socket.gaierror, UnicodeError, ValueError) as exc:
+        if requests.utils.get_environ_proxies(url) and not _looks_like_address(parts.hostname):
+            return  # behind a proxy (some offices, some laptops): the proxy looks the name up, not us
+        raise SourceError(f"Couldn't find {parts.hostname}. Check the link, or try again later.") from exc
+    for *_, address in found:
+        ip = ipaddress.ip_address(address[0].split("%")[0])
+        if ip.version == 6 and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        if not ip.is_global:
+            raise SourceError("That link points inside a private network, so Tripwire won't open it.")
+
+
+def _looks_like_address(host):
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
 def _get(url, **kwargs):
+    """Fetch a link. Every hop of a redirect is checked with _check_public, and a download
+    stops at MAX_DOWNLOAD_BYTES. With stream=True the caller reads (and limits) it itself."""
     kwargs.setdefault("timeout", TIMEOUT)
+    stream = kwargs.pop("stream", False)
     headers = {"User-Agent": USER_AGENT, **kwargs.pop("headers", {})}
     try:
-        return requests.get(url, headers=headers, **kwargs)
+        for _ in range(MAX_REDIRECTS + 1):
+            _check_public(url)
+            response = requests.get(url, headers=headers, allow_redirects=False, stream=True, **kwargs)
+            location = response.headers.get("Location")
+            if not (response.is_redirect and location):
+                break
+            response.close()
+            following = urljoin(response.url, location)
+            if urlparse(following).hostname != urlparse(url).hostname:
+                headers.pop("Authorization", None)  # a password for one site is never sent to another
+            url = following
+            kwargs.pop("params", None)  # they belonged to the first address
+        else:
+            raise SourceError("That link sends Tripwire round in circles (too many redirects).")
+        if not stream:
+            _read_limited(response)
+        return response
     except requests.RequestException as exc:
         raise SourceError(f"Couldn't reach {urlparse(url).netloc}. Check the link, or try again later.") from exc
+
+
+def _read_limited(response):
+    too_big = SourceError(f"That's too big for Tripwire to fetch (over {MAX_DOWNLOAD_BYTES // 1048576} MB).")
+    length = response.headers.get("Content-Length", "")
+    if length.isdigit() and int(length) > MAX_DOWNLOAD_BYTES:
+        response.close()
+        raise too_big
+    chunks, total = [], 0
+    for chunk in response.iter_content(64 * 1024):
+        total += len(chunk)
+        if total > MAX_DOWNLOAD_BYTES:
+            response.close()
+            raise too_big
+        chunks.append(chunk)
+    response._content = b"".join(chunks)  # from here on it behaves like an ordinary, fully read response
+    response._content_consumed = True
 
 
 # ---------------------------------------------------------------------------

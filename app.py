@@ -63,9 +63,31 @@ def load_user():
     g.guest = bool(g.user and g.user["guest"])
 
 
+def safe_next(target, default):
+    """Only ever a page on this site. Refuses tricks like //other.site or /\\other.site
+    (browsers read a backslash as a slash) and hidden control characters."""
+    if (target.startswith("/") and not target.startswith(("//", "/\\"))
+            and not any(c == "\\" or ord(c) < 32 for c in target)):
+        return target
+    return default
+
+
 def uid():
     """The visitor's id: their account, their guest visit, or 0 (nothing added yet, so nothing to show)."""
     return g.user["id"] if g.user else 0
+
+
+@app.after_request
+def protective_headers(response):
+    """Ask browsers for the safe behaviour: no showing Tripwire inside other sites' frames
+    (a trick to make people click things), no guessing file types, no telling other sites
+    which Tripwire page someone came from, and no camera, microphone or location."""
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    return response
 
 
 # Plain-words pages for "not found" and other errors, in the site's own style.
@@ -103,12 +125,20 @@ def server_error(error):
                            message="Tripwire hit an unexpected problem. Nothing you did caused it."), 500
 
 
+# Bots could otherwise make endless guest visits and fill the database. This counts guest
+# visits for the whole site (nobody is tracked); people with an account are never affected.
+GUESTS_PER_HOUR = int(os.environ.get("GUESTS_PER_HOUR", "300"))
+
+
 def saves_things(view):
     """No account needed: the first time a visitor saves something, Tripwire starts a
     guest visit for them. It lasts until they close the browser, unless they make an account."""
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
         if g.user is None and request.method == "POST":
+            if tw().guests_this_hour() >= GUESTS_PER_HOUR:
+                flash("Lots of visitors are trying Tripwire right now. Make an account (it's free) to carry on.", "error")
+                return redirect(url_for("signup"))
             session["user_id"] = tw().create_guest()
             g.user, g.guest = tw().user(session["user_id"]), True
         return view(*args, **kwargs)
@@ -136,7 +166,7 @@ def set_language(code):
     if code not in i18n.LANGUAGES:
         abort(404)
     target = request.args.get("next", "")
-    response = redirect(target if target.startswith("/") and not target.startswith("//") else url_for("home"))
+    response = redirect(safe_next(target, url_for("home")))
     response.set_cookie("lang", code, max_age=365 * 86400, samesite="Lax", secure=ON_VERCEL)
     if code != i18n.DEFAULT:
         session["language_popup"] = code
@@ -167,7 +197,7 @@ def helpers():
 def back_to(default="change_list"):
     """Where to go after Keep/Disregard. Only ever a page on this site."""
     target = request.form.get("next", "")
-    return target if target.startswith("/") and not target.startswith("//") else url_for(default)
+    return safe_next(target, url_for(default))
 
 
 # -- accounts ---------------------------------------------------------------
@@ -222,6 +252,37 @@ def human_check():
     challenge = _new_human_check()  # a wrong answer always gets a new question, so guessing doesn't help
     return jsonify(passed=False, message=message, question=challenge["question"], salt=challenge["salt"],
                    bits=challenge["bits"])
+
+
+@app.get("/account")
+@account_required("see and manage your account")
+def account():
+    conn, user_id = tw().conn, uid()
+    def count(sql):
+        return conn.execute(sql, (user_id,)).fetchone()["n"]
+    counts = {"watching": count("SELECT COUNT(*) AS n FROM watches w JOIN themes t ON t.id = w.theme_id WHERE t.user_id = ?"),
+              "changes": count("""SELECT COUNT(*) AS n FROM entries e JOIN watches w ON w.id = e.watch_id
+                                  JOIN themes t ON t.id = w.theme_id WHERE t.user_id = ?"""),
+              "shelf": count("SELECT COUNT(*) AS n FROM shelf_items WHERE user_id = ?"),
+              "books": count("SELECT COUNT(*) AS n FROM book_comparisons WHERE user_id = ?")}
+    every = Tripwire.summary_every(g.user)
+    return render_template("account.html", counts=counts,
+                           every="off" if every == "off" else f"{every} ({SUMMARY_WHEN[every]})")
+
+
+@app.post("/account/delete")
+@account_required("manage your account")
+def delete_account():
+    """The right to leave: the account and everything in it, gone. The password is asked
+    again so nobody can do this with a borrowed, still-open browser."""
+    if request.form.get("sure") != "yes" or not tw().log_in(g.user["email"], request.form.get("password", "")):
+        flash("That password doesn't match, so nothing was deleted.", "error")
+        return redirect(url_for("account"))
+    tw().delete_user(uid())
+    session.clear()
+    session["intro_seen"] = True
+    flash("Your account and everything in it have been deleted. Thank you for using Tripwire.")
+    return redirect(url_for("home"))
 
 
 @app.get("/welcome")

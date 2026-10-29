@@ -24,6 +24,7 @@ from . import books, db, sources
 
 MAX_FILE_BYTES = 15 * 1024 * 1024    # one original file kept from a link
 MAX_SHELF_BYTES = 60 * 1024 * 1024   # everything on one person's shelf
+GUEST_SHELF_BYTES = 10 * 1024 * 1024  # the same, for a visitor without an account (so bots can't fill the database)
 MAX_TEXT_CHARS = 2_000_000           # the words of one item (a long book is about 1 million)
 LIST_COLUMNS = ["id", "user_id", "title", "note", "source_url", "file_name", "file_size", "text_from",
                 "watch_id", "before_check_id", "created_at"]
@@ -92,6 +93,11 @@ class Shelf:
     # -- adding ---------------------------------------------------------------
 
     def _check_room(self, user_id, size):
+        guest = self.conn.execute("SELECT guest FROM users WHERE id = ?", (user_id,)).fetchone()
+        if guest and guest["guest"]:
+            if self.used_bytes(user_id) + size > GUEST_SHELF_BYTES:
+                raise ShelfError(f"Without an account, a shelf holds up to {GUEST_SHELF_BYTES // 1048576} MB. "
+                                 f"Make an account (it's free) for {MAX_SHELF_BYTES // 1048576} MB.")
         if self.used_bytes(user_id) + size > MAX_SHELF_BYTES:
             raise ShelfError(f"Your shelf is full (it holds up to {MAX_SHELF_BYTES // 1048576} MB). "
                              "Download it to keep everything, then remove a few big items to make room.")

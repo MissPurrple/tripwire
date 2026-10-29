@@ -647,3 +647,8 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
 .intro-skip:hover, .intro-skip:focus-visible { opacity: 1; text-decoration: underline; }
 .tw-intro.tripped .intro-skip { display: none; }
 @media (prefers-reduced-motion: reduce) { .tw-intro, .trip-button, .intro-hint, .intro-stage { transition: none; } }
+
+/* Privacy: the honest warning, and deleting an account */
+.privacy-note { font-size: .9rem; padding: 10px 14px; border-left: 4px solid var(--accent); background: var(--bg); margin: 12px 0 0; }
+.danger-zone { border-color: var(--removal); }
+.danger-button { background: var(--removal); color: #fff; }

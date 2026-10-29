@@ -135,6 +135,8 @@ Summaries go out during the daily run: daily ones every day, weekly ones on Mond
 
 **Feedback inbox (optional):** add `ADMIN_EMAILS` with your own account's email. Then **More → Feedback inbox** shows what testers wrote in the About page's feedback box. Nobody else can see it.
 
+**Visitors without an account (optional setting):** anyone can try Tripwire without signing up. To stop bots flooding the database, at most 300 new guest visits a hour are allowed across the whole site (nobody is tracked to do this); after that, visitors are asked to make an account. Change the number with a `GUESTS_PER_HOUR` setting. Guests' shelves hold 10 MB, and their things are deleted 3 days after their visit.
+
 **Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
 
 **My shelf and Kiwix:** no setup needed. My shelf keeps people's own copies (up to 60 MB each, in the database). "Take my shelf with me" downloads it as a ZIP (open `index.html` in any browser) or a ZIM file for **[Kiwix](https://kiwix.org/en/)**, the free app that reads whole libraries offline. Then and now reads older Wikipedia articles from library.kiwix.org and older web pages from the Internet Archive.

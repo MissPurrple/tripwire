@@ -104,6 +104,16 @@ class Tripwire:
             self.conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id = ?", (user_id, guest_id))
         self.conn.execute("DELETE FROM users WHERE id = ?", (guest_id,))
 
+    def guests_this_hour(self):
+        since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 3600))
+        return self.conn.execute("SELECT COUNT(*) AS n FROM users WHERE guest = 1 AND created_at >= ?",
+                                 (since,)).fetchone()["n"]
+
+    def delete_user(self, user_id):
+        """Delete an account and everything in it (the database removes their things with it;
+        feedback stays, with no name attached)."""
+        self.conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
     def delete_old_guests(self):
         """Tidy up: guests' things are deleted a few days after their visit."""
         cutoff = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - self.GUEST_DAYS * 86400))

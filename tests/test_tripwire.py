@@ -343,6 +343,70 @@ class WebAppTests(CheckerTests):
         self.assertIn("Gazette 12", self.client.get("/shelf").data.decode())
         self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM users WHERE guest = 1").fetchone()["n"], 0)
 
+    def test_redirects_stay_on_this_site(self):
+        self.log_in()
+        watch = self.tw.add_watch(self.theme, "Warli")
+        for sneaky in ["//evil.example", "/\\evil.example", "https://evil.example", "/ok\r\nSet-Cookie: x=1"]:
+            response = self.client.post(f"/watches/{watch}/check", data={"next": sneaky})
+            self.assertNotIn("evil", response.headers["Location"])
+            self.assertNotIn("Set-Cookie", response.headers["Location"])
+        self.assertTrue(self.client.get("/language/en?next=//evil.example").headers["Location"].endswith("/"))
+
+    def test_browsers_are_asked_to_be_careful(self):
+        headers = self.client.get("/").headers
+        self.assertEqual(headers["X-Frame-Options"], "DENY")
+        self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(headers["Referrer-Policy"], "same-origin")
+        self.assertIn("camera=()", headers["Permissions-Policy"])
+
+    def test_too_many_guests_at_once_must_make_an_account(self):
+        import app as webapp
+        with mock.patch.object(webapp, "GUESTS_PER_HOUR", 2):
+            for _ in range(2):
+                visitor = webapp.app.test_client()
+                visitor.post("/themes", data={"name": "A theme"})
+            response = self.client.post("/themes", data={"name": "One too many"})
+        self.assertTrue(response.headers["Location"].endswith("/signup"))
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM users WHERE guest = 1").fetchone()["n"], 2)
+
+    def test_delete_my_account(self):
+        self.log_in()
+        self.tw.add_watch(self.theme, "Warli")
+        self.client.post("/feedback", data={"message": "Lovely"})
+        page = self.client.get("/account").data.decode()
+        self.assertIn("1 watched item", page)
+        self.assertIn("Delete my account", page)
+        # A wrong password deletes nothing.
+        self.client.post("/account/delete", data={"password": "wrong", "sure": "yes"})
+        self.assertIsNotNone(self.tw.user(self.user))
+        self.client.post("/account/delete", data={"password": "correct horse"})  # not ticked: nothing
+        self.assertIsNotNone(self.tw.user(self.user))
+        page = self.client.post("/account/delete", data={"password": "correct horse", "sure": "yes"},
+                                follow_redirects=True).data.decode()
+        self.assertIn("have been deleted", page)
+        self.assertIsNone(self.tw.user(self.user))
+        for table in ("themes", "watches", "entries"):
+            self.assertEqual(self.tw.conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"], 0, table)
+        self.assertEqual(self.tw.totals()["feedback"], 1)  # stays, with no name attached
+        self.assertTrue(self.client.get("/account").headers["Location"].endswith("/signup"))
+
+    def test_guest_shelf_is_smaller(self):
+        from tripwire import shelf
+        with mock.patch.object(shelf, "GUEST_SHELF_BYTES", 10):
+            page = self.client.post("/shelf/file", data={"title": "Big", "file_name": "big.txt",
+                                                         "read_text": "far more than ten bytes of words"},
+                                    follow_redirects=True).data.decode()
+        self.assertIn("Without an account, a shelf holds up to", page)
+
+    def test_private_network_links_are_refused(self):
+        self.log_in()
+        for link in ["http://127.0.0.1:5000/admin", "http://169.254.169.254/latest/meta-data/", "file:///etc/passwd"]:
+            with self.assertRaises(sources.SourceError):
+                sources._check_public(link)
+        page = self.client.post("/live/check", json={"url": "http://127.0.0.1:5000/"})
+        self.assertEqual(page.status_code, 502)
+        self.assertIn("private network", page.json["error"])
+
     def test_old_guests_are_tidied_away(self):
         self.client.post("/single-links", data={"target": "Warli"})
         self.tw.conn.execute("UPDATE users SET created_at = '2020-01-01T00:00:00Z' WHERE guest = 1")

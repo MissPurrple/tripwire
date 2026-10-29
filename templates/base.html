@@ -26,6 +26,7 @@
   {% macro account_links() %}
     {% if g.user and not is_guest %}
       <span class="who">{{ g.user.email }}</span>
+      <a href="{{ url_for('account') }}">{{ t('Your account') }}</a>
       <form method="post" action="{{ url_for('logout') }}"><button class="link">{{ t('Log out') }}</button></form>
     {% else %}
       <a href="{{ url_for('signup') }}">{{ t('Make an account') }}</a>

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Your account · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>Your account</h1>
+  <p>Signed in as <strong>{{ g.user.email }}</strong>. Tripwire keeps only what it needs: your email address (to log in and,
+     if you choose, to send your summary), your password in scrambled form (nobody can read it, not even Tripwire),
+     and the things you add.</p>
+</section>
+
+<section class="theme">
+  <h2>What Tripwire keeps about you</h2>
+  <ul class="about-list">
+    <li>{{ counts.watching }} watched item{{ 's' if counts.watching != 1 }} (pages and videos), with {{ counts.changes }} saved change{{ 's' if counts.changes != 1 }}</li>
+    <li>{{ counts.shelf }} item{{ 's' if counts.shelf != 1 }} on your shelf</li>
+    <li>{{ counts.books }} book comparison{{ 's' if counts.books != 1 }}</li>
+    <li>Summary emails: {{ every }} (<a href="{{ url_for('summary') }}">change</a>)</li>
+  </ul>
+  <p class="meta">No tracking cookies, no advertising, no selling data. Tripwire doesn't record your IP address with your account.</p>
+  {% include "_privacy_note.html" %}
+</section>
+
+<section class="theme danger-zone">
+  <h2>Delete my account</h2>
+  <p>This deletes your account and <strong>everything in it</strong>, straight away: watched pages, saved changes, your shelf,
+     book comparisons and settings. It can't be undone. Want to keep your shelf? <a href="{{ url_for('shelf_page') }}#take">Download it first</a>.</p>
+  <p class="meta">Two things stay, because they're no longer yours alone: public copies you chose to keep at the Internet Archive
+     (they're public and permanent; the Internet Archive can remove them if you ask them), and any feedback you sent, which stays with no name attached.</p>
+  <form method="post" action="{{ url_for('delete_account') }}" class="book-form"
+        onsubmit="return confirm('Delete your Tripwire account and everything in it? This cannot be undone.')">
+    <label>Your password, to confirm it's you
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <label class="check"><input type="checkbox" name="sure" value="yes" required> I understand everything will be deleted</label>
+    <button class="danger-button">Delete my account and everything in it</button>
+  </form>
+</section>
+{% endblock %}

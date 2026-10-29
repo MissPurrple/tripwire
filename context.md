@@ -113,3 +113,13 @@
 - Read aloud uses Purple's cloned ElevenLabs voice once ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID are set in Vercel (audio cached; per-visitor and daily caps); otherwise the device's own voice.
 - Language choice: English, draft Hindi, draft Sesotho (footer and Access panel). Choosing one shows Purple's "still in building form" notice. Drafts written by Claude, not yet checked by native speakers. Hindi audio: work in progress.
 - CONTRIBUTING.md explains how to translate. Open questions for Purple: which open-source licence, and making the repo public.
+
+## Built 29 Oct (evening): My shelf, Kiwix, Then and now
+- ElevenLabs removed (Purple, a voice artist, decided not to clone their voice for now). Read aloud = device voice only. Old code is in git history (commit 067779c) if ever wanted.
+- My shelf (main menu): keep files (scans/photos read on the device), PDF links, web pages, Wikipedia articles; search; optional watching of the original. 60 MB per person.
+- Take my shelf with me: ZIP (index.html works offline in any browser) and ZIM for Kiwix (searchable). Checked with the real kiwix-serve: opens, search works, PDFs open.
+- Then and now (More menu, and a button on every watched item): Wikipedia vs Kiwix's newest full offline copy (library.kiwix.org); other pages vs Internet Archive copy from ~1 year ago. NOT yet tested against the real Kiwix/Archive servers (blocked from the build machine): Purple to try on the live site.
+- Fixed: the scan progress box on Books was always visible.
+- Email: Proton needs a paid plan + custom domain. Advice given: skip email for the buildathon (the Weekly summary page works without it). Purple's open question: Gmail and an Indian phone number.
+- Future (pitch): a Sesotho voice and Sesotho-trained scan reading. Meta's open MMS voices likely include Sesotho (not confirmed; licence to check).
+- Ask Purple about going public (licence + public repo) AFTER these steps, as Purple asked.

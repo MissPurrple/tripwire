@@ -277,3 +277,19 @@ Purple's answers to Claude's questions: humans vs bots = **live from Cloudflare*
 > I cannot speak Hindi, so I'm not sure if, with Eleven Labs, I can get it to be my voice but speaking Hindi ... We can just say that it's a work in progress ... For now, we need to finish our main tasks.
 >
 > I would like to be able to have a button where you can click and say "Hindi version" or "Sesotho version." This way, we open it up to more people.
+
+## 15. Pausing the voice clone, email, Sesotho reading, My shelf and Kiwix (29 Oct 2026)
+
+> I think I'm going to pause on the Eleven Labs thing. I'm still not entirely sold on cloning my voice. As a voice artist, it's kind of scary for me to think that someone could then use my voice for their stuff without paying me ... Let's just work with whatever auto reader currently exists on the web
+>
+> On the publicising thing, ask me again after we've completed these next few steps.
+>
+> Proton doesn't seem to work because, on the one account, the free account, it's not possible at all. On the paid account, it says I need to already have a custom domain ... I can use Gmail, but doesn't that defeat the purpose of trying to have this be private?
+>
+> Curious thought: what would it take to have Sesotho reading data? Is there a way I can jig up a model or something that is able to read Sesotho? ... I can add that as my next big task, and I can include that in the pitch to say, "This is what I'm working towards."
+>
+> You clearly underestimate what you and I can do together. Anyway, let's work on my shelf and the Take My Shelf With Me, which is the downloadable copy, and then convert that file into a [Kiwix] library.
+>
+> I don't know if downloading the file should download both as a zip file and a zim file, both of them, just in case people have different purposes for it. I would absolutely love the comparison of [Kiwix] and Wikipedia copy. When somebody shares a link, say from Wikipedia, it can also share some interesting changes based off of the old or the before copy of that site, article, or blog on [Kiwix].
+>
+> it's literally just you and I against the world at this point.

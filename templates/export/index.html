@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ name }}</title>
+  {% with root = "" %}{% include "_style.html" %}{% endwith %}
+</head>
+<body>
+<main>
+  <a class="brand" href="index.html"><img src="static/rabbit.png" alt="" width="14" height="22"> TRIPWIRE · MY SHELF</a>
+  <h1>{{ name }}</h1>
+  <p class="meta">{{ items|length }} item{{ 's' if items|length != 1 }}, kept with Tripwire. This copy was made on {{ made }}.
+     It belongs to whoever holds it: it works with no internet, and nothing in it depends on the original websites.</p>
+  {% if items %}
+  <label class="meta" for="find">Find on this page</label>
+  <input type="search" id="find" placeholder="Type a word…" oninput="var q=this.value.toLowerCase();document.querySelectorAll('.card').forEach(function(c){c.hidden=q&&c.textContent.toLowerCase().indexOf(q)<0;});">
+  {% endif %}
+  {% for item in items %}
+  <article class="card">
+    <h3><a href="{{ item.page }}">{{ item.title }}</a></h3>
+    <p class="meta">Kept {{ item.created_at[:10] }}{% if item.source_url %} · from {{ item.source_url|truncate(70) }}{% endif %}
+      {% if item.file_path %} · <a href="{{ item.file_path }}">original file</a>{% endif %}</p>
+    {% if item.note %}<p>{{ item.note }}</p>{% endif %}
+  </article>
+  {% else %}
+  <p>This shelf is empty.</p>
+  {% endfor %}
+  <footer class="meta">Made with Tripwire, which watches the information people care about and keeps a copy when it changes.</footer>
+</main>
+</body>
+</html>

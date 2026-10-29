@@ -13,6 +13,8 @@ Tables:
            with a saved copy of the version Tripwire last saw (the "baseline")
   entries  the archive: one entry per detected change, holding the before and
            after text so it survives even if the original disappears
+  shelf_items    "My shelf": documents and pages a person keeps their own copy of
+  before_checks  a page compared with an older copy of it (Kiwix or the Internet Archive)
 """
 
 import json
@@ -121,6 +123,38 @@ CREATE TABLE IF NOT EXISTS book_jobs (
     started_at       TEXT,
     finished_at      TEXT,
     files_deleted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS before_checks (
+    id             {id},
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    url            TEXT NOT NULL,                -- the page as it is today
+    title          TEXT NOT NULL,
+    source         TEXT NOT NULL,                -- 'kiwix' or 'archive': where the older copy came from
+    source_name    TEXT NOT NULL,                -- in words, e.g. "Kiwix's offline Wikipedia (January 2024)"
+    before_date    TEXT,                         -- when the older copy was made
+    before_link    TEXT,                         -- where to read the older copy
+    download_link  TEXT,                         -- Kiwix only: the whole offline Wikipedia, to keep
+    category       TEXT NOT NULL,
+    summary        TEXT NOT NULL,
+    details        TEXT NOT NULL DEFAULT '{{}}', -- JSON: changes with a little context
+    created_at     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS shelf_items (
+    id               {id},
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title            TEXT NOT NULL,
+    note             TEXT NOT NULL DEFAULT '',
+    source_url       TEXT,                       -- where it came from, if it came from a link
+    file_name        TEXT,                       -- the original file, if there is one
+    file_size        INTEGER NOT NULL DEFAULT 0,
+    file_data        {blob},
+    text             TEXT NOT NULL DEFAULT '',   -- its words, so it can be searched and read aloud
+    text_from        TEXT,                       -- how the words were read, in words
+    watch_id         INTEGER REFERENCES watches(id) ON DELETE SET NULL,
+    before_check_id  INTEGER REFERENCES before_checks(id) ON DELETE SET NULL,
+    created_at       TEXT NOT NULL
 )
 """
 

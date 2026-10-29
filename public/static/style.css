@@ -582,3 +582,10 @@ html.a11y-contrast a { text-decoration-thickness: 2px; }
 
 /* Calm mode: nothing moves */
 html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation: none !important; transition: none !important; }
+
+/* My shelf */
+.shelf-words { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 70vh; overflow-y: auto; padding: 12px 14px;
+               border: 2px solid var(--edge); border-radius: 4px; background: var(--bg); line-height: 1.6; }
+
+/* Anything marked hidden stays hidden, whatever its other styles say. */
+[hidden] { display: none !important; }

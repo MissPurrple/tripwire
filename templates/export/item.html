@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ item.title }}</title>
+  {% with root = "../" %}{% include "_style.html" %}{% endwith %}
+</head>
+<body>
+<main>
+  <a class="brand" href="../index.html"><img src="../static/rabbit.png" alt="" width="14" height="22"> ← {{ name }}</a>
+  <h1>{{ item.title }}</h1>
+  <p class="meta">Kept {{ item.created_at[:10] }}{% if item.text_from %} · {{ item.text_from }}{% endif %}</p>
+  {% if item.note %}<p>{{ item.note }}</p>{% endif %}
+  {% if item.source_url %}<p>Came from: <a href="{{ item.source_url }}">{{ item.source_url }}</a>
+    <span class="meta">(needs internet; it may have changed or gone since)</span></p>{% endif %}
+  {% if item.watch %}<p class="meta">Tripwire was watching the original. Last check ({{ (item.watch.last_checked_at or '')[:10] }}): {{ item.watch.last_status }}.</p>{% endif %}
+  {% if item.file_path %}<p><a href="../{{ item.file_path }}">Open the original file</a> <span class="meta">({{ item.file_name }})</span></p>{% endif %}
+
+  {% if item.check %}
+  {% set c = item.check %}
+  <h2>Compared with an older copy</h2>
+  <p>Compared with {{ c.source_name }}{% if c.before_date %}, from {{ c.before_date }}{% endif %}: {{ c.summary }}</p>
+  {% if c.details.hunks %}
+  <ul class="changes">
+    {% for h in c.details.hunks[:12] %}
+    <li>{% if h.before %}<span class="meta">… {{ h.before }}</span> {% endif %}{% if h.removed %}<del>{{ h.removed|truncate(400) }}</del> {% endif %}{% if h.added %}<ins>{{ h.added|truncate(400) }}</ins>{% endif %}{% if h.after %} <span class="meta">{{ h.after }} …</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% if c.details.hunk_count > 12 %}<p class="meta">And {{ c.details.hunk_count - 12 }} more changes.</p>{% endif %}
+  {% endif %}
+  {% endif %}
+
+  <h2>The words</h2>
+  {% if item.text %}
+  <div class="words">{{ item.text }}</div>
+  {% else %}
+  <p class="meta">No words were read from this one (it may be a scan or a photo). The original file is the record.</p>
+  {% endif %}
+  <footer class="meta">From “{{ name }}”, a shelf made with Tripwire on {{ made }}.</footer>
+</main>
+</body>
+</html>

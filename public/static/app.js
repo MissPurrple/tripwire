@@ -93,8 +93,7 @@ window.Tripwire = window.Tripwire || {};
 
 
 // Access: read aloud, calm mode, bigger text, strong contrast. Settings live in this
-// browser only (localStorage). Read aloud uses Purple's voice through ElevenLabs when
-// the site has it, and the device's own voice otherwise (or if that fails).
+// browser only (localStorage). Read aloud uses the device's own voice.
 (function (T) {
   var html = document.documentElement, KEY = "tripwire-access";
   function load() { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { return {}; } }
@@ -106,11 +105,10 @@ window.Tripwire = window.Tripwire || {};
   }
 
   // ---- speaking ----
-  var audio = null, queue = [], speaking = false;
+  var queue = [], speaking = false;
   var LANGS = { en: "en-GB", hi: "hi-IN", st: "st-ZA" };
   T.stopSpeaking = function () {
     queue = []; speaking = false;
-    if (audio) { audio.pause(); audio = null; }
     if (window.speechSynthesis) speechSynthesis.cancel();
   };
   function deviceVoice(text, done) {
@@ -122,22 +120,11 @@ window.Tripwire = window.Tripwire || {};
     u.onend = u.onerror = done;
     speechSynthesis.speak(u);
   }
-  function purpleVoice(text, done) {
-    fetch(document.body.dataset.speakUrl, { method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text }) })
-      .then(function (r) { if (!r.ok) throw new Error("no voice"); return r.blob(); })
-      .then(function (blob) {
-        audio = new Audio(URL.createObjectURL(blob));
-        audio.onended = audio.onerror = done;
-        return audio.play();
-      })
-      .catch(function () { deviceVoice(text, done); });  // never leave anyone without a voice
-  }
   function next() {
     if (!queue.length) { speaking = false; return; }
     speaking = true;
     var text = queue.shift();
-    (document.body.dataset.voice === "purple" ? purpleVoice : deviceVoice)(text, next);
+    deviceVoice(text, next);
   }
   function chunks(text) {  // pieces of up to ~600 characters, split at sentence ends
     var out = [], piece = "";

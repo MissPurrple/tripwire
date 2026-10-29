@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ item.title }} · My shelf · Tripwire{% endblock %}
+{% block content %}
+{% if scan %}<script defer src="{{ url_for('static', filename='scan-reader.js') }}"></script>{% endif %}
+<p class="meta"><a href="{{ url_for('shelf_page') }}">← My shelf</a></p>
+<section class="intro">
+  <h1>{{ item.title }}</h1>
+  <p class="meta">Kept {{ item.created_at[:10] }}{% if item.text_from %} · {{ item.text_from }}{% endif %}</p>
+  {% if item.note %}<p>{{ item.note }}</p>{% endif %}
+  {% if item.source_url %}<p>From <a href="{{ item.source_url }}" target="_blank" rel="noopener">{{ item.source_url }}</a></p>{% endif %}
+  {% if watch %}
+  <p class="meta">Watching the original: <strong>{{ watch.last_status or 'Watching' }}</strong>{% if watch.last_checked_at %} (checked {{ watch.last_checked_at[:10] }}){% endif %}.
+    {% if watch.last_status == 'Removed' %}The original is gone. Your copy here is safe.{% endif %}</p>
+  {% endif %}
+  <div class="actions">
+    {% if item.file_name %}
+      <a class="button" href="{{ url_for('shelf_file', item_id=item.id) }}" target="_blank" rel="noopener">Open the original file</a>
+      <a class="link-button" href="{{ url_for('shelf_file', item_id=item.id, download=1) }}">Download it</a>
+    {% endif %}
+    {% if item.source_url and not item.before_check_id %}
+      <form method="post" action="{{ url_for('before_page') }}"><input type="hidden" name="url" value="{{ item.source_url }}">
+        <button class="secondary-button">Compare with an older copy</button></form>
+    {% endif %}
+  </div>
+</section>
+
+{% if check %}
+<section class="theme">
+  <h2>Then and now</h2>
+  <p>Compared with {{ check.source_name }}{% if check.before_date %}, from {{ check.before_date }}{% endif %}:
+     <strong>{{ check.summary }}</strong></p>
+  <p><a href="{{ url_for('before_result', check_id=check.id) }}">See the most interesting changes</a></p>
+</section>
+{% endif %}
+
+<section class="theme">
+  <h2>The words</h2>
+  {% if item.text %}
+    <div class="shelf-words" tabindex="0">{{ item.text }}</div>
+  {% elif scan %}
+    <p>No words have been read from this file yet. It looks like a scan or a photo.</p>
+    <button type="button" id="read-scan">Read the words on this device</button>
+    <div class="screen scan-progress" id="scan-progress" hidden aria-live="polite">
+      <p class="screen-line soft" id="scan-step">Getting ready…</p>
+      <div class="progress"><span id="scan-bar" style="width: 0%"></span></div>
+    </div>
+  {% else %}
+    <p class="empty">No words could be read from this file. The original file is the record.</p>
+  {% endif %}
+</section>
+
+<section class="theme">
+  <h2>Edit</h2>
+  <form method="post" action="{{ url_for('shelf_edit', item_id=item.id) }}" class="book-form">
+    <label>Title <input name="title" maxlength="200" value="{{ item.title }}" required></label>
+    <label>Note <input name="note" maxlength="2000" value="{{ item.note }}"></label>
+    <div class="actions"><button>Save</button></div>
+  </form>
+  <form method="post" action="{{ url_for('shelf_delete', item_id=item.id) }}"
+        onsubmit="return confirm('Remove this from your shelf? Your copy here, and its file, will be deleted.')">
+    <button class="link danger">Remove from my shelf</button>
+  </form>
+</section>
+
+{% if scan %}
+<script>
+  document.getElementById("read-scan").addEventListener("click", async function () {
+    var button = this, step = document.getElementById("scan-step");
+    button.disabled = true;
+    document.getElementById("scan-progress").hidden = false;
+    try {
+      var blob = await (await fetch("{{ url_for('shelf_file', item_id=item.id) }}", { credentials: "same-origin" })).blob();
+      var file = new File([blob], {{ item.file_name|tojson }}, { type: blob.type });
+      var progress = function (page, pages, part) {
+        step.textContent = "Reading page " + page + " of " + pages + " on this device…";
+        document.getElementById("scan-bar").style.width = (100 * (page - 1 + part) / pages) + "%";
+      };
+      var result = /\.pdf$/i.test(file.name) ? await window.Tripwire.readScannedPdf(file, progress)
+                                             : await window.Tripwire.readImage(file, progress);
+      if (!result) { step.textContent = "This PDF has no scanned pages to read."; return; }
+      var saved = await fetch("{{ url_for('shelf_set_text', item_id=item.id) }}", { method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: result.text, pages: result.pages }) });
+      if (!saved.ok) throw new Error((await saved.json()).error || "couldn't save the words");
+      location.reload();
+    } catch (error) {
+      button.disabled = false;
+      step.textContent = "Couldn't read it on this device (" + error.message + ").";
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

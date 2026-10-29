@@ -1,0 +1,28 @@
+<style>
+  /* Everything this copy needs is inside it: it works with no internet, in a browser or in Kiwix. */
+  @font-face { font-family: "VT323"; src: url("{{ root }}static/fonts/vt323-latin-400-normal.woff2") format("woff2"); }
+  :root { --bg: #04130a; --panel: #082414; --text: #c8f7d4; --soft: #8fd9a4; --green: #3dff7a; --line: #1d5a33;
+          --del: #ff8a9a; --ins: #8dffb0; color-scheme: dark; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f3fbf5; --panel: #ffffff; --text: #0d2416; --soft: #2f5a3d; --green: #0a7a33; --line: #b9dcc4;
+            --del: #a3112b; --ins: #0a6b2c; color-scheme: light; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, sans-serif; }
+  main { max-width: 52rem; margin: 0 auto; padding: 1.5rem 16px 3rem; }
+  h1, h2, .brand { font-family: "VT323", ui-monospace, monospace; color: var(--green); font-weight: normal; letter-spacing: .02em; }
+  h1 { font-size: 2.6rem; line-height: 1.1; margin: .2rem 0 .6rem; }
+  h2 { font-size: 1.8rem; margin: 2rem 0 .5rem; }
+  a { color: var(--green); }
+  .brand { text-decoration: none; font-size: 1.3rem; display: inline-flex; gap: .4rem; align-items: center; }
+  .meta { color: var(--soft); font-size: .92rem; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .9rem 1rem; margin: .8rem 0; }
+  .card h3 { margin: 0 0 .2rem; font-size: 1.1rem; }
+  .words { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line);
+           border-radius: 6px; padding: 1rem; }
+  del { color: var(--del); } ins { color: var(--ins); text-decoration: none; }
+  ul.changes { padding-left: 1.1rem; } ul.changes li { margin: .5rem 0; }
+  input[type=search] { width: 100%; font: inherit; padding: .5rem .7rem; background: var(--panel); color: var(--text);
+                       border: 1px solid var(--line); border-radius: 6px; }
+  footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+</style>

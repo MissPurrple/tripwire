@@ -103,6 +103,7 @@ class FakeWikipedia:
                     return r["text"]
         raise sources.SourceError("no such version")
 
+    article_url = staticmethod(lambda title: "https://en.wikipedia.org/wiki/" + title.replace(" ", "_"))
     revision_url = staticmethod(lambda revid: f"https://en.wikipedia.org/w/index.php?oldid={revid}")
     diff_url = staticmethod(lambda old, new: f"https://en.wikipedia.org/w/index.php?diff={new}&oldid={old}")
 
@@ -115,7 +116,7 @@ class CheckerTests(unittest.TestCase):
         if self.db_path.startswith("postgres"):
             import psycopg
             with psycopg.connect(self.db_path, autocommit=True) as conn:
-                conn.execute("DROP TABLE IF EXISTS speech_cache, speech_usage, feedback, stats_cache, book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
+                conn.execute("DROP TABLE IF EXISTS shelf_items, before_checks, feedback, stats_cache, book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
         self.tw = Tripwire(self.db_path)
         self.user = self.tw.create_user("purple@example.org", "correct horse")
         FakeWikipedia.articles = {"Warli": [
@@ -1290,11 +1291,7 @@ class AccessAndLanguageTests(CheckerTests):
             for expected in ['class="skip-link" href="#main"', 'id="main"', 'id="access-button"', "Welcome to Tripwire",
                              "Would you like Tripwire to read things aloud to you?", "Calm mode", "Strong contrast"]:
                 self.assertIn(expected, page, (path, expected))
-        self.assertIn("your device&#39;s voice", self.client.get("/").data.decode())
-        with mock.patch.dict(os.environ, {"ELEVENLABS_API_KEY": "k", "ELEVENLABS_VOICE_ID": "v"}):
-            page = self.client.get("/").data.decode()
-        self.assertIn('data-voice="purple"', page)
-        self.assertIn("Purple&#39;s voice", page)
+        self.assertIn("your device's own voice", self.client.get("/").data.decode())
 
     def test_switch_to_hindi_and_sesotho(self):
         response = self.client.get("/language/hi?next=/about")
@@ -1336,39 +1333,274 @@ class AccessAndLanguageTests(CheckerTests):
                 self.assertTrue(english_keys <= set(data), code)
                 self.assertIn("Draft", data["_status"])
 
-    def test_purple_voice(self):
-        calls = []
 
-        def fake_post(url, **kwargs):
-            calls.append((url, kwargs["json"]))
-            return mock.Mock(status_code=200, content=b"ID3 fake mp3")
+KIWIX_CATALOG = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/">
+  <entry><name>wikipedia_en_all</name><flavour>mini</flavour><dc:issued>2025-06-01T00:00:00Z</dc:issued>
+    <link type="text/html" href="/content/wikipedia_en_all_mini_2025-06" /></entry>
+  <entry><name>wikipedia_en_all</name><flavour>maxi</flavour><dc:issued>2024-01-15T00:00:00Z</dc:issued>
+    <link type="text/html" href="/content/wikipedia_en_all_maxi_2024-01" />
+    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim"
+          href="https://download.kiwix.org/zim/wikipedia/wikipedia_en_all_maxi_2024-01.zim.meta4" length="1" /></entry>
+  <entry><name>wikipedia_en_all</name><flavour>maxi</flavour><dc:issued>2023-01-15T00:00:00Z</dc:issued>
+    <link type="text/html" href="/content/wikipedia_en_all_maxi_2023-01" /></entry>
+</feed>"""
 
-        self.assertEqual(self.client.post("/speak", json={"text": "Hello"}).status_code, 503)  # not connected
-        env = {"ELEVENLABS_API_KEY": "key", "ELEVENLABS_VOICE_ID": "purplevoice"}
-        with mock.patch.dict(os.environ, env), mock.patch("requests.post", fake_post):
-            response = self.client.post("/speak", json={"text": "Pages vanish. Tripwire notices."})
-            self.assertEqual((response.status_code, response.mimetype, response.data), (200, "audio/mpeg", b"ID3 fake mp3"))
-            self.client.post("/speak", json={"text": "Pages vanish. Tripwire notices."})
-        self.assertEqual(len(calls), 1)  # the second time came from memory: no credits used
-        self.assertIn("purplevoice", calls[0][0])
-        self.assertEqual(calls[0][1]["model_id"], "eleven_multilingual_v2")
 
-    def test_purple_voice_limits(self):
-        env = {"ELEVENLABS_API_KEY": "key", "ELEVENLABS_VOICE_ID": "v", "ELEVENLABS_DAILY_CHARACTERS": "50"}
-        with mock.patch.dict(os.environ, env), mock.patch("requests.post", return_value=mock.Mock(status_code=200, content=b"mp3")):
-            self.assertEqual(self.client.post("/speak", json={"text": "x" * 40}).status_code, 200)
-            response = self.client.post("/speak", json={"text": "y" * 40})  # over the site's daily allowance
-            self.assertEqual(response.status_code, 503)
-            self.assertIn("allowance", response.json["error"])
-        with self.client.session_transaction() as sess:
-            sess["speech_window"] = [time.time(), 3990]
-        with mock.patch.dict(os.environ, env):
-            self.assertEqual(self.client.post("/speak", json={"text": "z" * 40}).status_code, 429)  # this visitor: too much, too fast
-        with mock.patch.dict(os.environ, {"ELEVENLABS_API_KEY": "bad", "ELEVENLABS_VOICE_ID": "v"}), \
-                mock.patch("requests.post", return_value=mock.Mock(status_code=401, content=b"")):
-            with self.client.session_transaction() as sess:
-                sess.pop("speech_window", None)
-            self.assertIn("API key", self.client.post("/speak", json={"text": "hello there"}).json["error"])
+def fake_response(status=200, text="", content=None, content_type="text/html", url="", data=None):
+    return mock.Mock(status_code=status, text=text, content=content if content is not None else text.encode(),
+                     headers={"Content-Type": content_type}, url=url, json=lambda: data or {})
+
+
+def fake_kiwix_and_archive(kiwix_article=None, archive_text=None):
+    """A pretend library.kiwix.org and Internet Archive."""
+    def get(url, params=None, **kwargs):
+        if url.endswith("/catalog/v2/entries"):
+            name = params["name"]
+            return fake_response(text=KIWIX_CATALOG if name == "wikipedia_en_all" else "<feed xmlns='http://www.w3.org/2005/Atom'/>",
+                                 content_type="application/atom+xml")
+        if "/content/wikipedia_en_all_maxi_2024-01/" in url:
+            if kiwix_article and url.endswith("/A/Warli"):
+                return fake_response(text=kiwix_article, url=url)
+            return fake_response(status=404)
+        if url == "https://archive.org/wayback/available":
+            if archive_text is None:
+                return fake_response(data={"archived_snapshots": {}}, content_type="application/json")
+            return fake_response(data={"archived_snapshots": {"closest": {
+                "available": True, "timestamp": "20251020120000", "url": "https://web.archive.org/web/20251020120000/" + params["url"]}}},
+                content_type="application/json")
+        if url.startswith("https://web.archive.org/web/20251020120000id_/"):
+            return fake_response(text=archive_text)
+        raise AssertionError("unexpected request: " + url)
+    return get
+
+
+class ShelfTests(CheckerTests):
+    """My shelf, Take my shelf with me (ZIP and Kiwix ZIM), and Then and now."""
+
+    def setUp(self):
+        super().setUp()
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        self.client = webapp.app.test_client()
+        self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+
+    def edit_warli(self):
+        FakeWikipedia.articles["Warli"].append(
+            {"revid": 2, "user": "B", "comment": "more", "text": "The Warli are an Adivasi people of Maharashtra and Gujarat. They paint."})
+
+    def upload(self, name, data, **form):
+        import io
+        return self.client.post("/shelf/file", data=dict(form, file=(io.BytesIO(data), name)),
+                                content_type="multipart/form-data", follow_redirects=True)
+
+    def test_pages_need_an_account(self):
+        self.client.post("/logout")
+        for path in ["/shelf", "/shelf/1", "/shelf/download.zip", "/shelf/download.zim", "/before"]:
+            self.assertEqual(self.client.get(path).status_code, 302, path)
+
+    def test_keep_a_file_search_and_open_it(self):
+        words = "Government Gazette of Lesotho. Notice 12: the village of Ha Mohale is renamed. " * 3
+        page = self.upload("gazette.txt", words.encode(), title="Gazette 12", note="From the post office").data.decode()
+        self.assertIn("On your shelf.", page)
+        self.assertIn("Ha Mohale is renamed", page)
+        self.assertIn("Read from the file (plain text)", page)
+        listing = self.client.get("/shelf?q=mohale").data.decode()
+        self.assertIn("Gazette 12", listing)
+        self.assertIn("1 found", listing)
+        self.assertIn("Nothing found.", self.client.get("/shelf?q=zebra").data.decode())
+        item = self.tw.conn.execute("SELECT id FROM shelf_items").fetchone()["id"]
+        opened = self.client.get(f"/shelf/{item}/file")
+        self.assertEqual((opened.status_code, opened.mimetype, opened.data), (200, "text/plain", words.encode()))
+        self.assertIn("inline", opened.headers["Content-Disposition"])
+        self.assertIn("attachment", self.client.get(f"/shelf/{item}/file?download=1").headers["Content-Disposition"])
+        self.assertIn("1 kept", self.client.get("/").data.decode())  # on the home screen
+
+    def test_web_pages_are_never_shown_inside_tripwire(self):
+        """An uploaded HTML file could carry a script: it's only ever downloaded."""
+        self.upload("page.html", b"<html><body><script>alert(1)</script>" + b"<p>Some words here.</p>" * 10 + b"</body></html>")
+        item = self.tw.conn.execute("SELECT id FROM shelf_items").fetchone()["id"]
+        opened = self.client.get(f"/shelf/{item}/file")
+        self.assertEqual(opened.mimetype, "application/octet-stream")
+        self.assertIn("attachment", opened.headers["Content-Disposition"])
+        self.assertEqual(opened.headers["X-Content-Type-Options"], "nosniff")
+
+    def test_scans_read_on_the_device(self):
+        page = self.upload("memo.pdf", make_pdf(["", ""]), read_text="Memo from the Ministry. " * 10, read_pages="2").data.decode()
+        self.assertIn("Read on your device (scanned, 2 pages)", page)
+        self.assertIn("Memo from the Ministry", page)
+        # Too big to upload: only its words are kept.
+        page = self.client.post("/shelf/file", data={"file_name": "huge-scan.pdf", "read_text": "Big scan words. " * 10,
+                                                     "read_pages": "40"}, follow_redirects=True).data.decode()
+        self.assertIn("keep your own copy of it", page)
+        self.assertIn("Big scan words", page)
+        self.assertNotIn("Open the original file", page)
+        # A scan whose words weren't read yet can be read later.
+        page = self.upload("photo.jpg", b"\xff\xd8\xff fake photo").data.decode()
+        self.assertIn("Read the words on this device", page)
+        item = self.tw.conn.execute("SELECT id FROM shelf_items WHERE file_name = 'photo.jpg'").fetchone()["id"]
+        self.client.post(f"/shelf/{item}/text", json={"text": "Words in the photo.", "pages": 1})
+        page = self.client.get(f"/shelf/{item}").data.decode()
+        self.assertIn("Words in the photo.", page)
+        self.assertIn("Read on your device (scanned, 1 page)", page)
+
+    def test_keep_a_wikipedia_link_watch_it_and_compare_with_kiwix(self):
+        kiwix_page = ("<html><body><h1>Warli</h1><p>The Warli are an Adivasi people of Maharashtra.</p>"
+                      "<p>This article is issued from Wikipedia. The text is licensed under Creative Commons.</p></body></html>")
+        self.edit_warli()
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive(kiwix_article=kiwix_page)):
+            page = self.client.post("/shelf/link", data={"url": "https://en.wikipedia.org/wiki/Warli", "watch": "on",
+                                                         "compare": "on"}, follow_redirects=True).data.decode()
+        self.assertIn("They paint.", page)  # today's words are kept
+        self.assertIn("Watching the original", page)
+        self.assertIn("Kiwix&#39;s offline English Wikipedia (January 2024)", page)
+        check = self.tw.conn.execute("SELECT * FROM before_checks").fetchone()
+        self.assertEqual(check["before_date"], "2024-01-15")
+        self.assertEqual(check["download_link"], "https://download.kiwix.org/zim/wikipedia/wikipedia_en_all_maxi_2024-01.zim")
+        self.assertNotIn("Creative Commons", check["details"])  # Kiwix's licence line isn't a change
+        result = self.client.get(f"/before/{check['id']}").data.decode()
+        self.assertIn("Gujarat", result)
+        self.assertIn("On your shelf ✓", result)
+        self.assertIn("Download it from Kiwix", result)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM watches WHERE target = 'Warli'").fetchone()["n"], 1)
+
+    def test_keep_a_pdf_link(self):
+        pdf = make_pdf(["Gazette notice: the road to Semonkong will be closed for repairs in November. " * 3])
+        with mock.patch("tripwire.books.fetch_book", return_value=("notice.pdf", pdf)):
+            page = self.client.post("/shelf/link", data={"url": "https://gov.example.ls/notice.pdf"},
+                                    follow_redirects=True).data.decode()
+        self.assertIn("Semonkong", page)
+        self.assertIn("Open the original file", page)
+        self.assertNotIn("Watching the original", page)
+        item = self.tw.conn.execute("SELECT id FROM shelf_items").fetchone()["id"]
+        self.assertEqual(self.client.get(f"/shelf/{item}/file").data, pdf)
+
+    def test_others_cannot_see_your_shelf(self):
+        self.upload("mine.txt", b"Private words. " * 10)
+        item = self.tw.conn.execute("SELECT id FROM shelf_items").fetchone()["id"]
+        self.client.post("/logout")
+        self.tw.create_user("someone@example.org", "another horse")
+        self.client.post("/login", data={"email": "someone@example.org", "password": "another horse"})
+        for path in [f"/shelf/{item}", f"/shelf/{item}/file"]:
+            self.assertEqual(self.client.get(path).status_code, 404)
+        self.assertEqual(self.client.post(f"/shelf/{item}/delete").status_code, 404)
+        self.assertNotIn("Private words", self.client.get("/shelf?q=private").data.decode())
+        import zipfile, io
+        z = zipfile.ZipFile(io.BytesIO(self.client.get("/shelf/download.zip").data))
+        self.assertNotIn("Private words", "".join(z.read(n).decode("utf-8", "ignore") for n in z.namelist()))
+
+    def test_edit_and_remove(self):
+        self.upload("a.txt", b"Words to keep. " * 10)
+        item = self.tw.conn.execute("SELECT id FROM shelf_items").fetchone()["id"]
+        self.client.post(f"/shelf/{item}/edit", data={"title": "Better title", "note": "A note"})
+        self.assertIn("Better title", self.client.get(f"/shelf/{item}").data.decode())
+        self.client.post(f"/shelf/{item}/delete")
+        self.assertEqual(self.client.get(f"/shelf/{item}").status_code, 404)
+
+    def test_shelf_has_a_size_limit(self):
+        from tripwire import shelf
+        with mock.patch.object(shelf, "MAX_SHELF_BYTES", 500):
+            page = self.upload("big.txt", b"Too many words. " * 50).data.decode()
+        self.assertIn("Your shelf is full", page)
+
+    def fill_shelf(self):
+        self.upload("gazette.txt", "Ha Mohale is renamed. Lesotho gazette, “quoted” café. ".encode() * 5, title="Gazette 12")
+        self.upload("scan.pdf", make_pdf(["", ""]), read_text="Words from a scan of Semonkong. " * 5, read_pages="2")
+
+    def test_take_my_shelf_with_me_as_a_zip(self):
+        import io, json, zipfile
+        self.fill_shelf()
+        response = self.client.get("/shelf/download.zip?name=Lesotho gazettes")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response.headers["Content-Disposition"])
+        self.assertIn(".zip", response.headers["Content-Disposition"])
+        z = zipfile.ZipFile(io.BytesIO(response.data))
+        names = z.namelist()
+        for expected in ["Lesotho-gazettes/index.html", "Lesotho-gazettes/shelf.json", "Lesotho-gazettes/README.txt",
+                         "Lesotho-gazettes/items/0001-Gazette-12.html", "Lesotho-gazettes/text/0001-Gazette-12.txt",
+                         "Lesotho-gazettes/files/0002-scan.pdf", "Lesotho-gazettes/static/fonts/vt323-latin-400-normal.woff2"]:
+            self.assertIn(expected, names)
+        index = z.read("Lesotho-gazettes/index.html").decode()
+        self.assertIn("Lesotho gazettes", index)
+        self.assertIn('href="items/0001-Gazette-12.html"', index)
+        self.assertNotIn("purple@example.org", index)  # the copy may be shared: no email address in it
+        item = z.read("Lesotho-gazettes/items/0001-Gazette-12.html").decode()
+        self.assertIn("“quoted” café", item)
+        self.assertIn('href="../static/fonts/vt323-latin-400-normal.woff2"'.replace('href="', 'url("').replace('woff2"', 'woff2")'), item)
+        self.assertEqual(z.read("Lesotho-gazettes/files/0002-scan.pdf")[:5], b"%PDF-")
+        listing = json.loads(z.read("Lesotho-gazettes/shelf.json"))
+        self.assertEqual([i["title"] for i in listing["items"]], ["Gazette 12", "scan"])
+
+    def test_take_my_shelf_with_me_for_kiwix(self):
+        from libzim.reader import Archive
+        from libzim.search import Query, Searcher
+        self.fill_shelf()
+        response = self.client.get("/shelf/download.zim?name=Lesotho gazettes")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(".zim", response.headers["Content-Disposition"])
+        path = os.path.join(self.tmp.name, "shelf.zim")
+        with open(path, "wb") as f:
+            f.write(response.data)
+        zim = Archive(path)
+        self.assertEqual(zim.main_entry.get_item().path, "index.html")
+        self.assertEqual(zim.get_metadata("Title").decode(), "Lesotho gazettes")
+        self.assertEqual(zim.get_metadata("Language").decode(), "eng")
+        self.assertTrue(zim.has_illustration(48))
+        self.assertIn("Ha Mohale is renamed", bytes(zim.get_entry_by_path("items/0001-Gazette-12.html").get_item().content).decode())
+        self.assertEqual(bytes(zim.get_entry_by_path("files/0002-scan.pdf").get_item().content)[:5], b"%PDF-")
+        found = list(Searcher(zim).search(Query().set_query("Semonkong")).getResults(0, 10))
+        self.assertEqual(found, ["items/0002-scan.html"])  # searchable inside Kiwix
+
+    def test_empty_shelf_still_downloads(self):
+        import io, zipfile
+        self.assertIn("This shelf is empty", zipfile.ZipFile(io.BytesIO(self.client.get("/shelf/download.zip").data))
+                      .read("My-shelf/index.html").decode())
+        self.assertEqual(self.client.get("/shelf/download.zim").status_code, 200)
+
+    def test_then_and_now_for_a_web_page(self):
+        old = "<html><body><p>The clinic in Ha Mohale is open every day. Nurses: four.</p></body></html>"
+        pages = {"https://health.example.ls/clinics": {"status": "ok", "text": "The clinic in Ha Mohale is open on Mondays. Nurses: one."}}
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive(archive_text=old)), \
+                mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+            page = self.client.post("/before", data={"url": "https://health.example.ls/clinics"}, follow_redirects=True).data.decode()
+        self.assertIn("the Internet Archive&#39;s copy (October 2025)", page)
+        self.assertIn("every day", page)
+        self.assertIn("Mondays", page)
+        self.assertIn("Keep today's copy on my shelf", page)
+        self.assertIn("health.example.ls/clinics", self.client.get("/before").data.decode())  # listed
+
+    def test_then_and_now_falls_back_to_the_internet_archive(self):
+        """A Wikipedia article Kiwix doesn't have (e.g. too new) uses the Internet Archive instead."""
+        old = "<html><body><p>The Warli are an Adivasi people.</p></body></html>"
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive(kiwix_article=None, archive_text=old)):
+            page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli"}, follow_redirects=True).data.decode()
+        self.assertIn("the Internet Archive&#39;s copy", page)
+
+    def test_then_and_now_with_no_older_copy(self):
+        pages = {"https://new.example.org/": {"status": "ok", "text": "Brand new page."}}
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive()), \
+                mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+            page = self.client.post("/before", data={"url": "https://new.example.org/"}, follow_redirects=True).data.decode()
+        self.assertIn("couldn&#39;t find an older copy", page)
+
+    def test_then_and_now_button_on_watched_items(self):
+        self.tw.add_watch(self.theme, "Warli")
+        page = self.client.get("/watching").data.decode()
+        self.assertIn("Then and now", page)
+        self.assertIn('value="https://en.wikipedia.org/wiki/Warli"', page)
+
+    def test_kiwix_catalogue(self):
+        from tripwire import before
+        copies = before.parse_catalog(KIWIX_CATALOG.encode())
+        self.assertEqual([c["flavour"] for c in copies], ["mini", "maxi", "maxi"])
+        self.assertEqual(copies[1]["content_url"], "https://library.kiwix.org/content/wikipedia_en_all_maxi_2024-01")
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive()):
+            newest = before.kiwix_copy("en")
+            self.assertEqual(newest["date"], "2024-01-15")  # the newest full copy, not the newer "mini" one
+            self.assertIsNone(before.kiwix_copy("st"))
+        # Older copies put the kind in the name, with no separate <flavour>.
+        old_style = KIWIX_CATALOG.replace("<flavour>maxi</flavour>", "").replace("<flavour>mini</flavour>", "")
+        self.assertEqual([c["flavour"] for c in before.parse_catalog(old_style.encode())], ["mini", "maxi", "maxi"])
 
 
 class SetupTests(unittest.TestCase):

@@ -31,9 +31,8 @@ isn't your thing, leave a message in the feedback box on Tripwire's About page i
 
 ## Voices
 
-Tripwire can read every page aloud. With ElevenLabs connected it reads in Purple's voice;
-otherwise it uses the device's own voice. If you'd like to lend your voice for another
-language, please get in touch.
+Tripwire can read every page aloud, using the device's own voice. Many devices have no
+Sesotho voice yet; if you know of a good, freely licensed one, please get in touch.
 
 ## Code
 

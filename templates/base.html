@@ -15,14 +15,15 @@
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
   <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
 </head>
-<body class="{% block body_class %}{% endblock %}" data-voice="{{ voice }}" data-speak-url="{{ url_for('speak') }}">
+<body class="{% block body_class %}{% endblock %}">
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="loading-bar" aria-hidden="true"></div>
   {% set main_links = [('index', 'Watching', ['index']), ('videos', 'Videos', ['videos']),
                         ('change_list', 'Changes', ['change_list', 'entry']),
                         ('book_list', 'Books', ['book_list', 'book_comparison', 'book_job']),
+                        ('shelf_page', 'My shelf', ['shelf_page', 'shelf_item']),
                         ('stats_page', 'Stats', ['stats_page'])] %}
-  {% set more_links = [('live_watch', 'Live watch', ['live_watch']), ('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Weekly summary', ['summary']),
+  {% set more_links = [('before_page', 'Then and now', ['before_page', 'before_result']), ('live_watch', 'Live watch', ['live_watch']), ('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Weekly summary', ['summary']),
                         ('about', 'About Tripwire', ['about'])] + ([('feedback_inbox', 'Feedback inbox', ['feedback_inbox'])] if is_admin else []) %}
   <header class="top {{ self.main_class() }}">
     <a class="brand" href="{{ url_for('home') }}">Tripwire<span class="cursor" aria-hidden="true"></span></a>
@@ -86,8 +87,7 @@
     <h2 id="access-title">Access</h2>
     <p class="meta">Make Tripwire easier to use. Your choices are remembered on this device.</p>
     <label class="check"><input type="checkbox" data-setting="read"> <span><strong>Read aloud.</strong>
-      Click any text to hear it, or use “Read this page aloud”. Reads in
-      {{ "Purple's voice" if voice == 'purple' else "your device's voice" }}.</span></label>
+      Click any text to hear it, or use “Read this page aloud”. Uses your device's own voice.</span></label>
     <label class="check"><input type="checkbox" data-setting="calm"> <span><strong>Calm mode.</strong> No typing effects or pauses: everything appears at once.</span></label>
     <label class="check"><input type="checkbox" data-setting="big"> <span><strong>Bigger text.</strong></span></label>
     <label class="check"><input type="checkbox" data-setting="contrast"> <span><strong>Strong contrast.</strong> Black on white, no textures.</span></label>

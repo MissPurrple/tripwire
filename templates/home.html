@@ -6,9 +6,11 @@
                ('2', 'VIDEOS', url_for('videos'), (numbers.videos ~ (' video' if numbers.videos == 1 else ' videos')) if numbers else ''),
                ('3', 'CHANGES', url_for('change_list'), numbers.waiting ~ ' waiting' if numbers else ''),
                ('4', 'BOOKS', url_for('book_list'), numbers.books ~ ' compared' if numbers else ''),
-               ('5', 'STATS', url_for('stats_page'), ''),
-               ('6', 'ARCHIVE', url_for('archive'), (numbers.copies ~ (' public copy' if numbers.copies == 1 else ' public copies')) if numbers else ''),
-               ('7', 'ABOUT', url_for('about'), '')] if numbers else
+               ('5', 'MY SHELF', url_for('shelf_page'), numbers.shelf ~ ' kept' if numbers else ''),
+               ('6', 'THEN AND NOW', url_for('before_page'), ''),
+               ('7', 'STATS', url_for('stats_page'), ''),
+               ('8', 'ARCHIVE', url_for('archive'), (numbers.copies ~ (' public copy' if numbers.copies == 1 else ' public copies')) if numbers else ''),
+               ('9', 'ABOUT', url_for('about'), '')] if numbers else
               [('L', 'LOG IN', url_for('login'), ''), ('M', 'MAKE AN ACCOUNT', url_for('signup'), ''),
                ('A', 'ABOUT TRIPWIRE', url_for('about'), '')] %}
 <div class="computer" aria-label="Tripwire, shown as an old box computer">

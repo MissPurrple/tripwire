@@ -11,13 +11,14 @@ Online (Vercel), it needs three settings (Environment Variables):
 import functools
 import hmac
 import os
+import re
 import time
 from urllib.parse import urlparse
 
 from flask import Flask, Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.exceptions import HTTPException
 
-from tripwire import books, changes, charts, db, humancheck, i18n, live, mailer, sources, speech, stats
+from tripwire import before, books, changes, charts, db, humancheck, i18n, live, mailer, shelf, sources, stats
 from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
@@ -112,30 +113,7 @@ def current_language():
 def language_helpers():
     lang = current_language()
     return {"lang": lang, "t": lambda text: i18n.translate(lang, text), "languages": i18n.choices(),
-            "language_name": i18n.LANGUAGES[lang]["_english_name"], "github_url": GITHUB_URL,
-            "voice": "purple" if os.environ.get("ELEVENLABS_API_KEY") and os.environ.get("ELEVENLABS_VOICE_ID") else "device"}
-
-
-SPEECH_PER_VISITOR = 4000      # characters per visitor per 10 minutes in Purple's voice
-
-
-@app.post("/speak")
-def speak():
-    """Audio of a piece of text in Purple's voice (ElevenLabs). If it can't be made, the
-    browser reads it with the device's own voice instead, so this never blocks anyone."""
-    data = request.get_json(silent=True) or {}
-    text = (data.get("text") or "")[:speech.MAX_CHARACTERS]
-    window = session.get("speech_window") or [time.time(), 0]
-    if time.time() - window[0] > 600:
-        window = [time.time(), 0]
-    if window[1] + len(text) > SPEECH_PER_VISITOR:
-        return jsonify(error="That's a lot of reading in a short time; your device's voice will carry on."), 429
-    try:
-        audio = speech.Speech(tw().conn).audio(text, current_language())
-    except speech.SpeechError as exc:
-        return jsonify(error=str(exc)), 503
-    session["speech_window"] = [window[0], window[1] + len(text)]
-    return Response(audio, mimetype="audio/mpeg", headers={"Cache-Control": "private, max-age=86400"})
+            "language_name": i18n.LANGUAGES[lang]["_english_name"], "github_url": GITHUB_URL}
 
 
 @app.get("/language/<code>")
@@ -262,6 +240,7 @@ def home():
                                     (uid,)).fetchone()["n"],
             "books": len(tw().book_comparisons(uid)),
             "copies": len(tw().copies(uid)),
+            "shelf": conn.execute("SELECT COUNT(*) AS n FROM shelf_items WHERE user_id = ?", (uid,)).fetchone()["n"],
         }
     return render_template("home.html", numbers=numbers)
 
@@ -603,7 +582,7 @@ def book_comparison(comparison_id):
         abort(404)
     job = tw().book_job_for(comparison_id)
     return render_template("book.html", c=row, job=job, file_days=BOOK_FILE_DAYS,
-                           kinds=changes.CHANGE_KINDS, interesting=_interesting_changes(row))
+                           kinds=changes.CHANGE_KINDS, interesting=_interesting_changes(db.entry_details(row)))
 
 
 @app.post("/books/<int:comparison_id>/files/delete")
@@ -618,10 +597,9 @@ def delete_book_files(comparison_id):
     return redirect(url_for("book_comparison", comparison_id=comparison_id))
 
 
-def _interesting_changes(comparison, limit=6):
+def _interesting_changes(d, limit=6):
     """A short list worth looking at first: renamed names, the most repeated
-    word swaps, and the biggest added or removed passages."""
-    d = db.entry_details(comparison)
+    word swaps, and the biggest added or removed passages. `d` is a comparison's details."""
     picks = [{"kind": "Name", "removed": old, "added": new} for old, new in d.get("name_changes", [])[:2]]
     picks += [{"kind": f"Swapped {n}×", "removed": old, "added": new}
               for old, new, n in d.get("swaps", [])[:2] if (old, new) not in {(p["removed"], p["added"]) for p in picks}]
@@ -640,6 +618,230 @@ def delete_book_comparison(comparison_id):
     tw().delete_book_comparison(comparison_id)
     flash("Comparison deleted.")
     return redirect(url_for("book_list"))
+
+
+# ---------------------------------------------------------------------------
+# My shelf: your own copies, and "Take my shelf with me"
+# ---------------------------------------------------------------------------
+
+def _shelf():
+    return shelf.Shelf(tw().conn)
+
+
+@app.get("/shelf")
+@login_required
+def shelf_page():
+    search = request.args.get("q", "")
+    return render_template("shelf.html", items=_shelf().items(g.user["id"], search), search=search,
+                           used_mb=_shelf().used_bytes(g.user["id"]) / 1048576,
+                           limit_mb=shelf.MAX_SHELF_BYTES // 1048576, upload_limit_mb=UPLOAD_LIMIT_MB)
+
+
+@app.post("/shelf/file")
+@login_required
+def shelf_add_file():
+    upload = request.files.get("file")
+    read_text = request.form.get("read_text", "").strip()
+    try:
+        item_id = _shelf().add_file(g.user["id"], upload.filename if upload else request.form.get("file_name", ""),
+                                    upload.read() if upload and upload.filename else b"",
+                                    request.form.get("title", ""), request.form.get("note", ""),
+                                    read_text=read_text or None, pages=request.form.get("read_pages", type=int))
+    except shelf.ShelfError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("shelf_page"))
+    flash("On your shelf." if upload and upload.filename else
+          "On your shelf: its words are kept. The file itself was too big to upload, so keep your own copy of it.")
+    return redirect(url_for("shelf_item", item_id=item_id))
+
+
+@app.post("/shelf/link")
+@login_required
+def shelf_add_link():
+    url = request.form.get("url", "").strip()
+    check_id = None
+    try:
+        if request.form.get("compare") and sources.is_wikipedia_link(url):
+            try:
+                check_id = before.save(tw().conn, g.user["id"], before.compare_with_before(url))
+            except sources.SourceError as exc:
+                flash(f"Kept, but not compared with an older copy: {exc}")
+        item_id = _shelf().add_link(g.user["id"], url, request.form.get("title", ""), request.form.get("note", ""),
+                                    before_check_id=check_id)
+    except (shelf.ShelfError, sources.SourceError) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("shelf_page"))
+    if request.form.get("watch"):
+        try:
+            watch_id = tw().add_watch(tw().single_links(g.user["id"]), url)
+            tw().conn.execute("UPDATE shelf_items SET watch_id = ? WHERE id = ?", (watch_id, item_id))
+        except (ValueError, sources.SourceError) as exc:
+            flash(f"Kept, but Tripwire couldn't start watching the link: {exc}")
+    flash("On your shelf.")
+    return redirect(url_for("shelf_item", item_id=item_id))
+
+
+def _own_item(item_id):
+    item = _shelf().item(g.user["id"], item_id)
+    if not item:
+        abort(404)
+    return item
+
+
+@app.get("/shelf/<int:item_id>")
+@login_required
+def shelf_item(item_id):
+    item = _own_item(item_id)
+    watch = tw().own_watch(g.user["id"], item["watch_id"]) if item["watch_id"] else None
+    check = before.own(tw().conn, g.user["id"], item["before_check_id"]) if item["before_check_id"] else None
+    return render_template("shelf_item.html", item=item, watch=watch, check=check,
+                           check_details=db.entry_details(check) if check else None,
+                           scan=bool(item["file_name"]) and not item["text"]
+                           and item["file_name"].lower().endswith((".pdf", ".png", ".jpg", ".jpeg", ".webp")))
+
+
+# Kinds of file a browser can safely show inside the page; anything else is downloaded.
+SHOW_INLINE = {"application/pdf", "image/png", "image/jpeg", "image/webp", "image/gif", "text/plain"}
+
+
+def _download_headers(filename, inline=False):
+    from urllib.parse import quote
+    plain = re.sub(r'[^\w. -]', "_", filename, flags=re.ASCII) or "download"
+    kind = "inline" if inline else "attachment"
+    return {"Content-Disposition": f"{kind}; filename=\"{plain}\"; filename*=UTF-8''{quote(filename)}",
+            "X-Content-Type-Options": "nosniff"}
+
+
+def _stream(data):
+    """Send in pieces: Vercel only allows big downloads when they're streamed."""
+    for start in range(0, len(data), 256 * 1024):
+        yield data[start:start + 256 * 1024]
+
+
+@app.get("/shelf/<int:item_id>/file")
+@login_required
+def shelf_file(item_id):
+    found = _shelf().file(g.user["id"], item_id)
+    if not found:
+        abort(404)
+    name, data = found
+    kind = shelf.file_type(name)
+    inline = kind in SHOW_INLINE and not request.args.get("download")
+    return Response(_stream(data), mimetype=kind if inline else "application/octet-stream",
+                    headers=dict(_download_headers(name, inline), **{"Content-Length": str(len(data))}))
+
+
+@app.post("/shelf/<int:item_id>/text")
+@login_required
+def shelf_set_text(item_id):
+    """Words read from a scan on the person's own device, sent afterwards."""
+    _own_item(item_id)
+    data = request.get_json(silent=True) or {}
+    try:
+        _shelf().set_text(g.user["id"], item_id, data.get("text", ""), data.get("pages"))
+    except shelf.ShelfError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(ok=True)
+
+
+@app.post("/shelf/<int:item_id>/edit")
+@login_required
+def shelf_edit(item_id):
+    _own_item(item_id)
+    _shelf().update(g.user["id"], item_id, request.form.get("title", ""), request.form.get("note", ""))
+    flash("Saved.")
+    return redirect(url_for("shelf_item", item_id=item_id))
+
+
+@app.post("/shelf/<int:item_id>/delete")
+@login_required
+def shelf_delete(item_id):
+    _own_item(item_id)
+    _shelf().delete(g.user["id"], item_id)
+    flash("Removed from your shelf.")
+    return redirect(url_for("shelf_page"))
+
+
+@app.get("/shelf/download.<kind>")
+@login_required
+def shelf_download(kind):
+    """Take my shelf with me: everything as one ZIP (for any browser) or ZIM (for Kiwix)."""
+    if kind not in ("zip", "zim"):
+        abort(404)
+    name = request.args.get("name", "").strip()[:80] or "My shelf"
+    path = (_shelf().export_zip(g.user["id"], name) if kind == "zip"
+            else _shelf().export_zim(g.user["id"], name, current_language()))
+    size = os.path.getsize(path)
+
+    def pieces():
+        try:
+            with open(path, "rb") as f:
+                while True:
+                    piece = f.read(256 * 1024)
+                    if not piece:
+                        break
+                    yield piece
+        finally:
+            os.remove(path)
+
+    filename = f"{shelf.safe_name(name, 'my-shelf')}-{db.now()[:10]}.{kind}"
+    return Response(pieces(), mimetype="application/zip" if kind == "zip" else "application/octet-stream",
+                    headers=dict(_download_headers(filename), **{"Content-Length": str(size)}))
+
+
+# ---------------------------------------------------------------------------
+# Compare with an older copy (Kiwix's offline Wikipedia, or the Internet Archive)
+# ---------------------------------------------------------------------------
+
+@app.route("/before", methods=["GET", "POST"])
+@login_required
+def before_page():
+    if request.method == "POST":
+        try:
+            check_id = before.save(tw().conn, g.user["id"], before.compare_with_before(request.form.get("url", "")))
+        except sources.SourceError as exc:
+            flash(str(exc), "error")
+        else:
+            return redirect(url_for("before_result", check_id=check_id))
+    return render_template("before.html", checks=before.checks(tw().conn, g.user["id"]),
+                           url=request.values.get("url", ""))
+
+
+@app.get("/before/<int:check_id>")
+@login_required
+def before_result(check_id):
+    check = before.own(tw().conn, g.user["id"], check_id)
+    if not check:
+        abort(404)
+    d = db.entry_details(check)
+    on_shelf = tw().conn.execute("SELECT id FROM shelf_items WHERE before_check_id = ? AND user_id = ?",
+                                 (check_id, g.user["id"])).fetchone()
+    return render_template("before_result.html", c=check, d=d, interesting=_interesting_changes(d, limit=8),
+                           on_shelf=on_shelf)
+
+
+@app.post("/before/<int:check_id>/shelf")
+@login_required
+def before_to_shelf(check_id):
+    check = before.own(tw().conn, g.user["id"], check_id)
+    if not check:
+        abort(404)
+    try:
+        item_id = _shelf().add_link(g.user["id"], check["url"], before_check_id=check_id)
+    except (shelf.ShelfError, sources.SourceError) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("before_result", check_id=check_id))
+    flash("On your shelf, with this comparison.")
+    return redirect(url_for("shelf_item", item_id=item_id))
+
+
+@app.post("/before/<int:check_id>/delete")
+@login_required
+def before_delete(check_id):
+    if not before.own(tw().conn, g.user["id"], check_id):
+        abort(404)
+    tw().conn.execute("DELETE FROM before_checks WHERE id = ?", (check_id,))
+    return redirect(url_for("before_page"))
 
 
 @app.get("/summary")

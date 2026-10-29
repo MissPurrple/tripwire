@@ -31,6 +31,24 @@ window.Tripwire = window.Tripwire || {};
     return chars / pages > 80;
   }
 
+  function newWorker(onProgress) {
+    return window.Tesseract.createWorker("eng", 1, {
+      workerPath: BASE + "worker.min.js", corePath: BASE + "core", langPath: BASE + "lang", gzip: true,
+      logger: function (m) { if (m.status === "recognizing text") onProgress(m.progress); }
+    });
+  }
+
+  // Returns {text, pages: 1} for a photo of a page (JPG, PNG, WebP), read on this device.
+  T.readImage = async function (file, onProgress) {
+    await loadTools();
+    var worker = await newWorker(function (part) { onProgress(1, 1, part); });
+    try {
+      return { text: (await worker.recognize(file)).data.text, pages: 1 };
+    } finally {
+      await worker.terminate();
+    }
+  };
+
   // Returns {text, pages} for a scanned PDF, or null if the PDF already has text
   // (then Tripwire reads it normally). onProgress(pageNumber, pageCount, fractionOfPage).
   T.readScannedPdf = async function (file, onProgress) {
@@ -38,10 +56,7 @@ window.Tripwire = window.Tripwire || {};
     var pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
     if (await hasText(pdf)) return null;
     var current = 0;
-    var worker = await window.Tesseract.createWorker("eng", 1, {
-      workerPath: BASE + "worker.min.js", corePath: BASE + "core", langPath: BASE + "lang", gzip: true,
-      logger: function (m) { if (m.status === "recognizing text") onProgress(current, pdf.numPages, m.progress); }
-    });
+    var worker = await newWorker(function (part) { onProgress(current, pdf.numPages, part); });
     var texts = [];
     try {
       for (current = 1; current <= pdf.numPages; current++) {

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ c.title }} · Then and now · Tripwire{% endblock %}
+{% block content %}
+<p class="meta"><a href="{{ url_for('before_page') }}">← Then and now</a></p>
+<section class="intro">
+  <h1>{{ c.title }}</h1>
+  <p>Compared with <strong>{{ c.source_name }}</strong>{% if c.before_date %}, made on {{ c.before_date }}{% endif %},
+     and the page today ({{ c.created_at[:10] }}).</p>
+  <p class="summary"><span class="badge cat-{{ c.category }}">{{ CATEGORIES[c.category] }}</span> {{ c.summary }}</p>
+  <div class="tiles">
+    <div class="stat-tile"><span>Words then</span><strong>{{ '{:,}'.format(d.words_before or 0) }}</strong></div>
+    <div class="stat-tile"><span>Words now</span><strong>{{ '{:,}'.format(d.words_after or 0) }}</strong></div>
+    <div class="stat-tile"><span>Changes</span><strong>{{ '{:,}'.format(d.hunk_count or 0) }}</strong></div>
+  </div>
+  <div class="actions">
+    {% if on_shelf %}
+      <a class="link-button" href="{{ url_for('shelf_item', item_id=on_shelf.id) }}">On your shelf ✓</a>
+    {% else %}
+      <form method="post" action="{{ url_for('before_to_shelf', check_id=c.id) }}"><button>Keep today's copy on my shelf</button></form>
+    {% endif %}
+    {% if c.before_link %}<a class="link-button" href="{{ c.before_link }}" target="_blank" rel="noopener">Read the older copy</a>{% endif %}
+    <a class="link-button" href="{{ c.url }}" target="_blank" rel="noopener">Read it today</a>
+  </div>
+  {% if c.download_link %}
+  <p class="meta">Want the whole offline Wikipedia that this older copy comes from, to keep yourself?
+     <a href="{{ c.download_link }}" rel="noopener">Download it from Kiwix</a> (it's big: open it with the free Kiwix app).</p>
+  {% endif %}
+</section>
+
+{% if interesting %}
+<section class="sources">
+  <h2>Most interesting changes</h2>
+  <ul class="interesting">
+    {% for i in interesting %}
+    <li><span class="badge">{{ i.kind }}</span>
+      {% if i.before %}<span class="meta">… {{ i.before }}</span>{% endif %}
+      {% if i.removed %}<del>{{ i.removed|truncate(400) }}</del>{% endif %}
+      {% if i.added %}<ins>{{ i.added|truncate(400) }}</ins>{% endif %}
+      {% if i.after %}<span class="meta">{{ i.after }} …</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if d.hunks %}
+<section class="sources">
+  <h2>Every change</h2>
+  <p class="meta">Struck-through words were in the older copy; green words are new.
+    {% if d.hunk_count > d.hunks|length %}Showing the first {{ d.hunks|length }} of {{ d.hunk_count }}.{% endif %}
+    {% if c.source == 'kiwix' %}Kiwix lays out some parts differently (like reference lists), so a few changes may be layout, not words.{% endif %}</p>
+  <ul class="interesting">
+    {% for h in d.hunks %}
+    <li>{% if h.before %}<span class="meta">… {{ h.before }}</span>{% endif %}
+      {% if h.removed %}<del>{{ h.removed|truncate(600) }}</del>{% endif %}
+      {% if h.added %}<ins>{{ h.added|truncate(600) }}</ins>{% endif %}
+      {% if h.after %}<span class="meta">{{ h.after }} …</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<form method="post" action="{{ url_for('before_delete', check_id=c.id) }}" onsubmit="return confirm('Delete this comparison?')">
+  <button class="link danger">Delete this comparison</button>
+</form>
+{% endblock %}

@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}My shelf · Tripwire{% endblock %}
+{% block content %}
+<script defer src="{{ url_for('static', filename='scan-reader.js') }}"></script>
+<section class="intro">
+  <h1>My shelf</h1>
+  <p>Your own copies of the documents and pages you care about: a gazette, a memo, a Wikipedia article, a blog post.
+     If the original is changed or taken down, your copy stays. And you can take the whole shelf with you as one file,
+     to keep on a phone or a USB stick, with no internet and no Tripwire needed.</p>
+</section>
+
+<section class="theme" id="take">
+  <h2>Take my shelf with me</h2>
+  <p>Download everything on your shelf: the original files, their words, and a page for each, all in one file.</p>
+  <form method="get" class="book-form" data-no-loading>
+    <label>Name this copy
+      <input name="name" maxlength="80" placeholder="e.g. Lesotho gazettes 2026" value="My shelf">
+    </label>
+    <div class="actions">
+      <button formaction="{{ url_for('shelf_download', kind='zip') }}">Download as ZIP</button>
+      <button formaction="{{ url_for('shelf_download', kind='zim') }}" class="secondary-button">Download for Kiwix (ZIM)</button>
+    </div>
+  </form>
+  <p class="meta"><strong>ZIP:</strong> unzip it and open <code>index.html</code> in any web browser.
+     <strong>ZIM:</strong> open it with <a href="https://kiwix.org/en/applications/" target="_blank" rel="noopener">Kiwix</a>,
+     the free app for reading whole libraries offline, on phones and computers. It's searchable inside Kiwix, and a
+     Kiwix hotspot can share it over Wi-Fi with everyone nearby, like a school or a community centre.</p>
+</section>
+
+<section class="theme">
+  <h2>Keep a file</h2>
+  <form method="post" action="{{ url_for('shelf_add_file') }}" enctype="multipart/form-data" class="book-form" id="file-form">
+    <label>File (PDF, a photo of a page, EPUB, text…)
+      <input type="file" name="file" required>
+    </label>
+    <label>Title (optional)
+      <input name="title" maxlength="200" placeholder="e.g. Government Gazette, 3 March 2026">
+    </label>
+    <label>Note (optional)
+      <input name="note" maxlength="2000" placeholder="Where it's from, why it matters">
+    </label>
+    <input type="hidden" name="read_text"><input type="hidden" name="read_pages"><input type="hidden" name="file_name">
+    <div class="screen scan-progress" id="scan-progress" hidden aria-live="polite">
+      <p class="screen-line" id="scan-title">READING…</p>
+      <p class="screen-line soft" id="scan-step">Getting ready to read it on this device…</p>
+      <div class="progress"><span id="scan-bar" style="width: 0%"></span></div>
+      <p class="screen-line dim scan-note">Keep this page open. Reading takes a few seconds per page.</p>
+    </div>
+    <button id="file-add">Keep it</button>
+  </form>
+  <p class="meta">Scanned PDFs and photos of pages are read on your own device, so their words can be searched.
+     Files can be up to {{ upload_limit_mb }} MB. For a bigger scan, only its words are kept: keep the file itself safe on your own device.</p>
+</section>
+
+<section class="theme">
+  <h2>Keep a copy of a link</h2>
+  <form method="post" action="{{ url_for('shelf_add_link') }}" class="book-form">
+    <label>Link
+      <input name="url" type="url" required placeholder="A Wikipedia article, a web page, or a link to a PDF">
+    </label>
+    <label>Title (optional)
+      <input name="title" maxlength="200">
+    </label>
+    <label>Note (optional)
+      <input name="note" maxlength="2000">
+    </label>
+    <label class="check"><input type="checkbox" name="watch" checked> <span>Keep watching the original, and tell me if it changes or disappears</span></label>
+    <label class="check"><input type="checkbox" name="compare" checked> <span>For Wikipedia: also compare it with Kiwix's offline copy, to see what changed since then</span></label>
+    <button>Keep a copy</button>
+  </form>
+  <p class="meta">A PDF at the link is kept whole (up to 15 MB). For a web page, its words are kept.</p>
+</section>
+
+<section>
+  <h2>On your shelf</h2>
+  <form method="get" class="inline" role="search">
+    <input type="search" name="q" value="{{ search }}" placeholder="Search titles, notes and words" aria-label="Search your shelf">
+    <button>Search</button>
+  </form>
+  {% if search %}<p class="meta">{{ items|length }} found for “{{ search }}”. <a href="{{ url_for('shelf_page') }}">Show everything</a></p>{% endif %}
+  {% for item in items %}
+  {% set gone = item.watch_status and 'Removed' in item.watch_status %}
+  <article class="entry {{ 'cat-removal' if gone else 'cat-edit' }}">
+    <div class="entry-head">
+      <span class="badge {{ 'cat-removal' if gone }}">{{ 'Original gone' if gone else ('File' if item.file_name else 'Copy of a page') }}</span>
+      <span class="when">{{ item.created_at[:10] }}</span>
+    </div>
+    <h3><a href="{{ url_for('shelf_item', item_id=item.id) }}">{{ item.title }}</a></h3>
+    <p class="meta">{% if item.source_url %}From {{ item.source_url|truncate(70) }} · {% endif %}{{ '{:,}'.format(item.text_length or 0) }} characters of text{% if item.file_name %} · {{ ('%.1f MB'|format(item.file_size / 1048576)) if item.file_size >= 1048576 else ('%d KB'|format((item.file_size / 1024)|round(0, 'ceil'))) }} file{% endif %}
+      {% if item.watch_status %} · Watching: {{ item.watch_status }}{% endif %}</p>
+    {% if item.note %}<p>{{ item.note }}</p>{% endif %}
+  </article>
+  {% else %}
+  <p class="empty">{{ 'Nothing found.' if search else 'Nothing here yet. Keep a file or a link above.' }}</p>
+  {% endfor %}
+  <p class="meta">Using {{ '%.1f'|format(used_mb) }} MB of your {{ limit_mb }} MB shelf.</p>
+</section>
+
+<script>
+  // Before sending: read a scanned PDF or a photo on this device, so its words can be kept and searched.
+  var fileForm = document.getElementById("file-form"), ready = false;
+  fileForm.addEventListener("submit", async function (event) {
+    if (ready) return;
+    event.preventDefault();
+    var input = fileForm.elements.file, file = input.files[0], button = document.getElementById("file-add");
+    var panel = document.getElementById("scan-progress"), limit = {{ upload_limit_mb }} * 1024 * 1024;
+    if (!file) return;
+    button.disabled = true;
+    try {
+      var isPhoto = /\.(jpe?g|png|webp)$/i.test(file.name), isPdf = /\.pdf$/i.test(file.name), result = null;
+      function progress(page, pages, part) {
+        panel.hidden = false;
+        document.getElementById("scan-title").textContent = "READING " + file.name.toUpperCase();
+        document.getElementById("scan-step").textContent = "Reading page " + page + " of " + pages + " on this device…";
+        document.getElementById("scan-bar").style.width = (100 * (page - 1 + part) / pages) + "%";
+      }
+      if (isPhoto) result = await window.Tripwire.readImage(file, progress);
+      else if (isPdf) result = await window.Tripwire.readScannedPdf(file, progress);
+      if (result) {
+        fileForm.elements.read_text.value = result.text;
+        fileForm.elements.read_pages.value = result.pages;
+        document.getElementById("scan-step").textContent = "Done: " + result.pages + (result.pages === 1 ? " page" : " pages") + " read.";
+      }
+      if (file.size > limit) {
+        if (!result) {
+          button.disabled = false;
+          alert("This file is " + (file.size / 1048576).toFixed(1) + " MB. Files can be up to {{ upload_limit_mb }} MB.");
+          return;
+        }
+        // Too big to send: keep its words only.
+        fileForm.elements.file_name.value = file.name;
+        input.value = "";
+        input.required = false;
+      }
+    } catch (error) {
+      document.getElementById("scan-step").textContent = "Couldn't read the words on this device (" + error.message + "). Keeping the file anyway.";
+    }
+    document.body.classList.add("is-loading");
+    ready = true;
+    fileForm.requestSubmit ? fileForm.requestSubmit() : fileForm.submit();
+  });
+</script>
+{% endblock %}

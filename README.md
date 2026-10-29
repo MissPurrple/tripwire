@@ -81,8 +81,9 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/mailer.py`, `templates/emails/` | The weekly summary email |
 | `tripwire/humancheck.py` | The sign-up page's own "are you human?" check |
 | `tripwire/live.py`, `templates/live.html` | Live watch: checks a page every few minutes while it's open |
+| `tripwire/shelf.py`, `templates/export/` | My shelf, and "Take my shelf with me": the ZIP and Kiwix (ZIM) downloads |
+| `tripwire/before.py` | Then and now: compares a page with Kiwix's offline Wikipedia or the Internet Archive |
 | `tripwire/i18n.py`, `translations/` | Languages (English, plus draft Hindi and Sesotho) |
-| `tripwire/speech.py` | Read aloud in Purple's voice (ElevenLabs), with the device voice as a fallback |
 | `public/static/scan-reader.js`, `public/static/ocr/` | Reads scanned PDFs in the visitor's own browser (Tesseract and pdf.js, served by Tripwire itself) |
 | `tripwire/db.py` | Storage: a `tripwire.db` file on your laptop, or a Postgres database online |
 | `templates/`, `public/static/` | Page layouts, the retro styling, and the fonts (VT323 and IBM Plex, free under the SIL Open Font License, served by Tripwire itself) |
@@ -128,19 +129,14 @@ The books-published numbers need no setup. They come from Open Library and fill 
 
 Summaries go out on Mondays during the daily run, to everyone who has them switched on (the Weekly summary page has the switch and an **Email it to me now** button). Optional: `SITE_URL` (e.g. `https://tripwire.vercel.app`) sets the address used in email links.
 
-**Read aloud in Purple's voice (optional):** without this, "Read aloud" (in the Access button) uses the device's own voice, which is free. To use a cloned voice:
-1. On **elevenlabs.io**, go to **Voices → Add a new voice → Instant Voice Clone** and upload a minute or two of clear recordings of your voice. Copy the new voice's **Voice ID**.
-2. Under your profile, open **API Keys** and create a key.
-3. In Vercel, add `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`, then redeploy. Optional: `ELEVENLABS_DAILY_CHARACTERS` (default `30000`) caps how much the site can use per day; after that, the device voice takes over until the next day. Audio is remembered, so the same text is never paid for twice.
-
-Tripwire uses ElevenLabs' multilingual model, so the same voice can also read Hindi or Sesotho text (the accent may not be perfect).
-
 **Languages:** English, plus draft Hindi and Sesotho, chosen at the bottom of every page or in the Access panel. Translations live in `translations/`; see `CONTRIBUTING.md` to help.
 
 **Feedback inbox (optional):** add `ADMIN_EMAILS` with your own account's email. Then **More → Feedback inbox** shows what testers wrote in the About page's feedback box. Nobody else can see it.
 
 **Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
 
+**My shelf and Kiwix:** no setup needed. My shelf keeps people's own copies (up to 60 MB each, in the database). "Take my shelf with me" downloads it as a ZIP (open `index.html` in any browser) or a ZIM file for **[Kiwix](https://kiwix.org/en/)**, the free app that reads whole libraries offline. Then and now reads older Wikipedia articles from library.kiwix.org and older web pages from the Internet Archive.
+
 ## Next up
 - **"Watch this with Tripwire" browser extension:** one click to add the page you're on.
-- Offline, preservation-first copies through **[Kiwix](https://kiwix.org/en/)**. Kiwix packages Wikipedia and other knowledge sites into single files ("ZIM" files) that anyone can keep and read with no internet. Tripwire could compare live articles against a Kiwix copy, and keep its own archive in a format Kiwix can open.
+- **A Sesotho voice** for read aloud, and Sesotho-trained text reading for scanned pages.

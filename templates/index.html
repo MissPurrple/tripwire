@@ -12,6 +12,9 @@
       </div>
       <div class="row-actions">
         <form method="post" action="{{ url_for('check_watch', watch_id=w.id) }}"><button class="link">Check</button></form>
+        <form method="post" action="{{ url_for('before_page') }}" title="Compare with {{ "Kiwix's offline copy" if w.kind == 'wikipedia' else "the Internet Archive's copy from a year ago" }}">
+          <input type="hidden" name="url" value="{{ w.target if w.kind == 'web' else 'https://' ~ (w.lang or 'en') ~ '.wikipedia.org/wiki/' ~ w.target|replace(' ', '_') }}">
+          <button class="link">Then and now</button></form>
         {% if w.last_status != 'Removed' %}<a class="link-button" href="{{ url_for('public_copy', kind='watch', item_id=w.id) }}">Keep a public copy…</a>{% endif %}
         <form method="post" action="{{ url_for('remove_watch', watch_id=w.id) }}"
               onsubmit="return confirm('Stop watching this? Its changes will be deleted too. Public copies you made stay in your Archive.')"><button class="link danger">Stop watching</button></form>

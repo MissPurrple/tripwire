@@ -166,3 +166,22 @@
 - Email: Purple now chooses **Gmail for now** (Proton needs a custom domain Purple doesn't have). Steps are in the README
   (new Gmail address + 2-Step Verification + app password). ADMIN_EMAILS = the address Purple logs in to Tripwire with.
 - Next to discuss: suggestion 6 (shelf encrypted with a key only the person holds).
+
+## Built 29 Oct (after Claude's rubric review, scored 3.3/5): five pages
+- Review notes: biggest gaps were no real testers yet (Purple is finding some) and too many pages. Purple's decisions:
+  KEEP the slow opening with NO skip (still version only for reduced-motion users), KEEP the retro look, KEEP About long
+  and detailed for the judges (Purple will read it and decide what to cut; don't shorten it without asking).
+- "Indigenous" appears in: About (Who it's for + Purple's own quote), the example theme name, the demo examples. It's a
+  theme people choose; Purple is fine with it.
+- Menu: Watching · My shelf · Changes · Books & videos · About (+ Account menu). Live watch = switch at the top of Watching
+  (off by default). Watched videos listed on Watching. Books & videos side by side; "Check it now" or "Watch it" for videos;
+  "Keep watching the links" for books (links only; EPUB/text/web). Archive (public copies) inside My shelf. Summary at the top
+  of Changes. Stats link at the bottom of every page. Old addresses redirect.
+- "Then and now" replaced by two buttons on every watched item: Test against Kiwix (Wikipedia only) / Test against Internet
+  Archive. No exact copy -> similar articles (Kiwix title search) or nearby saved pages (Internet Archive). Still not tested
+  against the real Kiwix/Archive servers (blocked from Claude's machine): Purple to try on the live site.
+- Hindi/Sesotho drafts OFF the site; saved here in translation-drafts/. About: "What we'd like to see next" invites translators.
+- About additions (Purple's points): "Why not just use what already exists?" and "communities not fully online".
+- Fixes: empty first visit shows "Try it with real examples"; daily checks ignore "updated 5 minutes ago" noise; long pages
+  compared sentence by sentence (fast). 312 tests pass on SQLite and Postgres.
+- The other Claude session works in parallel on security (log-in pauses, email confirmation, cross-site form refusal).

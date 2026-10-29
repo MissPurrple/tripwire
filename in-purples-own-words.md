@@ -321,3 +321,31 @@ Purple's answers to Claude's questions: humans vs bots = **live from Cloudflare*
 
 Purple's answers to Claude's questions: without an account = **try everything** (things last until the browser
 closes; an account keeps them); the opening plays **once per visit**; the voice plays **on "Trip the wires"**.
+
+## 17. After the honest rubric review: fewer pages, Kiwix buttons, keep the slow opening (29 Oct 2026)
+
+> Okay, I will get some people to use it, and I'll do my best.
+>
+> As for the indigenous framing, where did I mention indigenous, though? I think I was saying that to you, no? ... Indigenous framing, usually, from what I'm told, is the theme that I added, so that's what a person selects they want to keep, right?
+>
+> Could you please add the one-sentence answer as to why not use what exists in my About section? ... while they watch something changing, Tripwire keeps your own copy, notices all of that, and lets you carry it all offline. That is very important, and then also state as another point that, for communities that are not fully online, this can be the preservation tool for things like scanned PDFs that tend to circle around, memos that are not necessarily publicly documented or archived, or if you live in a community that does not do archiving well to begin with
+>
+> maybe remove the AI drafts for Hindi and Sesotho, then. Rather, add it into our About page as to what we would like to see happen, so that it's not public already before it is checked.
+>
+> Videos and books should be together. They can just be split on the screen. ... Watching should be by itself. ... You can only watch books with links.
+>
+> As for stats, don't put stats in the menu. Put stats at the bottom of the page so that it's a fun thing for people to see. It's not a core function.
+>
+> Live Watch can be in Watching ... It can be turned off by default, and if one wishes to use it, it should be right at the top of the page.
+>
+> Archive: the Archive and My Shelf should be combined because they should be serving a similar, if not the same, function.
+>
+> Okay, no, we're keeping the slow on purpose. That's the entire point. I don't want the skip to be obvious when you first open the page. I want people to fully experience that intro section. ... Waiting for 7.5 seconds, relax, calm down. Your life isn't going to end in 7.5 seconds, and that is the point I'm trying to get to.
+>
+> Also keeping my retro look. The point is to be creative, and I am creative and expressive. Creative like that is not a bad thing.
+>
+> The current About page is mainly just for the judges. ... (so that the judges have a central place for them to find notes, etc., while they're judging).
+>
+> I should be able to maybe click "Test against Kiwix" or "Test against Internet Archive." I should have those two buttons there, and then I can search if that information is there, either in that exact same name, same author, or something that might be similar.
+>
+> Fine, we can shorten it, but don't make it super short, because I want it to be detailed and not notes. I would rather go read through it and see what can go and what should stay.

@@ -144,7 +144,8 @@
   rubric, and it invites help). Added a "help is very welcome" line and the three changes above to the timeline.
 - Open: Purple to record the welcome line; Purple to send a bigger version of the rabbit drawing (the current file is
   76x120 pixels, a little soft when enlarged in the opening).
-- Status: on branch `intro-and-guests` (NOT on main / the live site yet), merged with the parallel session's My shelf,
+- Status: LIVE (merged into main 29 Oct, Purple asked to go live; tagline changed to ARCHIVE & PRESERVE.), merged with the parallel session's My shelf,
   Then and now, access mode and languages. My shelf and Then and now also work without an account. The read-aloud
-  question now appears after the opening. 261 tests pass (SQLite and Postgres). Waiting for Purple to try the
-  Vercel preview before merging to main.
+  question now appears after the opening. 261 tests pass (SQLite and Postgres).
+- OPEN: Purple saw 500 errors on the preview (database settings ARE enabled for Preview). A simulated-Vercel run showed
+  no errors on any page. Need the Vercel Logs error text to find the cause.

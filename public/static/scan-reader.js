@@ -49,6 +49,18 @@ window.Tripwire = window.Tripwire || {};
     }
   };
 
+  // Returns {text, pages} for a PDF that already has text, read on this device (for locked
+  // items: Tripwire can't read them, so their words are read here before they're locked).
+  T.readPdfText = async function (file) {
+    await loadTools();
+    var pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise, texts = [];
+    for (var i = 1; i <= pdf.numPages; i++) {
+      var content = await (await pdf.getPage(i)).getTextContent();
+      texts.push(content.items.map(function (item) { return item.str + (item.hasEOL ? "\n" : " "); }).join(""));
+    }
+    return { text: texts.join("\n\n"), pages: pdf.numPages };
+  };
+
   // Returns {text, pages} for a scanned PDF, or null if the PDF already has text
   // (then Tripwire reads it normally). onProgress(pageNumber, pageCount, fractionOfPage).
   T.readScannedPdf = async function (file, onProgress) {

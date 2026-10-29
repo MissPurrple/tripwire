@@ -669,3 +669,10 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
 
 .similar { list-style: none; padding: 0; } .similar li { padding: 8px 0; border-bottom: 1px dashed var(--line); }
 .similar form { align-items: center; justify-content: space-between; flex-wrap: wrap; } .similar-label { overflow-wrap: anywhere; }
+
+/* The vault */
+.vault-box { border-color: var(--names); }
+.locked-entry { border-left-color: var(--names); }
+.recovery-code { font-family: var(--font-mono); font-size: 1.3rem; letter-spacing: .08em; padding: 12px 14px; background: var(--screen);
+  color: var(--phosphor); border-radius: 4px; overflow-wrap: anywhere; user-select: all; }
+[data-vault-state].unlocked { color: var(--accent); }

@@ -171,6 +171,12 @@ ADDED_COLUMNS = [
     ("users", "failed_login_at", "TEXT"),                       # when the last wrong one was
     ("users", "email_confirmed_at", "TEXT"),                    # no summary emails until the address is confirmed
     ("users", "confirm_sent_at", "TEXT"),                       # when the last "confirm your email" went out
+    # The vault (locked shelf items). Tripwire only ever holds the key *locked*: by the person's
+    # passphrase, or by their recovery code. Both stay in their browser; Tripwire never sees either.
+    ("users", "vault", "TEXT"),                                 # JSON: salts, iterations and the two locked keys
+    ("shelf_items", "locked", "INTEGER NOT NULL DEFAULT 0"),    # 1 = locked in the person's browser before upload
+    ("shelf_items", "sealed_title", "TEXT"),                    # locked items: the title, locked
+    ("shelf_items", "sealed", "TEXT"),                          # locked items: title, note, words, file name, locked
 ]
 
 

@@ -16,6 +16,8 @@
     <li>{{ counts.books }} book comparison{{ 's' if counts.books != 1 }}</li>
     <li>Summary emails: {{ every }} (<a href="{{ url_for('change_list', _anchor='summary') }}">change</a>)</li>
   </ul>
+  <p>For the most private things, use <a href="{{ url_for('vault_page') }}">your vault</a>: they're locked on your
+     device before they're sent, and Tripwire can't read them.</p>
   <p class="meta">No tracking cookies, no advertising, no selling data. Tripwire doesn't record your IP address with your account.</p>
   {% include "_privacy_note.html" %}
 </section>

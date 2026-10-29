@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ name }}: locked items</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f1e4; --text: #221f1a; --muted: #5d5649; --edge: #2a2620; --accent: #1f6b3c; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14120e; --text: #efe6d2; --muted: #b3a88f; --edge: #5a5141; --accent: #7cf29c; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-family: ui-monospace, monospace; }
+  .box { border: 2px solid var(--edge); border-radius: 6px; padding: 14px 18px; margin: 16px 0; }
+  input, button { font: inherit; padding: 8px 10px; border-radius: 4px; border: 2px solid var(--edge); }
+  input[type=password] { width: 100%; box-sizing: border-box; }
+  button { background: var(--accent); color: var(--bg); cursor: pointer; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  .words { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 50vh; overflow-y: auto; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>🔒 {{ name }}: locked items</h1>
+  <p>{{ count }} item{{ 's' if count != 1 }}, locked in your browser before they were ever sent to Tripwire. They're still
+     locked in this file. Type your vault passphrase (or recovery code) to open them here. This page works with no internet:
+     nothing you type, and nothing unlocked, leaves this device.</p>
+  <form id="open" class="box">
+    <label><span id="label">Vault passphrase</span><br><input type="password" name="secret" required autocomplete="off"></label>
+    <p><label><input type="checkbox" name="recovery"> Use my recovery code instead</label></p>
+    <button>Unlock</button>
+    <p class="meta" id="status" aria-live="polite"></p>
+  </form>
+  <div id="items"></div>
+  <p class="meta">Made with Tripwire on {{ made }}. Locked with AES-256-GCM; the passphrase becomes a key through
+     PBKDF2-SHA256. The code that does it is inside this page: you can read it.</p>
+</main>
+<script>{{ core }}</script>
+<script type="application/json" id="data">{{ data }}</script>
+<script>
+(function () {
+  var data = JSON.parse(document.getElementById("data").textContent), V = window.TripwireVault;
+  var form = document.getElementById("open");
+  function say(text) { document.getElementById("status").textContent = text; }
+  function add(parent, tag, text, cls) { var el = document.createElement(tag); if (text) el.textContent = text; if (cls) el.className = cls; parent.appendChild(el); return el; }
+  form.recovery.addEventListener("change", function () {
+    document.getElementById("label").textContent = form.recovery.checked ? "Recovery code" : "Vault passphrase";
+  });
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    if (!V || !V.available) { say("This browser can't do the unlocking. Please use an up-to-date browser."); return; }
+    say("Unlocking…");
+    try {
+      var key = await V.open(data.vault, form.secret.value, data.user, form.recovery.checked);
+      form.secret.value = "";
+      var list = document.getElementById("items");
+      list.textContent = "";
+      for (var i = 0; i < data.items.length; i++) {
+        var item = data.items[i], box = add(list, "section", "", "box");
+        try {
+          var details = JSON.parse(await V.unsealText(key, item.sealed, data.user, "details"));
+          add(box, "h2", details.title || "Untitled");
+          add(box, "p", "Kept " + item.created_at.slice(0, 10), "meta");
+          if (details.note) add(box, "p", details.note);
+          if (item.file) {
+            var blob = new Blob([await V.unseal(key, item.file, data.user, "file")], { type: details.file_type || "application/octet-stream" });
+            var link = add(box, "a", "Save " + (details.file_name || "the file"));
+            link.href = URL.createObjectURL(blob); link.download = details.file_name || "file";
+          }
+          if (details.text) { var more = add(box, "details"); add(more, "summary", "Its words"); add(more, "div", details.text, "words"); }
+        } catch (e) { add(box, "p", e.message); }
+      }
+      form.hidden = true;
+    } catch (e) { say(e.message); }
+  });
+})();
+</script>
+</body>
+</html>

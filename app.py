@@ -10,12 +10,14 @@ Online (Vercel), it needs three settings (Environment Variables):
 
 import functools
 import hmac
+import json
 import os
 import re
 import time
 from urllib.parse import urlparse
 
-from flask import Flask, Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_template, request, send_file, session,
+                   url_for)
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.exceptions import HTTPException
 
@@ -841,9 +843,121 @@ def _own_item(item_id):
     return item
 
 
+# ---------------------------------------------------------------------------
+# The vault: shelf items locked in the person's own browser before they're sent.
+# Tripwire stores them and hands them back, but can't open them: it never sees the
+# passphrase, the recovery code or the key (see tripwire/export_files/vault-core.js).
+# ---------------------------------------------------------------------------
+
+VAULT_CORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tripwire", "export_files", "vault-core.js")
+SEALED_PIECE = re.compile(r"[A-Za-z0-9+/]{16,400}={0,2}")
+
+
+@app.get("/vault-core.js")
+def vault_core():
+    """The locking code, from the same file the offline unlock page uses."""
+    return send_file(VAULT_CORE, mimetype="text/javascript", max_age=300)
+
+
+def _vault():
+    return json.loads(g.user["vault"]) if g.user and g.user["vault"] else None
+
+
+@app.get("/vault")
+@account_required("lock things in your own vault")
+def vault_page():
+    locked = tw().conn.execute("SELECT COUNT(*) AS n FROM shelf_items WHERE user_id = ? AND locked = 1",
+                               (uid(),)).fetchone()["n"]
+    return render_template("vault.html", vault=_vault(), locked=locked)
+
+
+@app.get("/vault/key")
+@account_required("lock things in your own vault")
+def vault_key():
+    """The vault key, still locked (by the passphrase and by the recovery code)."""
+    if not _vault():
+        abort(404)
+    return jsonify(_vault())
+
+
+def _valid_vault(record):
+    return (isinstance(record, dict) and record.get("v") == 1 and record.get("kdf") == "PBKDF2-SHA256"
+            and isinstance(record.get("iterations"), int) and 100_000 <= record["iterations"] <= 10_000_000
+            and all(isinstance(record.get(k), str) and SEALED_PIECE.fullmatch(record[k])
+                    for k in ("salt", "recovery_salt", "key", "recovery_key")))
+
+
+@app.post("/vault/setup")
+@account_required("lock things in your own vault")
+def vault_setup():
+    record = request.get_json(silent=True)
+    if _vault():
+        return jsonify(error="You already have a vault."), 409
+    if not _valid_vault(record):
+        return jsonify(error="That vault didn't arrive whole. Please try again."), 400
+    keep = {k: record[k] for k in ("v", "kdf", "iterations", "salt", "recovery_salt", "key", "recovery_key")}
+    tw().conn.execute("UPDATE users SET vault = ? WHERE id = ?", (json.dumps(keep), uid()))
+    return jsonify(ok=True)
+
+
+@app.post("/vault/passphrase")
+@account_required("lock things in your own vault")
+def vault_passphrase():
+    """A new passphrase: the browser locks the same key again, so every item stays readable."""
+    record, old = request.get_json(silent=True), _vault()
+    if not old or not _valid_vault(record) or record["recovery_key"] != old["recovery_key"]:
+        return jsonify(error="That change didn't arrive whole. Please try again."), 400
+    keep = {k: record[k] for k in ("v", "kdf", "iterations", "salt", "recovery_salt", "key", "recovery_key")}
+    tw().conn.execute("UPDATE users SET vault = ? WHERE id = ?", (json.dumps(keep), uid()))
+    return jsonify(ok=True)
+
+
+@app.post("/vault/reset")
+@account_required("lock things in your own vault")
+def vault_reset():
+    """Lost both the passphrase and the recovery code: the only way on is to start again.
+    Locked items can't be opened by anyone any more, so they're deleted with the vault."""
+    try:
+        right_password = tw().log_in(g.user["email"], request.form.get("password", ""))
+    except TooManyTries as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("vault_page"))
+    if request.form.get("sure") != "yes" or not right_password:
+        flash("That password doesn't match, so nothing was deleted.", "error")
+        return redirect(url_for("vault_page"))
+    tw().conn.execute("DELETE FROM shelf_items WHERE user_id = ? AND locked = 1", (uid(),))
+    tw().conn.execute("UPDATE users SET vault = NULL WHERE id = ?", (uid(),))
+    flash("Your vault and its locked items are gone. You can set up a new vault any time.")
+    return redirect(url_for("vault_page"))
+
+
+@app.post("/shelf/locked")
+@account_required("lock things in your own vault")
+def shelf_add_locked():
+    upload = request.files.get("file")
+    try:
+        item_id = _shelf().add_locked(uid(), request.form.get("sealed_title", ""), request.form.get("sealed", ""),
+                                      upload.read() if upload else None)
+    except shelf.ShelfError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(url=url_for("shelf_item", item_id=item_id))
+
+
+@app.get("/shelf/<int:item_id>/sealed")
+@account_required("lock things in your own vault")
+def shelf_sealed(item_id):
+    row = _shelf().sealed(uid(), item_id)
+    if not row:
+        abort(404)
+    return jsonify(sealed_title=row["sealed_title"], sealed=row["sealed"], has_file=bool(row["has_file"]),
+                   created_at=row["created_at"])
+
+
 @app.get("/shelf/<int:item_id>")
 def shelf_item(item_id):
     item = _own_item(item_id)
+    if item["locked"]:
+        return render_template("shelf_locked.html", item=item)
     watch = tw().own_watch(uid(), item["watch_id"]) if item["watch_id"] else None
     check = before.own(tw().conn, uid(), item["before_check_id"]) if item["before_check_id"] else None
     return render_template("shelf_item.html", item=item, watch=watch, check=check,

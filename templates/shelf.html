@@ -53,6 +53,38 @@
      Files can be up to {{ upload_limit_mb }} MB. For a bigger scan, only its words are kept: keep the file itself safe on your own device.</p>
 </section>
 
+<section class="theme vault-box" id="lock">
+  <h2>🔒 Lock something in your vault</h2>
+  {% if not g.user or is_guest %}
+    <p>With an account, you can lock documents in your browser before they're sent, with a key only you hold.
+       Tripwire keeps them but can't read them. <a href="{{ url_for('signup') }}">Make an account</a> to use your own vault.</p>
+  {% elif not g.user.vault %}
+    <p>Lock documents in your own browser before they're sent, with a key only you hold. Tripwire keeps them but can't read
+       them: not the file, its title, your note, or its words. <a href="{{ url_for('vault_page') }}">Make your vault</a> (two minutes).</p>
+  {% else %}
+    <p>Locked on this device first, then sent. Tripwire can't read any of it. Vault: <strong data-vault-state>Checking…</strong>
+       (<a href="{{ url_for('vault_page') }}">manage</a>)</p>
+    <form id="lock-form" class="book-form">
+      <label>File (optional: you can lock just a written note)
+        <input type="file" name="file">
+      </label>
+      <label>Title
+        <input name="title" maxlength="200" required placeholder="Only you will see this">
+      </label>
+      <label>Note, or anything you want to write down (optional)
+        <textarea name="note" rows="4" maxlength="200000"></textarea>
+      </label>
+      <label id="lock-secret" hidden>Vault passphrase (your vault is locked on this device)
+        <input type="password" name="secret" autocomplete="current-password">
+      </label>
+      <button id="lock-add">Lock it and keep it</button>
+      <p class="meta" id="lock-status" aria-live="polite"></p>
+    </form>
+    <p class="meta">Scans and photos are read on this device first, so their words are locked too. Files can be up to {{ upload_limit_mb }} MB.
+       Locked items can't be searched here, watched, or put in the Kiwix file (Tripwire can't read them); they are in the ZIP download, still locked.</p>
+  {% endif %}
+</section>
+
 <section class="theme">
   <h2>Keep a copy of a link</h2>
   <form method="post" action="{{ url_for('shelf_add_link') }}" class="book-form">
@@ -80,6 +112,13 @@
   </form>
   {% if search %}<p class="meta">{{ items|length }} found for “{{ search }}”. <a href="{{ url_for('shelf_page') }}">Show everything</a></p>{% endif %}
   {% for item in items %}
+  {% if item.locked %}
+  <article class="entry locked-entry">
+    <div class="entry-head"><span class="badge">🔒 Locked</span><span class="when">{{ item.created_at[:10] }}</span></div>
+    <h3><a href="{{ url_for('shelf_item', item_id=item.id) }}"><span data-sealed-title="{{ item.sealed_title }}">Locked item</span></a></h3>
+    <p class="meta">Locked in your browser · {{ '%.1f MB'|format(item.file_size / 1048576) if item.file_size >= 1048576 else '%d KB'|format((item.file_size / 1024)|round(0, 'ceil')) }}</p>
+  </article>
+  {% else %}
   {% set gone = item.watch_status and 'Removed' in item.watch_status %}
   <article class="entry {{ 'cat-removal' if gone else 'cat-edit' }}">
     <div class="entry-head">
@@ -91,6 +130,7 @@
       {% if item.watch_status %} · Watching: {{ item.watch_status }}{% endif %}</p>
     {% if item.note %}<p>{{ item.note }}</p>{% endif %}
   </article>
+  {% endif %}
   {% else %}
   <p class="empty">{{ 'Nothing found.' if search else 'Nothing here yet. Keep a file or a link above.' }}</p>
   {% endfor %}
@@ -160,4 +200,55 @@
     fileForm.requestSubmit ? fileForm.requestSubmit() : fileForm.submit();
   });
 </script>
+{% if g.user and not is_guest and g.user.vault %}
+<script>
+  // Lock it here, then send only the locked parts.
+  (function () {
+    var form = document.getElementById("lock-form");
+    function say(text) { document.getElementById("lock-status").textContent = text; }
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      var V = window.TripwireVault, vault = window.Tripwire.vault, user = vault.user();
+      var file = form.file.files[0], button = document.getElementById("lock-add");
+      var limit = {{ upload_limit_mb }} * 1024 * 1024;
+      if (file && file.size > limit - 1024 * 1024) { say("Files can be up to {{ upload_limit_mb|round(0, 'floor')|int - 1 }} MB once locked."); return; }
+      button.disabled = true;
+      try {
+        var key = await vault.key();
+        if (!key) {
+          var secret = document.getElementById("lock-secret");
+          if (secret.hidden || !form.secret.value) { secret.hidden = false; form.secret.focus(); throw new Error("Type your vault passphrase to unlock it on this device."); }
+          say("Unlocking on this device…");
+          key = await vault.unlock(form.secret.value, false);
+          form.secret.value = ""; secret.hidden = true;
+        }
+        var text = "", textFrom = "";
+        if (file && /\.(jpe?g|png|webp|pdf)$/i.test(file.name) && window.Tripwire.readScannedPdf) {
+          var progress = function (page, pages) { say("Reading page " + page + " of " + pages + " on this device…"); };
+          try {
+            var read = /\.pdf$/i.test(file.name)
+              ? (await window.Tripwire.readScannedPdf(file, progress)) || (await window.Tripwire.readPdfText(file))
+              : await window.Tripwire.readImage(file, progress);
+            if (read && read.text) { text = read.text; textFrom = "Read on your device (" + read.pages + (read.pages === 1 ? " page)" : " pages)"); }
+          } catch (e) { /* the file is kept even if its words can't be read */ }
+        } else if (file && /\.(txt|md|csv|html?)$/i.test(file.name)) {
+          text = await file.text(); textFrom = "The words of the file";
+        }
+        say("Locking on this device…");
+        var details = { title: form.title.value, note: form.note.value, text: text, text_from: textFrom,
+                        file_name: file ? file.name : "", file_type: file ? file.type : "" };
+        var data = new FormData();
+        data.append("sealed_title", await V.sealText(key, form.title.value, user, "title"));
+        data.append("sealed", await V.sealText(key, JSON.stringify(details), user, "details"));
+        if (file) data.append("file", new Blob([await V.seal(key, await file.arrayBuffer(), user, "file")]), "locked.bin");
+        say("Sending the locked copy…");
+        var response = await fetch("{{ url_for('shelf_add_locked') }}", { method: "POST", credentials: "same-origin", body: data });
+        var result = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(result.error || "That didn't work. Please try again.");
+        window.location = result.url;
+      } catch (e) { say(e.message); button.disabled = false; }
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

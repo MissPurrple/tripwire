@@ -13,9 +13,11 @@
     } catch (e) {}
   </script>
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  <script defer src="{{ url_for('vault_core') }}"></script>
+  <script defer src="{{ url_for('static', filename='vault.js') }}"></script>
   <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}" data-vault-user="{{ g.user.id if g.user and not is_guest and g.user.vault else '' }}">
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="loading-bar" aria-hidden="true"></div>
   {% set main_links = [('index', 'Watching', ['index', 'before_result']),
@@ -27,6 +29,7 @@
     {% if g.user and not is_guest %}
       <span class="who">{{ g.user.email }}</span>
       <a href="{{ url_for('account') }}">{{ t('Your account') }}</a>
+      <a href="{{ url_for('vault_page') }}">{{ t('Your vault') }}</a>
       {% if is_admin %}<a href="{{ url_for('feedback_inbox') }}">Feedback inbox</a>{% endif %}
       <form method="post" action="{{ url_for('logout') }}"><button class="link">{{ t('Log out') }}</button></form>
     {% else %}
@@ -41,7 +44,7 @@
         <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ t(label) }}</a>
       {% endfor %}
       <details class="more">
-        <summary {% if request.endpoint in ('account', 'feedback_inbox', 'login', 'signup') %}class="on"{% endif %}>{{ 'Account' if g.user and not is_guest else 'Log in' }}</summary>
+        <summary {% if request.endpoint in ('account', 'vault_page', 'feedback_inbox', 'login', 'signup') %}class="on"{% endif %}>{{ 'Account' if g.user and not is_guest else 'Log in' }}</summary>
         <div class="menu">
           {{ account_links() }}
         </div>

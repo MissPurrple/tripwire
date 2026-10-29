@@ -515,6 +515,7 @@ class WebAppTests(CheckerTests):
         with self.client.session_transaction() as sess:
             self.assertNotEqual(sess["human_check"]["salt"], salt)  # a new challenge, so guessing doesn't help
             salt = sess["human_check"]["salt"]
+        bad = next(n for n in range(100000) if not humancheck.pow_ok(salt, n, 4))  # wrong for *this* challenge
         self.assertFalse(self.client.post("/human-check", json={"answer": "4", "nonce": bad}).json["passed"])
 
     def test_human_check_rules(self):
@@ -1976,3 +1977,122 @@ class SetupTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VaultTests(CheckerTests):
+    """Locked shelf items: Tripwire stores them but can't read them. (The locking itself runs in
+    the browser and is checked in a real browser too; these check everything on the server.)"""
+
+    RECORD = {"v": 1, "kdf": "PBKDF2-SHA256", "iterations": 600000, "salt": "c2FsdHNhbHRzYWx0c2FsdA==",
+              "recovery_salt": "cmVjb3ZlcnlyZWNvdmVyeQ==", "key": "bG9ja2VkLWtleS1ieS1wYXNzcGhyYXNlLWJsYWJsYQ==",
+              "recovery_key": "bG9ja2VkLWtleS1ieS1yZWNvdmVyeS1jb2RlLWJsYWJs"}
+
+    def setUp(self):
+        super().setUp()
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        self.client = webapp.app.test_client()
+        self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+
+    def make_vault(self):
+        self.assertEqual(self.client.post("/vault/setup", json=self.RECORD).json, {"ok": True})
+
+    def lock(self, title="U2VjcmV0IHRpdGxlIGxvY2tlZA==", sealed="TG9ja2VkIGRldGFpbHMgaGVyZQ==", file=b"\x00locked bytes"):
+        import io
+        data = {"sealed_title": title, "sealed": sealed}
+        if file is not None:
+            data["file"] = (io.BytesIO(file), "locked.bin")
+        return self.client.post("/shelf/locked", data=data, content_type="multipart/form-data")
+
+    def test_needs_an_account_and_a_vault(self):
+        self.assertEqual(self.lock().status_code, 400)  # no vault yet
+        self.assertIn("Make your vault", self.client.get("/vault").data.decode())
+        self.client.post("/logout")
+        self.assertTrue(self.client.get("/vault").headers["Location"].endswith("/signup"))
+        self.assertTrue(self.client.get("/vault/key").headers["Location"].endswith("/signup"))
+
+    def test_vault_is_stored_only_locked_and_only_once(self):
+        self.make_vault()
+        self.assertEqual(self.client.get("/vault/key").json, self.RECORD)
+        self.assertEqual(self.client.post("/vault/setup", json=self.RECORD).status_code, 409)  # can't be replaced
+        for broken in [dict(self.RECORD, iterations=1000), dict(self.RECORD, key="not base64!"),
+                       dict(self.RECORD, kdf="none"), {"v": 1}]:
+            self.client.post("/vault/reset", data={"password": "correct horse", "sure": "yes"})
+            self.assertEqual(self.client.post("/vault/setup", json=broken).status_code, 400)
+
+    def test_locked_items_are_stored_as_they_arrive(self):
+        self.make_vault()
+        url = self.lock().json["url"]
+        row = self.tw.conn.execute("SELECT * FROM shelf_items").fetchone()
+        self.assertEqual((row["locked"], row["title"], row["note"], row["text"], row["source_url"]),
+                         (1, "Locked item", "", "", None))
+        self.assertEqual(bytes(row["file_data"]), b"\x00locked bytes")
+        sealed = self.client.get(url + "/sealed").json
+        self.assertEqual(sealed["sealed_title"], "U2VjcmV0IHRpdGxlIGxvY2tlZA==")
+        self.assertTrue(sealed["has_file"])
+        page = self.client.get(url).data.decode()
+        self.assertIn("Tripwire can't read it", page)
+        self.assertIn('data-sealed-title="U2VjcmV0IHRpdGxlIGxvY2tlZA=="', self.client.get("/shelf").data.decode())
+        file = self.client.get(url + "/file")
+        self.assertEqual(file.data, b"\x00locked bytes")
+        self.assertIn("attachment", file.headers["Content-Disposition"])  # never shown as a page
+        # Not readable, so not searchable, editable or readable here.
+        self.assertNotIn("Locked item", self.client.get("/shelf?q=locked").data.decode().split("On your shelf")[1].split("Using")[0])
+        self.client.post(url + "/edit", data={"title": "Changed", "note": "x"})
+        self.assertEqual(self.tw.conn.execute("SELECT title FROM shelf_items").fetchone()["title"], "Locked item")
+
+    def test_only_locked_looking_data_is_accepted(self):
+        self.make_vault()
+        for title, sealed in [("<script>alert(1)</script>", "TG9ja2Vk"), ("TG9ja2Vk", "plain words, not locked"), ("", "TG9ja2Vk")]:
+            self.assertEqual(self.lock(title=title, sealed=sealed).status_code, 400)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM shelf_items").fetchone()["n"], 0)
+
+    def test_someone_else_cant_get_them(self):
+        self.make_vault()
+        url = self.lock().json["url"]
+        self.tw.create_user("other@example.org", "other password")
+        other = __import__("app").app.test_client()
+        other.post("/login", data={"email": "other@example.org", "password": "other password"})
+        for path in (url, url + "/sealed", url + "/file"):
+            self.assertEqual(other.get(path).status_code, 404, path)
+        self.assertEqual(other.get("/vault/key").status_code, 404)
+
+    def test_take_it_with_me_still_locked(self):
+        import io, json, zipfile
+        self.make_vault()
+        self.lock()
+        self.lock(title="QW5vdGhlciB0aXRsZQ==", file=None)
+        response = self.client.get("/shelf/download.zip?name=Mine")
+        z = zipfile.ZipFile(io.BytesIO(b"".join(response.response)))
+        names = z.namelist()
+        self.assertIn("Mine/locked/unlock.html", names)
+        data = json.loads(z.read("Mine/locked/locked.json"))
+        self.assertEqual(data["vault"], self.RECORD)
+        self.assertEqual(len(data["items"]), 2)
+        self.assertEqual(data["items"][0]["file"], "AGxvY2tlZCBieXRlcw==")
+        page = z.read("Mine/locked/unlock.html").decode()
+        self.assertIn("TripwireVault", page)  # the unlocking code travels with it
+        self.assertNotIn("</script>\n<script type=\"application/json\" id=\"data\"></script>", page)
+        self.assertNotIn("Locked item", z.read("Mine/index.html").decode())  # not among the readable pages
+
+    def test_forgot_everything_start_again(self):
+        self.make_vault()
+        self.lock()
+        self.client.post("/vault/reset", data={"password": "wrong", "sure": "yes"})
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM shelf_items").fetchone()["n"], 1)
+        self.client.post("/vault/reset", data={"password": "correct horse", "sure": "yes"})
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM shelf_items").fetchone()["n"], 0)
+        self.assertIsNone(self.tw.user(self.user)["vault"])
+
+    def test_new_passphrase_keeps_the_recovery_copy(self):
+        self.make_vault()
+        changed = dict(self.RECORD, salt="bmV3c2FsdG5ld3NhbHRuZXc=", key="bmV3bHktbG9ja2VkLWtleS1ieS1uZXctcGFzcw==")
+        self.assertEqual(self.client.post("/vault/passphrase", json=changed).json, {"ok": True})
+        self.assertEqual(self.client.get("/vault/key").json["key"], changed["key"])
+        swapped = dict(changed, recovery_key="c29tZW9uZS1lbHNlcy1yZWNvdmVyeS1rZXk=")
+        self.assertEqual(self.client.post("/vault/passphrase", json=swapped).status_code, 400)
+
+    def test_core_is_served(self):
+        response = self.client.get("/vault-core.js")
+        self.assertIn(b"TripwireVault", response.data)
+        self.assertIn("javascript", response.headers["Content-Type"])

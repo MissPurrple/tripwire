@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Locked item · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <p class="meta"><a href="{{ url_for('shelf_page') }}">← My shelf</a></p>
+  <h1 id="locked-title">🔒 Locked item</h1>
+  <p class="meta">Kept {{ item.created_at[:10] }} · locked in your browser before it was sent: Tripwire can't read it.</p>
+</section>
+
+<section class="theme" id="locked-closed">
+  <h2>Unlock to see it</h2>
+  <form id="open-form" class="book-form">
+    <label><span id="open-label">Vault passphrase</span>
+      <input type="password" name="secret" required autocomplete="current-password">
+    </label>
+    <label class="check"><input type="checkbox" name="recovery"> Use my recovery code instead</label>
+    <button>Unlock</button>
+    <p class="meta" id="open-status" aria-live="polite"></p>
+  </form>
+</section>
+
+<section class="theme" id="locked-open" hidden>
+  <h2>What's inside</h2>
+  <p id="locked-note"></p>
+  <p class="meta" id="locked-from"></p>
+  <div class="actions" id="locked-file" hidden>
+    <a class="button" id="file-open" target="_blank" rel="noopener">Open the file</a>
+    <a class="button secondary" id="file-save">Save the file</a>
+  </div>
+  <h3 id="words-heading" hidden>Its words</h3>
+  <div class="shelf-words" id="locked-words" hidden></div>
+  <p class="meta">Unlocked only on this device, only for you. Nothing unlocked is sent anywhere.</p>
+</section>
+
+<section class="theme danger-zone">
+  <h2>Remove it</h2>
+  <form method="post" action="{{ url_for('shelf_delete', item_id=item.id) }}"
+        onsubmit="return confirm('Remove this locked item from your shelf for good?')">
+    <button class="danger-button">Remove from my shelf</button>
+  </form>
+</section>
+
+<script>
+(function () {
+  var itemUrl = "{{ url_for('shelf_sealed', item_id=item.id) }}", fileUrl = "{{ url_for('shelf_file', item_id=item.id) }}";
+  function say(text) { document.getElementById("open-status").textContent = text; }
+  async function show(key) {
+    var V = window.TripwireVault, user = window.Tripwire.vault.user();
+    var item = await (await fetch(itemUrl, { credentials: "same-origin" })).json();
+    var details = JSON.parse(await V.unsealText(key, item.sealed, user, "details"));
+    document.getElementById("locked-title").textContent = details.title || "Untitled";
+    document.title = (details.title || "Locked item") + " · Tripwire";
+    document.getElementById("locked-note").textContent = details.note || "";
+    document.getElementById("locked-from").textContent = details.text_from || "";
+    if (details.text) {
+      document.getElementById("words-heading").hidden = false;
+      var words = document.getElementById("locked-words");
+      words.textContent = details.text; words.hidden = false;
+    }
+    if (item.has_file) {
+      var locked = new Uint8Array(await (await fetch(fileUrl, { credentials: "same-origin" })).arrayBuffer());
+      var blob = new Blob([await V.unseal(key, locked, user, "file")], { type: details.file_type || "application/octet-stream" });
+      var link = URL.createObjectURL(blob);
+      document.getElementById("file-open").href = link;
+      var save = document.getElementById("file-save");
+      save.href = link; save.download = details.file_name || "file";
+      document.getElementById("locked-file").hidden = false;
+    }
+    document.getElementById("locked-closed").hidden = true;
+    document.getElementById("locked-open").hidden = false;
+  }
+  document.addEventListener("DOMContentLoaded", async function () {
+    var form = document.getElementById("open-form");
+    form.recovery.addEventListener("change", function () {
+      document.getElementById("open-label").textContent = form.recovery.checked ? "Recovery code" : "Vault passphrase";
+    });
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      say("Unlocking on this device…");
+      try { await show(await window.Tripwire.vault.unlock(form.secret.value, form.recovery.checked)); form.secret.value = ""; }
+      catch (e) { say(e.message); }
+    });
+    var key = await window.Tripwire.vault.key();
+    if (key) { try { await show(key); } catch (e) { say(e.message); } }
+  });
+})();
+</script>
+{% endblock %}

@@ -11,6 +11,7 @@ The download comes two ways, with the same pages inside:
     school or village over Wi-Fi. Searchable inside Kiwix.
 """
 
+import base64
 import json
 import mimetypes
 import os
@@ -19,6 +20,7 @@ import tempfile
 import zipfile
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from markupsafe import Markup
 
 from . import books, db, sources
 
@@ -27,7 +29,12 @@ MAX_SHELF_BYTES = 60 * 1024 * 1024   # everything on one person's shelf
 GUEST_SHELF_BYTES = 10 * 1024 * 1024  # the same, for a visitor without an account (so bots can't fill the database)
 MAX_TEXT_CHARS = 2_000_000           # the words of one item (a long book is about 1 million)
 LIST_COLUMNS = ["id", "user_id", "title", "note", "source_url", "file_name", "file_size", "text_from",
-                "watch_id", "before_check_id", "created_at"]
+                "watch_id", "before_check_id", "created_at", "locked", "sealed_title"]
+# Locked items arrive already locked (see tripwire/export_files/vault-core.js): text that looks like
+# this, and nothing else. Tripwire can't read them; it only checks they're the right shape and size.
+SEALED = re.compile(r"[A-Za-z0-9+/]+={0,2}")
+MAX_SEALED_TITLE = 4000
+MAX_SEALED_CHARS = MAX_TEXT_CHARS * 2 + 100_000
 
 
 def _columns(prefix=""):
@@ -69,8 +76,8 @@ class Shelf:
                     FROM shelf_items s LEFT JOIN watches w ON w.id = s.watch_id WHERE s.user_id = ?"""
         params = [user_id]
         search = search.strip()
-        if search:
-            query += " AND (LOWER(s.title) LIKE ? OR LOWER(s.note) LIKE ? OR LOWER(s.text) LIKE ?)"
+        if search:  # locked items can't be searched here: Tripwire can't read them (the browser can)
+            query += " AND s.locked = 0 AND (LOWER(s.title) LIKE ? OR LOWER(s.note) LIKE ? OR LOWER(s.text) LIKE ?)"
             params += [f"%{search.lower()}%"] * 3
         return self.conn.execute(query + " ORDER BY s.id DESC", params).fetchall()
 
@@ -168,16 +175,45 @@ class Shelf:
         return self._insert(user_id, title or page_title, note, text, f"The web page, as it was on {db.now()[:10]}",
                             source_url=url, watch_id=watch_id, before_check_id=before_check_id)
 
+    def add_locked(self, user_id, sealed_title, sealed, data=None):
+        """Keep an item that was locked in the person's browser. Tripwire stores it as it
+        arrives and can't open it: no title, no words, no file name, only the locked parts."""
+        if not self.conn.execute("SELECT vault FROM users WHERE id = ? AND vault IS NOT NULL", (user_id,)).fetchone():
+            raise ShelfError("Set up your vault first.")
+        for value, limit in ((sealed_title, MAX_SEALED_TITLE), (sealed, MAX_SEALED_CHARS)):
+            if not value or len(value) > limit or not SEALED.fullmatch(value):
+                raise ShelfError("That locked item didn't arrive whole. Please try again.")
+        data = data or None
+        if data and len(data) > MAX_FILE_BYTES:
+            raise ShelfError(f"Files can be up to {MAX_FILE_BYTES // 1048576} MB.")
+        size = len(data or b"") + len(sealed) + len(sealed_title)
+        self._check_room(user_id, size)
+        return self.conn.insert(
+            """INSERT INTO shelf_items (user_id, title, note, file_name, file_size, file_data, text,
+                   locked, sealed_title, sealed, created_at)
+               VALUES (?, 'Locked item', '', ?, ?, ?, '', 1, ?, ?, ?)""",
+            (user_id, "locked.bin" if data else None, size, data, sealed_title, sealed, db.now()))
+
+    def sealed(self, user_id, item_id):
+        return self.conn.execute("""SELECT id, sealed_title, sealed, file_data IS NOT NULL AS has_file, created_at
+                                    FROM shelf_items WHERE id = ? AND user_id = ? AND locked = 1""",
+                                 (item_id, user_id)).fetchone()
+
+    def locked_items(self, user_id):
+        """Everything locked, for taking with you (still locked)."""
+        return self.conn.execute("""SELECT sealed_title, sealed, file_data, created_at FROM shelf_items
+                                    WHERE user_id = ? AND locked = 1 ORDER BY id""", (user_id,)).fetchall()
+
     def set_text(self, user_id, item_id, text, pages=None):
         """Words read later on the person's device, for a scan that had none."""
         text = (text or "")[:MAX_TEXT_CHARS]
         self._check_room(user_id, len(text))
-        self.conn.execute("UPDATE shelf_items SET text = ?, text_from = ? WHERE id = ? AND user_id = ?",
+        self.conn.execute("UPDATE shelf_items SET text = ?, text_from = ? WHERE id = ? AND user_id = ? AND locked = 0",
                           (text, f"Read on your device (scanned, {pages} page{'s' if int(pages) != 1 else ''})" if pages else "Read on your device",
                            item_id, user_id))
 
     def update(self, user_id, item_id, title, note):
-        self.conn.execute("UPDATE shelf_items SET title = ?, note = ? WHERE id = ? AND user_id = ?",
+        self.conn.execute("UPDATE shelf_items SET title = ?, note = ? WHERE id = ? AND user_id = ? AND locked = 0",
                           (title.strip()[:200] or "Untitled", note.strip()[:2000], item_id, user_id))
 
     def delete(self, user_id, item_id):
@@ -188,7 +224,8 @@ class Shelf:
     def _export_pages(self, user_id, name):
         """Every page and file of the download, as (path, title, mimetype, content, is_page)."""
         env = Environment(loader=FileSystemLoader(EXPORT_TEMPLATES), autoescape=select_autoescape())
-        rows = self.conn.execute("SELECT * FROM shelf_items WHERE user_id = ? ORDER BY id", (user_id,)).fetchall()
+        rows = self.conn.execute("SELECT * FROM shelf_items WHERE user_id = ? AND locked = 0 ORDER BY id",
+                                 (user_id,)).fetchall()
         checks = {r["id"]: dict(r, details=db.entry_details(r)) for r in self.conn.execute(
             "SELECT * FROM before_checks WHERE user_id = ?", (user_id,)).fetchall()}
         watches = {r["id"]: r for r in self.conn.execute(
@@ -235,6 +272,23 @@ class Shelf:
             z.writestr(f"{folder}/shelf.json", json.dumps({"name": name, "made": db.now(), "items": listing},
                                                           indent=2, ensure_ascii=False))
             z.writestr(f"{folder}/README.txt", README.format(name=name, made=db.now()[:10], count=len(items)))
+            locked = self.locked_items(user_id)
+            if locked:  # still locked: only the person's passphrase or recovery code opens them
+                vault = self.conn.execute("SELECT vault FROM users WHERE id = ?", (user_id,)).fetchone()["vault"]
+                data = {"user": str(user_id), "vault": json.loads(vault),
+                        "items": [{"sealed_title": r["sealed_title"], "sealed": r["sealed"], "created_at": r["created_at"],
+                                   "file": base64.b64encode(bytes(r["file_data"])).decode() if r["file_data"] is not None else None}
+                                  for r in locked]}
+                as_json = json.dumps(data)
+                z.writestr(f"{folder}/locked/locked.json", as_json)
+                with open(os.path.join(STATIC, "vault-core.js"), encoding="utf-8") as f:
+                    core = f.read()
+                env = Environment(loader=FileSystemLoader(EXPORT_TEMPLATES), autoescape=select_autoescape())
+                # "<" can't appear in the data inside the page, so nothing in it can end the script early.
+                page = env.get_template("unlock.html").render(
+                    name=name, made=db.now()[:10], count=len(locked), core=Markup(core.replace("</", "<\\/")),
+                    data=Markup(as_json.replace("<", "\\u003c")))
+                z.writestr(f"{folder}/locked/unlock.html", page)
         return path
 
     def export_zim(self, user_id, name, lang="en"):
@@ -293,6 +347,8 @@ To read it: open index.html in any web browser. It works with no internet.
   files/   the original files (PDFs, photos...), exactly as they were kept
   text/    the words of each item as plain text, to search or copy
   shelf.json   the list of items, for other programs
+  locked/      items you locked in your vault, still locked: open locked/unlock.html
+               in any browser and type your vault passphrase (works with no internet)
 
 There is also a Kiwix version (.zim) of this shelf: download it from Tripwire's
 My shelf page and open it with the free Kiwix app (kiwix.org), on a phone or a

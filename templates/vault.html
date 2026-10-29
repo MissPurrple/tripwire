@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Your vault · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>Your vault</h1>
+  <div class="screen about-screen" data-typewriter="24">
+    <p class="screen-line big" data-speed="50">LOCKED ON YOUR DEVICE. UNREADABLE TO US.</p>
+    <p class="screen-line soft">Items you lock are scrambled in your own browser, with a key only you hold, before they're sent.
+      Tripwire keeps them safe, but can't read them: not the file, not its title, not your note, not its words.</p>
+  </div>
+</section>
+
+<noscript><p class="flash error">The vault works in your browser, so it needs JavaScript switched on.</p></noscript>
+<p class="flash error" id="no-crypto" hidden>This browser can't do the locking. Please use an up-to-date browser.</p>
+
+{% if not vault %}
+<section class="theme" id="setup">
+  <h2>Make your vault</h2>
+  <p>Choose a <strong>vault passphrase</strong>. Use a different one from your Tripwire password: Tripwire's server sees
+     your password when you log in, but never sees this passphrase.</p>
+  <form id="setup-form" class="book-form">
+    <label>Vault passphrase (at least 12 characters: a sentence of four or five random words is strong and easy to remember)
+      <input type="password" name="passphrase" minlength="12" required autocomplete="new-password">
+    </label>
+    <label>Type it again
+      <input type="password" name="again" minlength="12" required autocomplete="new-password">
+    </label>
+    <button>Make my vault</button>
+    <p class="meta" id="setup-status" aria-live="polite"></p>
+  </form>
+  <div id="recovery" hidden>
+    <h3>Your recovery code</h3>
+    <p>If you forget your passphrase, this code is the <strong>only</strong> way to open your vault. Nobody else can help:
+       not Tripwire, not Purple, not anyone. Write it on paper and keep it somewhere safe, not on this device.</p>
+    <p class="recovery-code" id="recovery-code"></p>
+    <label class="check"><input type="checkbox" id="written"> I've written it down somewhere safe</label>
+    <button type="button" id="save-vault" disabled>Finish making my vault</button>
+  </div>
+</section>
+{% else %}
+<section class="theme">
+  <h2>On this device: <span data-vault-state>Checking…</span></h2>
+  <p>{{ locked }} locked item{{ 's' if locked != 1 }}. Once unlocked, your vault stays open on this device for 30 minutes after
+     you last use it, and locks itself when you log out.</p>
+  <form id="unlock-form" class="book-form">
+    <label><span id="secret-label">Vault passphrase</span>
+      <input type="password" name="secret" required autocomplete="current-password">
+    </label>
+    <label class="check"><input type="checkbox" name="recovery"> Use my recovery code instead</label>
+    <div class="actions">
+      <button>Unlock</button>
+      <button type="button" class="secondary-button" id="lock-now">Lock it now</button>
+    </div>
+    <p class="meta" id="unlock-status" aria-live="polite"></p>
+  </form>
+</section>
+
+<section class="theme">
+  <h2>Change my passphrase</h2>
+  <p>Forgot it, but have your recovery code? Use the code here, and choose a new passphrase. Your locked items stay as they are.</p>
+  <form id="change-form" class="book-form">
+    <label>Current passphrase, or your recovery code
+      <input type="password" name="secret" required autocomplete="current-password">
+    </label>
+    <label class="check"><input type="checkbox" name="recovery"> That's my recovery code</label>
+    <label>New passphrase (at least 12 characters)
+      <input type="password" name="passphrase" minlength="12" required autocomplete="new-password">
+    </label>
+    <label>Type it again
+      <input type="password" name="again" minlength="12" required autocomplete="new-password">
+    </label>
+    <button>Change it</button>
+    <p class="meta" id="change-status" aria-live="polite"></p>
+  </form>
+</section>
+
+<section class="theme danger-zone">
+  <h2>Lost both? Start again</h2>
+  <p>Without your passphrase or your recovery code, nobody can open your locked items, ever. That's the point. You can start
+     a new vault, but your {{ locked }} locked item{{ 's' if locked != 1 }} will be deleted, because they can never be opened again.</p>
+  <form method="post" action="{{ url_for('vault_reset') }}" class="book-form"
+        onsubmit="return confirm('Delete your vault and every locked item in it? This cannot be undone.')">
+    <label>Your Tripwire password, to confirm it's you
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <label class="check"><input type="checkbox" name="sure" value="yes" required> I understand the locked items will be deleted</label>
+    <button class="danger-button">Delete my vault and its locked items</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="theme">
+  <h2>What Tripwire can and can't see</h2>
+  <dl class="choices">
+    <dt>Can't see</dt>
+    <dd>A locked item's file, title, note, or words. Your vault passphrase. Your recovery code. The key that locks everything.</dd>
+    <dt>Can see</dt>
+    <dd>That a locked item exists, roughly how big it is, and when it was added. That's needed to keep it and to count your space.</dd>
+    <dt>How it's locked</dt>
+    <dd>AES-256-GCM, built into your browser (no outside service). Your passphrase becomes a key through 600,000 rounds of
+        PBKDF2-SHA256, so guessing it is slow. The locking code is open: it's
+        <a href="{{ url_for('vault_core') }}">this one file</a>, and the same file is in your “Take my shelf with me” download.</dd>
+    <dt>Taking it with you</dt>
+    <dd>The ZIP download includes your locked items, still locked, and a page that unlocks them with your passphrase,
+        offline, with no internet and no Tripwire.</dd>
+    <dt>The honest limit</dt>
+    <dd>Like every website that locks things in your browser, you're trusting that the page sent to you is the real one.
+        If Tripwire's server were ever taken over, a changed page could try to catch your passphrase as you type it.
+        Items already locked stay locked. For the most sensitive things, keep them off the internet entirely.</dd>
+  </dl>
+</section>
+
+<script>
+(function () {
+  var V = window.TripwireVault, user = document.body.dataset.vaultUser || "{{ g.user.id }}";
+  function ready(run) { if (window.TripwireVault && window.Tripwire && window.Tripwire.vault) run(); else document.addEventListener("DOMContentLoaded", run); }
+  function say(id, text) { document.getElementById(id).textContent = text; }
+  async function post(url, body) {
+    var response = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify(body) });
+    var data = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(data.error || "That didn't work. Please try again.");
+    return data;
+  }
+  ready(function () {
+    V = window.TripwireVault;
+    if (!V.available) { document.getElementById("no-crypto").hidden = false; return; }
+    var setup = document.getElementById("setup-form");
+    if (setup) {
+      var made = null;
+      setup.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        if (setup.passphrase.value !== setup.again.value) { say("setup-status", "Those two passphrases are different."); return; }
+        say("setup-status", "Making your key on this device… (a few seconds)");
+        setup.querySelector("button").disabled = true;
+        made = await V.create(setup.passphrase.value, user);
+        say("setup-status", "");
+        document.getElementById("recovery-code").textContent = made.recoveryCode;
+        document.getElementById("recovery").hidden = false;
+        setup.hidden = true;
+      });
+      document.getElementById("written").addEventListener("change", function (e) {
+        document.getElementById("save-vault").disabled = !e.target.checked;
+      });
+      document.getElementById("save-vault").addEventListener("click", async function () {
+        try {
+          await post("{{ url_for('vault_setup') }}", made.record);
+          document.body.dataset.vaultUser = user;
+          await window.Tripwire.vault.unlock(setup.passphrase.value, false);
+          window.location = "{{ url_for('shelf_page') }}#lock";
+        } catch (e) { alert(e.message); }
+      });
+    }
+    var unlock = document.getElementById("unlock-form");
+    if (unlock) {
+      unlock.recovery.addEventListener("change", function () {
+        say("secret-label", unlock.recovery.checked ? "Recovery code" : "Vault passphrase");
+      });
+      unlock.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        say("unlock-status", "Unlocking on this device…");
+        try {
+          await window.Tripwire.vault.unlock(unlock.secret.value, unlock.recovery.checked);
+          unlock.secret.value = "";
+          say("unlock-status", "Unlocked.");
+          document.querySelectorAll("[data-vault-state]").forEach(function (el) { el.textContent = "Unlocked on this device"; });
+        } catch (e) { say("unlock-status", e.message); }
+      });
+      document.getElementById("lock-now").addEventListener("click", async function () {
+        await window.Tripwire.vault.lock();
+        say("unlock-status", "Locked.");
+        document.querySelectorAll("[data-vault-state]").forEach(function (el) { el.textContent = "Locked"; });
+      });
+    }
+    var change = document.getElementById("change-form");
+    if (change) change.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      if (change.passphrase.value !== change.again.value) { say("change-status", "Those two new passphrases are different."); return; }
+      say("change-status", "Changing it on this device…");
+      try {
+        var record = await window.Tripwire.vault.record();
+        await V.open(record, change.secret.value, user, change.recovery.checked);  // checks the old one first
+        var next = await V.relock(record, change.secret.value, change.recovery.checked, change.passphrase.value, user);
+        await post("{{ url_for('vault_passphrase') }}", next);
+        change.reset();
+        say("change-status", "Done. Use your new passphrase from now on.");
+      } catch (e) { say("change-status", e.message); }
+    });
+  });
+})();
+</script>
+{% endblock %}

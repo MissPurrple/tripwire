@@ -161,3 +161,8 @@
   sending summaries (a bot could sign up a stranger's email); form tokens against cross-site form tricks
   (browsers' SameSite cookies already block most); keep ADMIN_EMAILS to Purple's own registered email; consider
   removing the Vercel Analytics script (cookieless, but a third party sees visits); end-to-end encrypted shelf (big job).
+- BUILT and live (29 Oct): suggestions 1-3. Log-in pauses 15 min after 5 wrong passwords; email addresses must be
+  confirmed (link → page with a button) before any summary is sent; forms from other websites are refused.
+- Email: Purple now chooses **Gmail for now** (Proton needs a custom domain Purple doesn't have). Steps are in the README
+  (new Gmail address + 2-Step Verification + app password). ADMIN_EMAILS = the address Purple logs in to Tripwire with.
+- Next to discuss: suggestion 6 (shelf encrypted with a key only the person holds).

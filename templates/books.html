@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Books · Tripwire{% endblock %}
 {% block content %}
+<script defer src="{{ url_for('static', filename='scan-reader.js') }}"></script>
 {% if intro %}
 <div class="intro-overlay" id="intro" role="status" aria-live="polite">
   <div class="screen intro-screen" data-typewriter-manual>
@@ -50,10 +51,17 @@
       </label>
     </fieldset>
     {% endfor %}
-    <p class="meta">Best results: EPUB or plain text. PDFs work if they contain real text (not scanned pictures of pages).
-       Uploads can be up to {{ upload_limit_mb }} MB in total; for bigger books, paste links instead.
-       Copyrighted books are fine to compare here: the result stays private to you.</p>
-    <button>Compare</button>
+    <p class="meta">EPUB, plain text and PDF all work, including <strong>scanned PDFs</strong> (pictures of pages, like gazettes and memos).
+       Scanned pages are read on your own device: the document never leaves it, only the text it contains.
+       Uploads can be up to {{ upload_limit_mb }} MB in total (a scanned PDF only uploads its text, so it can be bigger);
+       for other big files, paste links instead. Copyrighted books are fine to compare here: the result stays private to you.</p>
+    <div class="screen scan-progress" id="scan-progress" hidden aria-live="polite">
+      <p class="screen-line" id="scan-title">SCANNED PDF FOUND.</p>
+      <p class="screen-line soft" id="scan-step">Getting ready to read it on this device…</p>
+      <div class="progress"><span id="scan-bar" style="width: 0%"></span></div>
+      <p class="screen-line dim scan-note">Keep this page open. Reading takes a few seconds per page.</p>
+    </div>
+    <button id="book-compare">Compare</button>
     <p class="meta" id="book-wait" hidden>Uploading…</p>
   </form>
 </section>
@@ -91,18 +99,50 @@
 {% endif %}
 
 <script>
-  // Warn before uploading more than Vercel accepts, instead of failing with a confusing error.
-  document.getElementById("book-form").addEventListener("submit", function (event) {
+  // Before sending: read any scanned PDF on this device (only its text is uploaded),
+  // then warn if the upload is bigger than Vercel accepts.
+  var bookForm = document.getElementById("book-form"), ready = false;
+  bookForm.addEventListener("submit", async function (event) {
+    if (ready) return;  // already prepared: let the form go
+    event.preventDefault();
+    var button = document.getElementById("book-compare"), panel = document.getElementById("scan-progress");
+    var inputs = Array.prototype.slice.call(bookForm.querySelectorAll("input[type=file]"));
+    button.disabled = true;
+    try {
+      for (var i = 0; i < inputs.length; i++) {
+        var input = inputs[i], file = input.files[0];
+        if (!file || !/\.pdf$/i.test(file.name)) continue;
+        panel.hidden = false;
+        document.getElementById("scan-title").textContent = "CHECKING " + file.name.toUpperCase() + " …";
+        var result = await window.Tripwire.readScannedPdf(file, function (page, pages, part) {
+          document.getElementById("scan-title").textContent = "SCANNED PDF FOUND: " + file.name.toUpperCase();
+          document.getElementById("scan-step").textContent = "Reading page " + page + " of " + pages + " on this device…";
+          document.getElementById("scan-bar").style.width = (100 * (page - 1 + part) / pages) + "%";
+        });
+        if (!result) continue;  // it has real text: Tripwire reads it as usual
+        var name = file.name.replace(/\.pdf$/i, "") + ".pdf (scanned, " + result.pages + " pages).txt";
+        var transfer = new DataTransfer();
+        transfer.items.add(new File([result.text], name, { type: "text/plain" }));
+        input.files = transfer.files;
+        document.getElementById("scan-step").textContent = "Done: " + result.pages + " pages read.";
+        document.getElementById("scan-bar").style.width = "100%";
+      }
+    } catch (error) {
+      button.disabled = false;
+      document.getElementById("scan-step").textContent = "Couldn't read that PDF on this device (" + error.message + ").";
+      return;
+    }
     var total = 0;
-    this.querySelectorAll("input[type=file]").forEach(function (input) {
-      if (input.files[0]) total += input.files[0].size;
-    });
+    inputs.forEach(function (input) { if (input.files[0]) total += input.files[0].size; });
     if (total > {{ upload_limit_mb }} * 1024 * 1024) {
-      event.preventDefault();
+      button.disabled = false;
       alert("These files are " + (total / 1048576).toFixed(1) + " MB together. Uploads can be up to {{ upload_limit_mb }} MB in total. Try an EPUB or text version, or paste links instead.");
       return;
     }
     document.getElementById("book-wait").hidden = false;
+    document.body.classList.add("is-loading");
+    ready = true;
+    bookForm.requestSubmit ? bookForm.requestSubmit() : bookForm.submit();
   });
   // Pick up any comparison that was interrupted (for example, the page was closed early).
   document.querySelectorAll("[data-unfinished]").forEach(function (el) {

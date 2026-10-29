@@ -536,3 +536,7 @@ textarea { font: inherit; width: 100%; padding: 8px 10px; border: 2px solid var(
 .live-entry { border-top: 1px dashed var(--phosphor-dim); padding: 8px 0; }
 .live-entry .added { color: var(--phosphor-soft); }
 .live-entry .removed { text-decoration: line-through; }
+.scan-progress { border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; font-size: 1.2rem; }
+.scan-progress .progress { border-color: var(--phosphor-dim); background: transparent; }
+.scan-progress .progress span { background: repeating-linear-gradient(90deg, var(--phosphor) 0 10px, transparent 10px 13px); }
+.scan-note { font-size: .95rem; }

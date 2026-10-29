@@ -34,6 +34,9 @@ def read_book(filename, data):
         text, info = sources.html_to_text(_decode(data)), {"format": "web page"}
     else:
         text, info = _decode(data), {"format": "plain text"}
+        scanned = SCANNED_NAME.search(filename or "")
+        if scanned:  # text read from a scanned PDF on the person's own device (see scan-reader.js)
+            info = {"format": "Scanned PDF, read on your device", "pages": int(scanned.group(1))}
     text, gutenberg = strip_gutenberg(text)
     if gutenberg:
         info.update({k: v for k, v in gutenberg.items() if v and not info.get(k)})
@@ -41,12 +44,15 @@ def read_book(filename, data):
     text = text.strip()
     if len(text.split()) < 20:
         raise BookError(f"Couldn't find readable text in “{filename}”. If it's a scanned PDF (pictures of "
-                        "pages), Tripwire can't read it yet. A text, EPUB or text-based PDF works best.")
+                        "pages), download it and choose the file with “Upload a file”: Tripwire reads scanned "
+                        "pages on your own device.")
     info["words"] = len(text.split())
     if not info.get("pages"):
         info["pages_estimate"] = max(1, round(info["words"] / WORDS_PER_PAGE))
     return text, info
 
+
+SCANNED_NAME = re.compile(r"\.pdf \(scanned, (\d+) pages?\)\.txt$", re.I)
 
 WORDS_PER_PAGE = 300  # a typical printed page, used only to estimate when the file doesn't say
 
@@ -180,4 +186,5 @@ def edition_label(filename, info):
 
 
 def clean_name(filename):
-    return re.sub(r"[^\w .,()\-']", "", posixpath.basename(filename or "book"))[:120] or "book"
+    name = SCANNED_NAME.sub(".pdf", posixpath.basename(filename or "book"))  # "x.pdf (scanned, 2 pages).txt" -> "x.pdf"
+    return re.sub(r"[^\w .,()\-']", "", name)[:120] or "book"

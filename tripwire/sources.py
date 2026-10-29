@@ -180,7 +180,29 @@ def fetch_page(url):
         return {"status": "removed", "code": response.status_code}
     if response.status_code >= 400:
         raise SourceError(f"{urlparse(url).netloc} answered with error {response.status_code}")
+    if "pdf" in response.headers.get("Content-Type", "").lower() or response.content[:5] == b"%PDF-":
+        return {"status": "ok", "text": pdf_text(response.content)}
     return {"status": "ok", "text": html_to_text(response.text)}
+
+
+def pdf_text(data):
+    """The text of a PDF found on the web (a gazette, a memo). A scanned PDF has
+    no text to compare, so it's described by its pages and a fingerprint of the
+    file instead: Tripwire still notices if it is replaced or removed."""
+    import hashlib
+    import io
+    from pypdf import PdfReader
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        text = "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
+        pages = len(reader.pages)
+    except Exception:  # a damaged PDF: fall back to the fingerprint
+        text, pages = "", None
+    if len(text.split()) >= 20:
+        return text
+    fingerprint = hashlib.sha256(data).hexdigest()[:16]
+    return (f"Scanned PDF ({pages} pages). Its words can't be read here, so Tripwire compares its fingerprint: "
+            f"{fingerprint}. To compare the words, download it and use Books.")
 
 
 # ---------------------------------------------------------------------------

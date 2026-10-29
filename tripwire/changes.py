@@ -98,11 +98,16 @@ def is_word(token):
     return bool(re.match(r"\w", token))
 
 
+APOSTROPHES = ("'", "’")
+
+
 def join_tokens(tokens):
-    """Glue tokens back into readable text (no space before punctuation)."""
+    """Glue tokens back into readable text (no space before punctuation, and
+    none around an apostrophe inside a word, as in "Morena's")."""
     out = ""
-    for token in tokens:
-        if out and is_word(token):
+    for i, token in enumerate(tokens):
+        inside_word = i >= 2 and tokens[i - 1] in APOSTROPHES and is_word(tokens[i - 2])
+        if out and is_word(token) and not inside_word:
             out += " "
         out += token
     return out

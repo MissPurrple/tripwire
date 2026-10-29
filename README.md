@@ -80,6 +80,8 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/stats.py`, `tripwire/charts.py` | The Stats page's numbers (Cloudflare Radar, Open Library) and the charts |
 | `tripwire/mailer.py`, `templates/emails/` | The weekly summary email |
 | `tripwire/humancheck.py` | The sign-up page's own "are you human?" check |
+| `tripwire/live.py`, `templates/live.html` | Live watch: checks a page every few minutes while it's open |
+| `public/static/scan-reader.js`, `public/static/ocr/` | Reads scanned PDFs in the visitor's own browser (Tesseract and pdf.js, served by Tripwire itself) |
 | `tripwire/db.py` | Storage: a `tripwire.db` file on your laptop, or a Postgres database online |
 | `templates/`, `public/static/` | Page layouts, the retro styling, and the fonts (VT323 and IBM Plex, free under the SIL Open Font License, served by Tripwire itself) |
 | `vercel.json` | Tells Vercel this is a Flask app, and to run the daily check |
@@ -129,5 +131,5 @@ Summaries go out on Mondays during the daily run, to everyone who has them switc
 **Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
 
 ## Next up
-- **"Watch this with Tripwire" browser extension:** one click to add the page you're on. Also short, live watching while your browser is open (e.g. a BBC live news page), with a sound or ping when it updates.
+- **"Watch this with Tripwire" browser extension:** one click to add the page you're on.
 - Offline, preservation-first copies through **[Kiwix](https://kiwix.org/en/)**. Kiwix packages Wikipedia and other knowledge sites into single files ("ZIM" files) that anyone can keep and read with no internet. Tripwire could compare live articles against a Kiwix copy, and keep its own archive in a format Kiwix can open.

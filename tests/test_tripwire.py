@@ -564,6 +564,29 @@ class BookTests(unittest.TestCase):
         text, info = books.read_book("old.html", f"<html><body><p>{OLD_BOOK}</p></body></html>".encode())
         self.assertEqual(info["format"], "web page")
 
+    def test_text_read_from_a_scanned_pdf(self):
+        from tripwire import books
+        text, info = books.read_book("gazette-1998.pdf (scanned, 12 pages).txt", OLD_BOOK.encode())
+        self.assertEqual((info["format"], info["pages"]), ("Scanned PDF, read on your device", 12))
+        self.assertEqual(books.edition_label(books.clean_name("gazette-1998.pdf (scanned, 12 pages).txt"), info),
+                         f"gazette-1998.pdf (Scanned PDF, read on your device, 12 pages, {info['words']:,} words)")
+
+    def test_apostrophes_stay_inside_words(self):
+        self.assertEqual(changes.join_tokens(changes.tokenize("Meet at the Morena's court, it's said.")),
+                         "Meet at the Morena's court, it's said.")
+
+    def test_watching_a_pdf_link(self):
+        pdf = make_pdf(["Notice No. 27: land held by families shall remain with families, says the Minister of Local Government today."] * 2)
+        response = mock.Mock(status_code=200, headers={"Content-Type": "application/pdf"}, content=pdf)
+        with mock.patch.object(sources, "_get", return_value=response):
+            self.assertIn("shall remain with families", sources.fetch_page("https://gov.example.ls/gazette.pdf")["text"])
+        scanned = make_pdf(["", ""])
+        response = mock.Mock(status_code=200, headers={"Content-Type": "application/pdf"}, content=scanned)
+        with mock.patch.object(sources, "_get", return_value=response):
+            text = sources.fetch_page("https://gov.example.ls/scan.pdf")["text"]
+        self.assertIn("Scanned PDF (2 pages)", text)
+        self.assertIn("fingerprint", text)
+
     def test_unreadable_books_explain_why(self):
         from tripwire import books
         with self.assertRaises(books.BookError):
@@ -571,6 +594,7 @@ class BookTests(unittest.TestCase):
         with self.assertRaises(books.BookError) as caught:
             books.read_book("scan.pdf", make_pdf(["", ""]))
         self.assertIn("scanned", str(caught.exception))
+        self.assertIn("on your own device", str(caught.exception))
         with self.assertRaises(books.BookError):
             books.read_book("broken.epub", b"PK not really a zip")
 

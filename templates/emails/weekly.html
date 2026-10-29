@@ -12,14 +12,14 @@
   {% if s.entries %}
   <tr><td style="padding:0 22px 12px;">
     <div style="font-size:13px;font-weight:bold;letter-spacing:1px;margin-bottom:6px;">THIS WEEK</div>
-    {% for e in (s.entries|reverse|list)[:10] %}<div style="font-size:14px;margin:4px 0;">▸ <a href="{{ site }}{{ url_for('entry', entry_id=e.id) }}" style="color:#b23f1c;">{{ e.label }}</a> · {{ CATEGORIES[e.category] }}</div>{% endfor %}
+    {% for e in (s.entries|reverse|list)[:10] %}<div style="font-size:14px;margin:4px 0;">▸ <a href="{{ site }}{{ url_for('entry', entry_id=e.id) }}" style="color:#1f6b3c;">{{ e.label }}</a> · {{ CATEGORIES[e.category] }}</div>{% endfor %}
     {% if s.entries|length > 10 %}<div style="font-size:13px;color:#5d5649;">…and {{ s.entries|length - 10 }} more.</div>{% endif %}
   </td></tr>
   {% endif %}
   {% if s.big %}
   <tr><td style="padding:0 22px 12px;">
     <div style="font-size:13px;font-weight:bold;letter-spacing:1px;margin-bottom:6px;">WORTH A LOOK</div>
-    {% for e in s.big %}<div style="font-size:14px;margin:4px 0;">▸ <a href="{{ site }}{{ url_for('entry', entry_id=e.id) }}" style="color:#b23f1c;">{{ e.label }}</a> · {{ CATEGORIES[e.category] }}</div>{% endfor %}
+    {% for e in s.big %}<div style="font-size:14px;margin:4px 0;">▸ <a href="{{ site }}{{ url_for('entry', entry_id=e.id) }}" style="color:#1f6b3c;">{{ e.label }}</a> · {{ CATEGORIES[e.category] }}</div>{% endfor %}
   </td></tr>
   {% endif %}
   {% if s.names %}
@@ -32,11 +32,11 @@
   <tr><td style="padding:0 22px 12px;">
     <div style="font-size:13px;font-weight:bold;letter-spacing:1px;margin-bottom:6px;">IMPORTANT CHANGES WITHOUT A PUBLIC COPY YET</div>
     <div style="font-size:13px;margin-bottom:6px;font-family:Georgia,serif;">If any of these matter to you, consider keeping a public, permanent copy with the Internet Archive.</div>
-    {% for e in s.offer_copy %}<div style="font-size:14px;margin:4px 0;">▸ <a href="{{ site }}{{ url_for('entry', entry_id=e.id) }}" style="color:#b23f1c;">{{ e.label }}</a></div>{% endfor %}
+    {% for e in s.offer_copy %}<div style="font-size:14px;margin:4px 0;">▸ <a href="{{ site }}{{ url_for('entry', entry_id=e.id) }}" style="color:#1f6b3c;">{{ e.label }}</a></div>{% endfor %}
   </td></tr>
   {% endif %}
   <tr><td style="padding:8px 22px 22px;">
-    <a href="{{ site }}{{ url_for('summary') }}" style="display:inline-block;background:#b23f1c;color:#fff8ee;text-decoration:none;padding:10px 16px;border:2px solid #2a2620;font-size:14px;font-weight:bold;">See everything</a>
+    <a href="{{ site }}{{ url_for('summary') }}" style="display:inline-block;background:#1f6b3c;color:#f2fbf3;text-decoration:none;padding:10px 16px;border:2px solid #2a2620;font-size:14px;font-weight:bold;">See everything</a>
   </td></tr>
   <tr><td style="padding:14px 22px;border-top:2px solid #2a2620;font-size:12px;color:#5d5649;">
     You get this once a week because weekly emails are switched on for {{ email }}.

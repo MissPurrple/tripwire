@@ -5,18 +5,18 @@
   --text: #2b2620;
   --muted: #6f665b;
   --line: #e2d9cb;
-  --accent: #9a3b1e;
+  --accent: #1f6b3c;
   --accent-text: #fff;
   --del-bg: #f8d7d0; --del-text: #8a1c0b;
   --ins-bg: #d6efd6; --ins-text: #1d5a22;
-  --tiny: #8a8173; --edit: #2f6690; --major: #b5651d; --removal: #a4161a; --names: #6a4c93;
+  --tiny: #8a8173; --edit: #2f6690; --major: #a8326e; --removal: #a4161a; --names: #6a4c93;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #1c1916; --card: #262220; --text: #ece5da; --muted: #a89f92; --line: #3b3530;
-    --accent: #e07a4f; --accent-text: #1c1916;
+    --accent: #7cf29c; --accent-text: #0d1a10;
     --del-bg: #4a1f1a; --del-text: #ffb4a6; --ins-bg: #1e3b22; --ins-text: #a8e0ab;
-    --tiny: #a89f92; --edit: #7fb3d9; --major: #e6a15c; --removal: #ff7b7f; --names: #bfa3e8;
+    --tiny: #a89f92; --edit: #7fb3d9; --major: #f08bbd; --removal: #ff7b7f; --names: #bfa3e8;
   }
 }
 
@@ -156,15 +156,16 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; max-hei
 .badge.cat-ok { background: var(--ins-text); }
 .entry.video h3 { overflow-wrap: anywhere; }
 
-/* Chart colours: a fixed order checked for colourblind-safe separation (light and dark). */
+/* Chart colours: no orange or yellow, to match the green look. This fixed order passed the
+   colourblind-safety checks in light and dark mode with no warnings (aqua, blue, magenta, green, violet, red). */
 :root {
-  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
-  --series-4: #eda100; --series-5: #e87ba4; --series-6: #008300;
+  --series-1: #1baf7a; --series-2: #2a78d6; --series-3: #e87ba4;
+  --series-4: #008300; --series-5: #6250d6; --series-6: #e34948;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
-    --series-4: #c98500; --series-5: #d55181; --series-6: #008300;
+    --series-1: #199e70; --series-2: #3987e5; --series-3: #d55181;
+    --series-4: #008300; --series-5: #9085e9; --series-6: #e66767;
   }
 }
 
@@ -286,7 +287,7 @@ main.wide, .top.wide { max-width: 1160px; }
 :root {
   --bg: #e6dece; --card: #f6f1e4; --text: #221f1a; --muted: #5d5649; --line: #d2c7af;
   --edge: #2a2620; --shadow: #2a2620;
-  --accent: #b23f1c; --accent-text: #fff8ee;
+  --accent: #1f6b3c; --accent-text: #f2fbf3;
   --screen: #0d1a10; --phosphor: #7cf29c; --phosphor-dim: #4fae6a; --phosphor-soft: #b9f7c9;
   --case: #e9e0c9; --case-dark: #cfc3a3; --case-edge: #a89a77;
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -297,7 +298,7 @@ main.wide, .top.wide { max-width: 1160px; }
   :root {
     --bg: #14120e; --card: #1e1b16; --text: #efe6d2; --muted: #b3a88f; --line: #3b352a;
     --edge: #5a5141; --shadow: #000;
-    --accent: #ffb23f; --accent-text: #1a1610;
+    --accent: #7cf29c; --accent-text: #0d1a10;
     --case: #cdbf9d; --case-dark: #ad9f7d; --case-edge: #7d714f;
   }
 }

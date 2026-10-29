@@ -1,19 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Weekly summary · Tripwire{% endblock %}
+{% block title %}Summary · Tripwire{% endblock %}
 {% block content %}
 <section class="intro">
-  <h1>Weekly summary</h1>
+  <h1>{{ s.name }} summary</h1>
   <p class="meta">{{ s.period }}</p>
   <blockquote class="digest">{{ s.text }}</blockquote>
 </section>
 
 <section class="theme email-box">
   <h2>By email</h2>
-  {% if email_ready %}
-    <p>Tripwire can email you this summary every Monday, so you don't have to come and look. One email a week, never more.</p>
+  {% if not g.user or is_guest %}
+    <p>Want this in your inbox, so you don't have to come and look? <a href="{{ url_for('signup') }}">Make an account</a>
+       and choose daily, weekly or monthly. Everything you've added so far comes with you.</p>
+  {% elif email_ready %}
+    <p>Tripwire can email you this summary, so you don't have to come and look. You choose how often; never more than that.</p>
     <form method="post" action="{{ url_for('summary_email_setting') }}" class="email-toggle">
-      <label class="check"><input type="checkbox" name="weekly_email" value="on" {% if weekly_email %}checked{% endif %}
-             onchange="this.form.submit()"> Email me this summary every Monday ({{ g.user.email }})</label>
+      <fieldset class="every-choice">
+        <legend>Email me a summary ({{ g.user.email }})</legend>
+        {% for key, label in [('daily', 'Daily'), ('weekly', 'Weekly'), ('monthly', 'Monthly'), ('off', 'Off')] %}
+          <label class="check"><input type="radio" name="every" value="{{ key }}" {% if every == key %}checked{% endif %}
+                 onchange="this.form.submit()"> {{ label }}{% if key != 'off' %} <span class="meta">({{ when[key] }})</span>{% endif %}</label>
+        {% endfor %}
+      </fieldset>
       <noscript><button>Save</button></noscript>
     </form>
     <form method="post" action="{{ url_for('summary_send_now') }}">
@@ -21,7 +29,7 @@
     </form>
   {% else %}
     <p class="meta">Email isn't set up on this site yet. The site owner connects an email service in Vercel
-       (see “Weekly summary by email” in the README), and then this summary can arrive every Monday.</p>
+       (see “Summary emails” in the README), and then this summary can arrive daily, weekly or monthly.</p>
   {% endif %}
 </section>
 {% if s.entries %}
@@ -33,7 +41,7 @@
 </section>
 {% if s.offer_copy %}
 <section class="theme offer">
-  <h2>Important changes this week</h2>
+  <h2>Important changes</h2>
   <p>These look like big changes. If any of them matter to you, consider keeping a public, permanent copy with the Internet Archive.</p>
   <ul>{% for e in s.offer_copy %}<li><a href="{{ url_for('entry', entry_id=e.id) }}">{{ e.label }}</a>: {{ CATEGORIES[e.category] }}</li>{% endfor %}</ul>
 </section>

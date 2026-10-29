@@ -49,9 +49,10 @@
 {% block content %}
 <section class="intro">
   <h1>What you're watching</h1>
-  <p>Tripwire checks these once a day by itself. When something changes, it saves the before and after
+  <p>{% if g.user and not is_guest %}Tripwire checks these once a day by itself.{% else %}Press <strong>Check</strong> to look for changes now.
+     With an account, Tripwire also checks them once a day by itself.{% endif %} When something changes, it saves the before and after
      in <a href="{{ url_for('change_list') }}">Changes</a>{% if new_count %} (<strong>{{ new_count }}</strong> waiting for you to look at){% endif %}.
-     No pings. Just a <a href="{{ url_for('summary') }}">weekly summary</a>.</p>
+     No pings. Just a <a href="{{ url_for('summary') }}">summary</a>: daily, weekly or monthly.</p>
   {% if themes or (single and watches[single.id]) %}
     <form method="post" action="{{ url_for('check_all') }}"><button>Check everything now</button></form>
   {% endif %}

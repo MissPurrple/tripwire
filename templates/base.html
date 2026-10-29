@@ -23,11 +23,19 @@
                         ('book_list', 'Books', ['book_list', 'book_comparison', 'book_job']),
                         ('shelf_page', 'My shelf', ['shelf_page', 'shelf_item']),
                         ('stats_page', 'Stats', ['stats_page'])] %}
-  {% set more_links = [('before_page', 'Then and now', ['before_page', 'before_result']), ('live_watch', 'Live watch', ['live_watch']), ('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Weekly summary', ['summary']),
+  {% macro account_links() %}
+    {% if g.user and not is_guest %}
+      <span class="who">{{ g.user.email }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button class="link">{{ t('Log out') }}</button></form>
+    {% else %}
+      <a href="{{ url_for('signup') }}">{{ t('Make an account') }}</a>
+      <a href="{{ url_for('login') }}">{{ t('Log in') }}</a>
+    {% endif %}
+  {% endmacro %}
+  {% set more_links = [('before_page', 'Then and now', ['before_page', 'before_result']), ('live_watch', 'Live watch', ['live_watch']), ('archive', 'Archive', ['archive', 'public_copy']), ('summary', 'Summary', ['summary']),
                         ('about', 'About Tripwire', ['about'])] + ([('feedback_inbox', 'Feedback inbox', ['feedback_inbox'])] if is_admin else []) %}
   <header class="top {{ self.main_class() }}">
     <a class="brand" href="{{ url_for('home') }}">Tripwire<span class="cursor" aria-hidden="true"></span></a>
-    {% if g.user %}
     <nav class="nav-wide" aria-label="Main">
       {% for endpoint, label, active in main_links %}
         <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ t(label) }}</a>
@@ -39,8 +47,7 @@
             <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ t(label) }}</a>
           {% endfor %}
           <hr>
-          <span class="who">{{ g.user.email }}</span>
-          <form method="post" action="{{ url_for('logout') }}"><button class="link">{{ t('Log out') }}</button></form>
+          {{ account_links() }}
         </div>
       </details>
     </nav>
@@ -51,11 +58,9 @@
           <a href="{{ url_for(endpoint) }}" {% if request.endpoint in active %}class="on" aria-current="page"{% endif %}>{{ t(label) }}</a>
         {% endfor %}
         <hr>
-        <span class="who">{{ g.user.email }}</span>
-        <form method="post" action="{{ url_for('logout') }}"><button class="link">{{ t('Log out') }}</button></form>
+        {{ account_links() }}
       </div>
     </details>
-    {% endif %}
   </header>
   {% if lang != 'en' %}
   <p class="language-banner" lang="{{ lang }}">{{ t('language_notice') }}
@@ -73,6 +78,10 @@
     <form method="dialog"><button autofocus>OK</button></form>
   </dialog>
   <script>document.getElementById("language-popup").showModal();</script>
+  {% endif %}
+  {% if is_guest %}
+  <p class="guest-bar">You're trying Tripwire without an account. What you add lasts until you close this browser.
+    <a href="{{ url_for('signup') }}">Make an account</a> to keep it and get updates.</p>
   {% endif %}
   <main id="main" class="{% block main_class %}{% endblock %}">
     {% for kind, message in get_flashed_messages(with_categories=true) %}

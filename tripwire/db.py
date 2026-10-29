@@ -7,7 +7,7 @@ Two ways to store things, same tables either way:
     uses that instead.
 
 Tables:
-  users    people with an account
+  users    people with an account, and guests trying Tripwire without one
   themes   what a person cares about, e.g. "Indigenous communities"
   watches  the things being watched inside a theme (a Wikipedia article or a web page),
            with a saved copy of the version Tripwire last saw (the "baseline")
@@ -164,6 +164,9 @@ ADDED_COLUMNS = [
     ("themes", "loose", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "weekly_email", "INTEGER NOT NULL DEFAULT 1"),   # 1 = send the weekly summary by email
     ("users", "summary_sent_at", "TEXT"),                       # when the last one went out
+    ("users", "guest", "INTEGER NOT NULL DEFAULT 0"),           # 1 = a visitor without an account (yet)
+    ("users", "summary_every", "TEXT"),                         # 'daily', 'weekly', 'monthly' or 'off';
+                                                                # empty = older accounts: follow weekly_email
 ]
 
 

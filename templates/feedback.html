@@ -9,7 +9,7 @@
 <article class="entry">
   <div class="entry-head"><span class="badge">{{ f.tried or 'General' }}</span><span class="when">{{ f.created_at[:16]|replace('T', ' ') }}</span></div>
   <p class="feedback-message">{{ f.message }}</p>
-  <p class="meta">{{ f.email or 'deleted account' }}</p>
+  <p class="meta">{{ 'a visitor without an account' if not f.email or f.email.endswith('@guest.invalid') else f.email }}</p>
 </article>
 {% else %}
 <p class="empty">No feedback yet. Share the About page with your testers: it has the feedback box.</p>

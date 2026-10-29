@@ -589,3 +589,61 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
 
 /* Anything marked hidden stays hidden, whatever its other styles say. */
 [hidden] { display: none !important; }
+.every-choice { border: 2px solid var(--edge); border-radius: 4px; padding: 10px 14px; margin: 0 0 12px; display: grid; gap: 6px; }
+.every-choice legend { font-family: var(--font-mono); font-size: .85rem; padding: 0 6px; }
+
+/* Trying Tripwire without an account: one calm line under the menu */
+.guest-bar { margin: 0; padding: 8px 24px; background: var(--screen); color: var(--phosphor-soft); font-family: var(--font-mono);
+  font-size: .82rem; border-bottom: 2px solid var(--edge); text-align: center; }
+.guest-bar a { color: var(--phosphor); }
+
+/* ---------------------------------------------------------------- the opening (templates/_intro.html) */
+/* Light mode: green on cream. Dark mode: green on black. Tripping the wires turns it black either way. */
+.tw-intro {
+  --intro-bg: #f6f1e4; --rain-fade: rgba(246, 241, 228, .16); --rain: rgba(31, 107, 60, .55); --rain-head: #1f6b3c;
+  --intro-green: #1f6b3c; --intro-glow: none;
+  position: fixed; inset: 0; z-index: 200; background: var(--intro-bg); overflow: hidden;
+  display: flex; align-items: center; justify-content: center; transition: opacity .7s, background-color .6s;
+}
+@media (prefers-color-scheme: dark) {
+  .tw-intro { --intro-bg: #050b06; --rain-fade: rgba(5, 11, 6, .14); --rain: rgba(124, 242, 156, .5); --rain-head: #d9ffe3;
+    --intro-green: #7cf29c; --intro-glow: 0 0 12px rgba(124, 242, 156, .6); }
+}
+.tw-intro.tripped { --intro-bg: #000; --rain-fade: rgba(0, 0, 0, .3); --rain: #39d353; --rain-head: #d9ffe3; }
+.tw-intro.tripped.storm { --rain-fade: rgba(0, 0, 0, .09); }  /* once it's black: long trails */
+.tw-intro.leaving { opacity: 0; pointer-events: none; }
+.tw-intro .rain { position: absolute; inset: 0; }
+.intro-stage {
+  position: relative; display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 24px 16px 32px; max-width: 100%; transition: opacity .5s;
+  /* a soft clearing in the rain, so the words stay easy to read */
+  background: radial-gradient(closest-side, var(--intro-bg) 55%, transparent);
+}
+.tw-intro.tripped .intro-stage { opacity: 0; }
+.intro-title, .intro-tagline { margin: 0; font-family: var(--font-pixel); color: var(--intro-green); text-shadow: var(--intro-glow); }
+.intro-title { font-size: clamp(3.4rem, 13vw, 7.5rem); line-height: 1; letter-spacing: .12em; min-height: 1em; }
+.intro-title .cursor { width: .28em; height: .62em; margin-left: .06em; margin-right: -.34em; vertical-align: .04em; }  /* hangs outside, so the word stays centred */
+.intro-tagline { font-size: clamp(1.4rem, 4.6vw, 2.3rem); letter-spacing: .14em; min-height: 1.2em; margin-top: 6px; }
+.intro-title .typed, .intro-tagline .typed { visibility: hidden; }
+.intro-title.shown .typed, .intro-tagline.shown .typed { visibility: visible; }
+.bunny-spot { height: clamp(130px, 24vh, 200px); margin: 22px 0 18px; display: flex; align-items: flex-end; justify-content: center; }
+.bunny { height: 100%; width: auto; transform-origin: 50% 100%; visibility: hidden; filter: drop-shadow(0 6px 0 rgba(0, 0, 0, .18)); }
+.bunny.ready { visibility: visible; }
+.trip-button {
+  font-family: var(--font-pixel); font-size: clamp(1.5rem, 5vw, 2rem); font-weight: 400; letter-spacing: .08em;
+  color: var(--intro-green); background: transparent; border: 2px solid var(--intro-green); border-radius: 2px;
+  box-shadow: none; padding: 6px 18px; text-shadow: var(--intro-glow);
+  opacity: 0; transform: translateY(6px); pointer-events: none; transition: opacity .6s, transform .6s, background-color .15s, color .15s;
+}
+.trip-button:hover, .trip-button:focus-visible { background: var(--intro-green); color: var(--intro-bg); text-shadow: none; outline: none; }
+.trip-button:active { transform: translate(2px, 2px); box-shadow: none; }
+.intro-hint { margin: 12px 0 0; font-family: var(--font-mono); font-size: .85rem; color: var(--intro-green); opacity: 0; transition: opacity .6s .3s; }
+.tw-intro.landed .trip-button { opacity: 1; transform: none; pointer-events: auto; }
+.tw-intro.landed .intro-hint { opacity: .8; }
+.intro-skip {
+  position: absolute; top: 14px; right: 16px; background: transparent; color: var(--intro-green); border: 0; box-shadow: none;
+  font-family: var(--font-mono); font-weight: 400; font-size: .85rem; opacity: .75; padding: 6px 8px;
+}
+.intro-skip:hover, .intro-skip:focus-visible { opacity: 1; text-decoration: underline; }
+.tw-intro.tripped .intro-skip { display: none; }
+@media (prefers-reduced-motion: reduce) { .tw-intro, .trip-button, .intro-hint, .intro-stage { transition: none; } }

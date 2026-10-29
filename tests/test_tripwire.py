@@ -294,12 +294,68 @@ class WebAppTests(CheckerTests):
     def log_in(self, email="purple@example.org", password="correct horse"):
         return self.client.post("/login", data={"email": email, "password": password}, follow_redirects=True)
 
-    def test_pages_need_an_account(self):
-        for path in ["/watching", "/changes", "/archive", "/summary", "/entries/1", "/copy/entry/1",
-                     "/videos", "/books", "/stats"]:
-            response = self.client.get(path)
-            self.assertEqual(response.status_code, 302)
-            self.assertTrue(response.headers["Location"].endswith("/login"))
+    def test_pages_open_without_an_account(self):
+        for path in ["/watching", "/changes", "/archive", "/summary", "/videos", "/books", "/stats", "/live", "/about"]:
+            self.assertEqual(self.client.get(path).status_code, 200, path)
+        self.assertEqual(self.client.get("/entries/1").status_code, 302)  # someone else's: not shown
+        self.assertEqual(self.client.get("/books/1").status_code, 404)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"], 1)  # looking makes no guest
+        # Public copies and emails need a real account.
+        response = self.client.get("/copy/entry/1")
+        self.assertTrue(response.headers["Location"].endswith("/signup"))
+        self.assertTrue(self.client.post("/summary/email", data={"every": "daily"}).headers["Location"].endswith("/signup"))
+
+    def test_guest_adds_things_then_keeps_them_with_an_account(self):
+        self.client.post("/themes", data={"name": "Indigenous communities"})
+        guest = self.tw.conn.execute("SELECT * FROM users WHERE guest = 1").fetchone()
+        theme = self.tw.conn.execute("SELECT id FROM themes WHERE user_id = ?", (guest["id"],)).fetchone()["id"]
+        self.client.post(f"/themes/{theme}/watches", data={"target": "Warli"})
+        page = self.client.get("/watching").data.decode()
+        self.assertIn("Warli", page)
+        self.assertIn("trying Tripwire without an account", page)
+        self.assertIn("Keep what you", self.client.get("/signup").data.decode())
+        self.assertEqual(self.tw.log_in(guest["email"], "!"), None)  # nobody can log in as a guest
+        # The guest's things aren't in the daily run, and aren't counted as people.
+        self.assertEqual(self.tw.totals()["people"], 1)
+        self.assertEqual(self.tw.check_all(), [])
+        self.assertIsNone(self.tw.conn.execute("SELECT last_checked_at FROM watches").fetchone()["last_checked_at"])
+        # Signing up keeps everything.
+        self.pass_human_check()
+        response = self.client.post("/signup", data={"email": "keeper@example.org", "password": "long enough"},
+                                    follow_redirects=True)
+        self.assertIn(b"HUMAN AFTER ALL", response.data)
+        user = self.tw.log_in("keeper@example.org", "long enough")
+        self.assertEqual(user["id"], guest["id"])
+        self.assertEqual(Tripwire.summary_every(user), "weekly")
+        page = self.client.get("/watching").data.decode()
+        self.assertIn("Warli", page)
+        self.assertNotIn("trying Tripwire without an account", page)
+
+    def test_guest_things_move_into_an_account_on_log_in(self):
+        self.client.post("/single-links", data={"target": "Warli"})
+        self.client.post("/themes", data={"name": "Language & memory"})
+        self.client.post("/shelf/file", data={"title": "Gazette 12", "file_name": "gazette.pdf",
+                                              "read_text": "Notice of the gazette."})
+        self.log_in()
+        page = self.client.get("/watching").data.decode()
+        self.assertIn("Warli", page)
+        self.assertIn("Language &amp; memory", page)
+        self.assertIn("Gazette 12", self.client.get("/shelf").data.decode())
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM users WHERE guest = 1").fetchone()["n"], 0)
+
+    def test_old_guests_are_tidied_away(self):
+        self.client.post("/single-links", data={"target": "Warli"})
+        self.tw.conn.execute("UPDATE users SET created_at = '2020-01-01T00:00:00Z' WHERE guest = 1")
+        self.tw.delete_old_guests()
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM watches").fetchone()["n"], 0)
+        self.assertNotIn("Warli", self.client.get("/watching").data.decode())  # the visit simply starts again
+
+    def test_opening_plays_once_per_visit(self):
+        self.assertIn('id="intro"', self.client.get("/").data.decode())
+        self.assertNotIn('id="intro"', self.client.get("/").data.decode())
+        self.assertIn('id="intro"', self.client.get("/?intro").data.decode())  # replay on purpose
+        self.log_in()
+        self.assertNotIn('id="intro"', self.client.get("/").data.decode())  # not again after logging in
 
     def pass_human_check(self):
         """Do what the sign-up page does: answer, solve the background proof of work, send."""
@@ -382,10 +438,11 @@ class WebAppTests(CheckerTests):
             self.assertIn(b"rabbit.png", self.client.get(path).data, path)
 
     def test_home_computer(self):
-        page = self.client.get("/").data.decode()  # logged out: offers to log in
+        page = self.client.get("/").data.decode()  # logged out: everything, plus logging in
         self.assertIn("[L] LOG IN", page)
         self.assertIn("[M] MAKE AN ACCOUNT", page)
-        self.assertNotIn("WATCHING", page)
+        self.assertIn("[1] WATCHING", page)
+        self.assertIn("No account needed", page)
         self.log_in()
         watch = self.tw.add_watch(self.theme, "Warli")
         self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")
@@ -1081,7 +1138,7 @@ class StatsPageTests(CheckerTests):
         self.assertIn('href="/stats" class="on" aria-current="page"', page)
         self.assertIn('href="/watching"', page)
         self.assertIn("<summary >More</summary>", page.replace('<summary class="on">', "<summary >"))
-        self.assertIn("Weekly summary", page)
+        self.assertIn('href="/summary" >Summary</a>', page)
 
 
 class FakeSMTP:
@@ -1174,23 +1231,54 @@ class EmailAndAboutTests(CheckerTests):
                 self.assertEqual(self.client.get("/cron", headers={"Authorization": "Bearer s3cret"}).json["summaries_emailed"], 0)
         self.assertEqual([m["To"] for m in FakeSMTP.sent], ["purple@example.org"])
 
-    def test_switch_weekly_email_off_and_on(self):
+    def test_choose_daily_weekly_monthly_or_off(self):
+        monday_1st = time.struct_time((2027, 2, 1, 3, 17, 0, 0, 32, 0))
+        tuesday_2nd = time.struct_time((2027, 2, 2, 3, 17, 0, 1, 33, 0))
+
+        def due_on(day):
+            with mock.patch("time.gmtime", side_effect=lambda *a: day if not a else time.struct_time(time.localtime(a[0]))):
+                return len(self.tw.users_due_summary())
+
         with mock.patch.dict(os.environ, EMAIL_SETTINGS):
-            self.assertIn('value="on" checked', self.client.get("/summary").data.decode())
-            self.client.post("/summary/email", data={})
-            self.assertNotIn('value="on" checked', self.client.get("/summary").data.decode())
-            self.assertEqual(self.tw.users_due_summary(), [])
-            self.client.post("/summary/email", data={"weekly_email": "on"})
-            self.assertEqual(len(self.tw.users_due_summary()), 1)
+            self.assertIn('value="weekly" checked', self.client.get("/summary").data.decode())  # the starting choice
+            self.assertEqual((due_on(monday_1st), due_on(tuesday_2nd)), (1, 0))
+            self.client.post("/summary/email", data={"every": "off"})
+            self.assertIn('value="off" checked', self.client.get("/summary").data.decode())
+            self.assertEqual((due_on(monday_1st), due_on(tuesday_2nd)), (0, 0))
+            self.client.post("/summary/email", data={"every": "daily"})
+            page = self.client.get("/summary").data.decode()
+            self.assertIn("Daily summary", page)
+            self.assertEqual((due_on(monday_1st), due_on(tuesday_2nd)), (1, 1))
+            self.client.post("/summary/email", data={"every": "monthly"})
+            self.assertIn("Monthly summary", self.client.get("/summary").data.decode())
+            self.assertEqual((due_on(monday_1st), due_on(tuesday_2nd)), (1, 0))
+            self.assertIn("Choose daily", self.client.post("/summary/email", data={"every": "hourly"},
+                                                           follow_redirects=True).data.decode())
+
+    def test_daily_email_says_today(self):
+        self.make_a_change()
+        self.tw.set_summary_every(self.user, "daily")
+        with mock.patch.dict(os.environ, EMAIL_SETTINGS):
+            self.client.post("/summary/send")
+        self.assertEqual(FakeSMTP.sent[-1]["Subject"], "Tripwire: 1 change today")
+        body = FakeSMTP.sent[-1].get_body(("plain",)).get_content()
+        self.assertIn("TRIPWIRE · DAILY SUMMARY", body)
+        self.assertIn("You get this every day", body)
+
+    def test_older_accounts_keep_their_weekly_switch(self):
+        self.tw.conn.execute("UPDATE users SET summary_every = NULL, weekly_email = 0")
+        self.assertEqual(Tripwire.summary_every(self.tw.user(self.user)), "off")
+        self.tw.conn.execute("UPDATE users SET weekly_email = 1")
+        self.assertEqual(Tripwire.summary_every(self.tw.user(self.user)), "weekly")
 
     def test_about_page_is_public(self):
         self.client.post("/logout")
         page = self.client.get("/about").data.decode()
         for expected in ["Who it&#39;s for", "No AI inside, on purpose", "How Tripwire changed", "So far",
-                         "Purple, Tripwire&#39;s maker", "to leave feedback"]:
+                         "Purple, Tripwire&#39;s maker", "Send feedback", "A sign-up wall → try it first"]:
             self.assertIn(expected, page.replace("Who it's for", "Who it&#39;s for").replace("Purple, Tripwire's maker", "Purple, Tripwire&#39;s maker"))
-        self.assertNotIn("Add the examples to my account", page)  # demo button only for signed-in people
-        self.assertIn("[A] ABOUT TRIPWIRE", self.client.get("/").data.decode())
+        self.assertIn("Add the examples", page)  # no account needed to try the examples
+        self.assertIn("[7] ABOUT", self.client.get("/").data.decode())
 
     def test_feedback_reaches_only_the_owner(self):
         self.client.post("/feedback", data={"tried": "Books", "message": "Loved the Frankenstein comparison!"})
@@ -1202,8 +1290,11 @@ class EmailAndAboutTests(CheckerTests):
             self.assertIn("Loved the Frankenstein comparison!", page)
             self.assertIn("Feedback inbox", self.client.get("/about").data.decode())
         self.client.post("/logout")
-        self.assertEqual(self.client.post("/feedback", data={"message": "spam"}).status_code, 302)  # must log in
+        self.client.post("/feedback", data={"message": "spam", "website": "http://spam"})  # a bot: ignored
         self.assertEqual(self.tw.totals()["feedback"], 1)
+        self.client.post("/feedback", data={"tried": "Stats", "message": "No account, still helpful"})
+        self.assertEqual(self.tw.totals()["feedback"], 2)  # visitors can leave feedback too
+        self.assertEqual(self.tw.totals()["people"], 1)  # without becoming a guest
 
     def test_demo_data(self):
         FakeWikipedia.articles = {title: [{"revid": n * 10 + 1, "user": "A", "comment": "", "text": f"About {title}. " * 20},
@@ -1275,7 +1366,7 @@ class LiveWatchTests(CheckerTests):
         self.assertIn('href="/live"', page)  # in the menu
         self.assertEqual(self.client.post("/live/check", json={"url": "https://youtu.be/aaaaaaaaaaa"}).status_code, 400)
         self.client.post("/logout")
-        self.assertEqual(self.client.get("/live").status_code, 302)
+        self.assertEqual(self.client.get("/live").status_code, 200)  # no account needed
 
 
 class AccessAndLanguageTests(CheckerTests):

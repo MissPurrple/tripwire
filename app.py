@@ -58,6 +58,14 @@ def load_user():
         raise db.SetupError("Add a TRIPWIRE_SECRET setting in Vercel (Settings → Environment Variables, "
                             "any long random text), then redeploy.")
     g.user = tw().user(session["user_id"]) if "user_id" in session else None
+    if g.user is None:
+        session.pop("user_id", None)  # e.g. a guest whose things were tidied away
+    g.guest = bool(g.user and g.user["guest"])
+
+
+def uid():
+    """The visitor's id: their account, their guest visit, or 0 (nothing added yet, so nothing to show)."""
+    return g.user["id"] if g.user else 0
 
 
 # Plain-words pages for "not found" and other errors, in the site's own style.
@@ -92,11 +100,14 @@ def server_error(error):
                            message="Tripwire hit an unexpected problem. Nothing you did caused it."), 500
 
 
-def login_required(view):
+def saves_things(view):
+    """No account needed: the first time a visitor saves something, Tripwire starts a
+    guest visit for them. It lasts until they close the browser, unless they make an account."""
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
-        if g.user is None:
-            return redirect(url_for("login"))
+        if g.user is None and request.method == "POST":
+            session["user_id"] = tw().create_guest()
+            g.user, g.guest = tw().user(session["user_id"]), True
         return view(*args, **kwargs)
     return wrapped
 
@@ -129,9 +140,23 @@ def set_language(code):
     return response
 
 
+def account_required(why):
+    """For the few things that need a real account (public copies, emails)."""
+    def decorate(view):
+        @functools.wraps(view)
+        def wrapped(*args, **kwargs):
+            if g.user is None or g.guest:
+                flash(f"Make an account to {why}. Everything you've added so far comes with you.", "message")
+                return redirect(url_for("signup"))
+            return view(*args, **kwargs)
+        return wrapped
+    return decorate
+
+
 @app.context_processor
 def helpers():
-    return {"CATEGORIES": changes.CATEGORIES, "details": db.entry_details, "donut": charts.donut,
+    return {"is_guest": g.get("guest", False),
+            "CATEGORIES": changes.CATEGORIES, "details": db.entry_details, "donut": charts.donut,
             "CHANGE_KINDS": changes.CHANGE_KINDS, "kind_counts": changes.kind_counts,
             "KIND_SERIES": {key: n for n, key in enumerate(changes.CHANGE_KINDS, start=1)}}
 
@@ -164,14 +189,15 @@ def signup():
         if not _human_ok():
             flash("Please finish the human check first.", "error")
         else:
+            email, password = request.form.get("email", ""), request.form.get("password", "")
             try:
-                user_id = tw().create_user(request.form.get("email", ""), request.form.get("password", ""))
+                # A guest keeps everything they added: their visit becomes the account.
+                user_id = tw().claim_guest(uid(), email, password) if g.guest else tw().create_user(email, password)
             except ValueError as exc:
                 flash(str(exc), "error")
             else:
                 session.clear()
-                session["user_id"] = user_id
-                session["human_after_all"] = True
+                session.update(user_id=user_id, human_after_all=True, intro_seen=True)
                 return redirect(url_for("welcome"))
     challenge = session.get("human_check") if _human_ok() else None
     if not _human_ok():
@@ -208,8 +234,10 @@ def login():
     if request.method == "POST":
         user = tw().log_in(request.form.get("email", ""), request.form.get("password", ""))
         if user:
+            if g.guest:  # things added before logging in move into the account
+                tw().merge_guest(uid(), user["id"])
             session.clear()
-            session["user_id"] = user["id"]
+            session.update(user_id=user["id"], intro_seen=True)
             return redirect(url_for("home"))
         flash("That email and password don't match.", "error")
     return render_template("auth.html", mode="login")
@@ -218,64 +246,65 @@ def login():
 @app.post("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    session["intro_seen"] = True  # straight back to the computer, not the opening again
+    return redirect(url_for("home"))
 
 
 # -- watching -----------------------------------------------------------------
 
 @app.get("/")
 def home():
-    """The front page: a box computer that boots up. Logged in, its screen
-    shows your numbers and a menu; logged out, it offers to log in."""
+    """The front page: a box computer that boots up, with the visitor's numbers
+    and a menu. The first time in a visit, the opening plays first (add ?intro to see it again)."""
+    intro = "intro" in request.args or not session.get("intro_seen")
+    session["intro_seen"] = True
     numbers = None
     if g.user:
-        uid = g.user["id"]
+        user_id = uid()
         conn = tw().conn
         numbers = {
             "watching": conn.execute("""SELECT COUNT(*) AS n FROM watches w JOIN themes t ON t.id = w.theme_id
-                                        WHERE t.user_id = ? AND w.kind != 'video'""", (uid,)).fetchone()["n"],
-            "videos": len(tw().videos(uid)),
+                                        WHERE t.user_id = ? AND w.kind != 'video'""", (user_id,)).fetchone()["n"],
+            "videos": len(tw().videos(user_id)),
             "waiting": conn.execute("""SELECT COUNT(*) AS n FROM entries e JOIN watches w ON w.id = e.watch_id
                                        JOIN themes t ON t.id = w.theme_id WHERE t.user_id = ? AND e.kept = 0""",
-                                    (uid,)).fetchone()["n"],
-            "books": len(tw().book_comparisons(uid)),
-            "copies": len(tw().copies(uid)),
-            "shelf": conn.execute("SELECT COUNT(*) AS n FROM shelf_items WHERE user_id = ?", (uid,)).fetchone()["n"],
+                                    (user_id,)).fetchone()["n"],
+            "books": len(tw().book_comparisons(user_id)),
+            "copies": len(tw().copies(user_id)),
+            "shelf": conn.execute("SELECT COUNT(*) AS n FROM shelf_items WHERE user_id = ?", (user_id,)).fetchone()["n"],
         }
-    return render_template("home.html", numbers=numbers)
+    return render_template("home.html", numbers=numbers, intro=intro)
 
 
 @app.get("/watching")
-@login_required
 def index():
     conn = tw().conn
-    themes = conn.execute("SELECT * FROM themes WHERE user_id = ? ORDER BY loose, id", (g.user["id"],)).fetchall()
+    themes = conn.execute("SELECT * FROM themes WHERE user_id = ? ORDER BY loose, id", (uid(),)).fetchall()
     watches = {t["id"]: conn.execute("SELECT * FROM watches WHERE theme_id = ? ORDER BY label",
                                      (t["id"],)).fetchall() for t in themes}
     single = next((t for t in themes if t["loose"] == 1), None)
     themes = [t for t in themes if not t["loose"]]
     new_count = conn.execute("""SELECT COUNT(*) AS n FROM entries e JOIN watches w ON w.id = e.watch_id
                                 JOIN themes t ON t.id = w.theme_id WHERE t.user_id = ? AND e.kept = 0""",
-                             (g.user["id"],)).fetchone()["n"]
+                             (uid(),)).fetchone()["n"]
     return render_template("index.html", themes=themes, watches=watches, single=single,
                            single_name=SINGLE_LINKS, new_count=new_count,
                            max_themes=MAX_THEMES, lookback=LOOKBACK_CHOICES)
 
 
 @app.post("/themes")
-@login_required
+@saves_things
 def add_theme():
     try:
-        tw().add_theme(g.user["id"], request.form.get("name", ""))
+        tw().add_theme(uid(), request.form.get("name", ""))
     except ValueError as exc:
         flash(str(exc), "error")
     return redirect(url_for("index"))
 
 
 @app.post("/themes/<int:theme_id>/delete")
-@login_required
 def remove_theme(theme_id):
-    theme = tw().own_theme(g.user["id"], theme_id)
+    theme = tw().own_theme(uid(), theme_id)
     if not theme or theme["loose"]:
         abort(404)
     tw().remove_theme(theme_id)
@@ -284,16 +313,16 @@ def remove_theme(theme_id):
 
 
 @app.post("/single-links")
-@login_required
+@saves_things
 def add_single_link():
     """Watch one link on its own, outside any theme."""
-    return add_watch(tw().single_links(g.user["id"]))
+    return add_watch(tw().single_links(uid()))
 
 
 @app.post("/themes/<int:theme_id>/watches")
-@login_required
+@saves_things
 def add_watch(theme_id):
-    if not tw().own_theme(g.user["id"], theme_id):
+    if not tw().own_theme(uid(), theme_id):
         abort(404)
     kind = request.form.get("kind") or None
     if sources.video_platform(request.form.get("target", "")):
@@ -308,18 +337,16 @@ def add_watch(theme_id):
 
 
 @app.post("/watches/<int:watch_id>/delete")
-@login_required
 def remove_watch(watch_id):
-    if not tw().own_watch(g.user["id"], watch_id):
+    if not tw().own_watch(uid(), watch_id):
         abort(404)
     tw().remove_watch(watch_id)
     return redirect(back_to("index"))
 
 
 @app.post("/watches/<int:watch_id>/check")
-@login_required
 def check_watch(watch_id):
-    watch = tw().own_watch(g.user["id"], watch_id)
+    watch = tw().own_watch(uid(), watch_id)
     if not watch:
         abort(404)
     entry = tw().check_watch(watch)
@@ -328,10 +355,9 @@ def check_watch(watch_id):
 
 
 @app.post("/check")
-@login_required
 def check_all():
     started = time.monotonic()
-    new = tw().check_all(g.user["id"], deadline=started + 25)
+    new = tw().check_all(uid(), deadline=started + 25)
     flash(f"Checked. {len(new)} new archive entr{'y' if len(new) == 1 else 'ies'}.")
     return redirect(url_for("change_list") if new else url_for("index"))
 
@@ -339,9 +365,8 @@ def check_all():
 # -- videos -----------------------------------------------------------------
 
 @app.get("/videos")
-@login_required
 def videos():
-    return render_template("videos.html", videos=tw().videos(g.user["id"]), state=_video_state)
+    return render_template("videos.html", videos=tw().videos(uid()), state=_video_state)
 
 
 def _video_state(watch):
@@ -350,10 +375,10 @@ def _video_state(watch):
 
 
 @app.post("/videos")
-@login_required
+@saves_things
 def add_video():
     try:
-        tw().add_video(g.user["id"], request.form.get("target", ""))
+        tw().add_video(uid(), request.form.get("target", ""))
         flash("Now watching that video. Find it on the Videos page.")
     except (ValueError, sources.SourceError) as exc:
         flash(str(exc), "error")
@@ -363,13 +388,11 @@ def add_video():
 # -- live watching: one page, every few minutes, while the page is open -------
 
 @app.get("/live")
-@login_required
 def live_watch():
     return render_template("live.html", min_seconds=live.MIN_SECONDS_BETWEEN)
 
 
 @app.post("/live/check")
-@login_required
 def live_check():
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
@@ -390,13 +413,12 @@ def live_check():
 # -- changes ------------------------------------------------------------------
 
 @app.get("/changes")
-@login_required
 def change_list():
     category = request.args.get("category", "")
     query = """SELECT e.*, w.label, w.kind, w.target FROM entries e
                JOIN watches w ON w.id = e.watch_id JOIN themes t ON t.id = w.theme_id
                WHERE t.user_id = ?"""
-    params = [g.user["id"]]
+    params = [uid()]
     if category:
         query += " AND e.category = ?"
         params.append(category)
@@ -405,29 +427,26 @@ def change_list():
 
 
 @app.get("/entries/<int:entry_id>")
-@login_required
 def entry(entry_id):
-    row = tw().own_entry(g.user["id"], entry_id)
+    row = tw().own_entry(uid(), entry_id)
     if row is None:
         flash("That change is no longer in your list.", "error")
         return redirect(url_for("change_list"))
     return render_template("entry.html", e=row, copy_options=tw().copy_options(entry=row),
-                           copies=tw().copies(g.user["id"], entry_id=entry_id))
+                           copies=tw().copies(uid(), entry_id=entry_id))
 
 
 @app.post("/entries/<int:entry_id>/keep")
-@login_required
 def keep(entry_id):
-    if not tw().own_entry(g.user["id"], entry_id):
+    if not tw().own_entry(uid(), entry_id):
         abort(404)
     tw().keep(entry_id)
     return redirect(back_to())
 
 
 @app.post("/entries/<int:entry_id>/disregard")
-@login_required
 def disregard(entry_id):
-    if not tw().own_entry(g.user["id"], entry_id):
+    if not tw().own_entry(uid(), entry_id):
         abort(404)
     tw().disregard(entry_id)
     flash("Disregarded: that entry has been deleted.")
@@ -439,10 +458,10 @@ def disregard(entry_id):
 def _copy_target(kind, item_id):
     """The entry or watched item a copy is for, and what could be saved."""
     if kind == "entry":
-        item = tw().own_entry(g.user["id"], item_id)
+        item = tw().own_entry(uid(), item_id)
         options = tw().copy_options(entry=item) if item else []
     else:
-        item = tw().own_watch(g.user["id"], item_id)
+        item = tw().own_watch(uid(), item_id)
         options = tw().copy_options(watch=item) if item else []
     if not item:
         abort(404)
@@ -450,7 +469,7 @@ def _copy_target(kind, item_id):
 
 
 @app.route("/copy/<kind>/<int:item_id>", methods=["GET", "POST"])
-@login_required
+@account_required("keep public copies with the Internet Archive")
 def public_copy(kind, item_id):
     """First ask: the button on a change or watched item brings people here.
     Second ask: this page says plainly what a public copy means, and only
@@ -474,7 +493,7 @@ def public_copy(kind, item_id):
         saved = 0
         for option in chosen:
             try:
-                tw().save_public_copy(g.user["id"], option,
+                tw().save_public_copy(uid(), option,
                                       watch_id=item["watch_id"] if kind == "entry" else item_id,
                                       entry_id=item_id if kind == "entry" else None)
                 saved += 1
@@ -489,10 +508,9 @@ def public_copy(kind, item_id):
 
 
 @app.get("/archive")
-@login_required
 def archive():
     """Every public Internet Archive copy this person chose to make."""
-    return render_template("archive.html", copies=tw().copies(g.user["id"]))
+    return render_template("archive.html", copies=tw().copies(uid()))
 
 
 # -- books: compare two editions, only when asked ---------------------------
@@ -511,11 +529,11 @@ def _edition(which):
 
 
 @app.route("/books", methods=["GET", "POST"])
-@login_required
+@saves_things
 def book_list():
     if request.method == "POST":
         try:
-            job = tw().start_book_job(g.user["id"], request.form.get("title", ""), _edition("a"), _edition("b"))
+            job = tw().start_book_job(uid(), request.form.get("title", ""), _edition("a"), _edition("b"))
         except books.BookError as exc:
             flash(str(exc), "error")
         else:
@@ -524,16 +542,15 @@ def book_list():
     # Arriving from elsewhere (not from within Books): show the "entering" screen first.
     came_from = urlparse(request.referrer or "")
     intro = request.method == "GET" and not (came_from.netloc == request.host and came_from.path.startswith("/books"))
-    return render_template("books.html", comparisons=tw().book_comparisons(g.user["id"]),
-                           jobs=tw().book_jobs_in_progress(g.user["id"]), upload_limit_mb=UPLOAD_LIMIT_MB,
+    return render_template("books.html", comparisons=tw().book_comparisons(uid()),
+                           jobs=tw().book_jobs_in_progress(uid()), upload_limit_mb=UPLOAD_LIMIT_MB,
                            intro=intro)
 
 
 @app.get("/books/jobs/<int:job_id>")
-@login_required
 def book_job(job_id):
     """The waiting page. It starts the comparison, then checks on it until it's done."""
-    job = tw().own_book_job(g.user["id"], job_id)
+    job = tw().own_book_job(uid(), job_id)
     if not job:
         abort(404)
     if job["status"] == "done" and job["comparison_id"]:
@@ -547,27 +564,24 @@ def _job_json(job):
 
 
 @app.post("/books/jobs/<int:job_id>/run")
-@login_required
 def run_book_job(job_id):
     """Does the comparison. It keeps going on the server even if the page is closed."""
-    if not tw().own_book_job(g.user["id"], job_id):
+    if not tw().own_book_job(uid(), job_id):
         abort(404)
     return _job_json(tw().run_book_job(job_id))
 
 
 @app.get("/books/jobs/<int:job_id>/status")
-@login_required
 def book_job_status(job_id):
-    job = tw().own_book_job(g.user["id"], job_id)
+    job = tw().own_book_job(uid(), job_id)
     if not job:
         abort(404)
     return _job_json(job)
 
 
 @app.post("/books/jobs/<int:job_id>/delete")
-@login_required
 def delete_book_job(job_id):
-    job = tw().own_book_job(g.user["id"], job_id)
+    job = tw().own_book_job(uid(), job_id)
     if not job or job["status"] == "done":
         abort(404)
     tw().conn.execute("DELETE FROM book_jobs WHERE id = ?", (job_id,))
@@ -575,9 +589,8 @@ def delete_book_job(job_id):
 
 
 @app.get("/books/<int:comparison_id>")
-@login_required
 def book_comparison(comparison_id):
-    row = tw().own_book_comparison(g.user["id"], comparison_id)
+    row = tw().own_book_comparison(uid(), comparison_id)
     if not row:
         abort(404)
     job = tw().book_job_for(comparison_id)
@@ -586,9 +599,8 @@ def book_comparison(comparison_id):
 
 
 @app.post("/books/<int:comparison_id>/files/delete")
-@login_required
 def delete_book_files(comparison_id):
-    if not tw().own_book_comparison(g.user["id"], comparison_id):
+    if not tw().own_book_comparison(uid(), comparison_id):
         abort(404)
     job = tw().book_job_for(comparison_id)
     if job:
@@ -611,9 +623,8 @@ def _interesting_changes(d, limit=6):
 
 
 @app.post("/books/<int:comparison_id>/delete")
-@login_required
 def delete_book_comparison(comparison_id):
-    if not tw().own_book_comparison(g.user["id"], comparison_id):
+    if not tw().own_book_comparison(uid(), comparison_id):
         abort(404)
     tw().delete_book_comparison(comparison_id)
     flash("Comparison deleted.")
@@ -629,21 +640,20 @@ def _shelf():
 
 
 @app.get("/shelf")
-@login_required
 def shelf_page():
     search = request.args.get("q", "")
-    return render_template("shelf.html", items=_shelf().items(g.user["id"], search), search=search,
-                           used_mb=_shelf().used_bytes(g.user["id"]) / 1048576,
+    return render_template("shelf.html", items=_shelf().items(uid(), search), search=search,
+                           used_mb=_shelf().used_bytes(uid()) / 1048576,
                            limit_mb=shelf.MAX_SHELF_BYTES // 1048576, upload_limit_mb=UPLOAD_LIMIT_MB)
 
 
 @app.post("/shelf/file")
-@login_required
+@saves_things
 def shelf_add_file():
     upload = request.files.get("file")
     read_text = request.form.get("read_text", "").strip()
     try:
-        item_id = _shelf().add_file(g.user["id"], upload.filename if upload else request.form.get("file_name", ""),
+        item_id = _shelf().add_file(uid(), upload.filename if upload else request.form.get("file_name", ""),
                                     upload.read() if upload and upload.filename else b"",
                                     request.form.get("title", ""), request.form.get("note", ""),
                                     read_text=read_text or None, pages=request.form.get("read_pages", type=int))
@@ -656,24 +666,24 @@ def shelf_add_file():
 
 
 @app.post("/shelf/link")
-@login_required
+@saves_things
 def shelf_add_link():
     url = request.form.get("url", "").strip()
     check_id = None
     try:
         if request.form.get("compare") and sources.is_wikipedia_link(url):
             try:
-                check_id = before.save(tw().conn, g.user["id"], before.compare_with_before(url))
+                check_id = before.save(tw().conn, uid(), before.compare_with_before(url))
             except sources.SourceError as exc:
                 flash(f"Kept, but not compared with an older copy: {exc}")
-        item_id = _shelf().add_link(g.user["id"], url, request.form.get("title", ""), request.form.get("note", ""),
+        item_id = _shelf().add_link(uid(), url, request.form.get("title", ""), request.form.get("note", ""),
                                     before_check_id=check_id)
     except (shelf.ShelfError, sources.SourceError) as exc:
         flash(str(exc), "error")
         return redirect(url_for("shelf_page"))
     if request.form.get("watch"):
         try:
-            watch_id = tw().add_watch(tw().single_links(g.user["id"]), url)
+            watch_id = tw().add_watch(tw().single_links(uid()), url)
             tw().conn.execute("UPDATE shelf_items SET watch_id = ? WHERE id = ?", (watch_id, item_id))
         except (ValueError, sources.SourceError) as exc:
             flash(f"Kept, but Tripwire couldn't start watching the link: {exc}")
@@ -682,18 +692,17 @@ def shelf_add_link():
 
 
 def _own_item(item_id):
-    item = _shelf().item(g.user["id"], item_id)
+    item = _shelf().item(uid(), item_id)
     if not item:
         abort(404)
     return item
 
 
 @app.get("/shelf/<int:item_id>")
-@login_required
 def shelf_item(item_id):
     item = _own_item(item_id)
-    watch = tw().own_watch(g.user["id"], item["watch_id"]) if item["watch_id"] else None
-    check = before.own(tw().conn, g.user["id"], item["before_check_id"]) if item["before_check_id"] else None
+    watch = tw().own_watch(uid(), item["watch_id"]) if item["watch_id"] else None
+    check = before.own(tw().conn, uid(), item["before_check_id"]) if item["before_check_id"] else None
     return render_template("shelf_item.html", item=item, watch=watch, check=check,
                            check_details=db.entry_details(check) if check else None,
                            scan=bool(item["file_name"]) and not item["text"]
@@ -719,9 +728,8 @@ def _stream(data):
 
 
 @app.get("/shelf/<int:item_id>/file")
-@login_required
 def shelf_file(item_id):
-    found = _shelf().file(g.user["id"], item_id)
+    found = _shelf().file(uid(), item_id)
     if not found:
         abort(404)
     name, data = found
@@ -732,45 +740,41 @@ def shelf_file(item_id):
 
 
 @app.post("/shelf/<int:item_id>/text")
-@login_required
 def shelf_set_text(item_id):
     """Words read from a scan on the person's own device, sent afterwards."""
     _own_item(item_id)
     data = request.get_json(silent=True) or {}
     try:
-        _shelf().set_text(g.user["id"], item_id, data.get("text", ""), data.get("pages"))
+        _shelf().set_text(uid(), item_id, data.get("text", ""), data.get("pages"))
     except shelf.ShelfError as exc:
         return jsonify(error=str(exc)), 400
     return jsonify(ok=True)
 
 
 @app.post("/shelf/<int:item_id>/edit")
-@login_required
 def shelf_edit(item_id):
     _own_item(item_id)
-    _shelf().update(g.user["id"], item_id, request.form.get("title", ""), request.form.get("note", ""))
+    _shelf().update(uid(), item_id, request.form.get("title", ""), request.form.get("note", ""))
     flash("Saved.")
     return redirect(url_for("shelf_item", item_id=item_id))
 
 
 @app.post("/shelf/<int:item_id>/delete")
-@login_required
 def shelf_delete(item_id):
     _own_item(item_id)
-    _shelf().delete(g.user["id"], item_id)
+    _shelf().delete(uid(), item_id)
     flash("Removed from your shelf.")
     return redirect(url_for("shelf_page"))
 
 
 @app.get("/shelf/download.<kind>")
-@login_required
 def shelf_download(kind):
     """Take my shelf with me: everything as one ZIP (for any browser) or ZIM (for Kiwix)."""
     if kind not in ("zip", "zim"):
         abort(404)
     name = request.args.get("name", "").strip()[:80] or "My shelf"
-    path = (_shelf().export_zip(g.user["id"], name) if kind == "zip"
-            else _shelf().export_zim(g.user["id"], name, current_language()))
+    path = (_shelf().export_zip(uid(), name) if kind == "zip"
+            else _shelf().export_zim(uid(), name, current_language()))
     size = os.path.getsize(path)
 
     def pieces():
@@ -794,40 +798,38 @@ def shelf_download(kind):
 # ---------------------------------------------------------------------------
 
 @app.route("/before", methods=["GET", "POST"])
-@login_required
+@saves_things
 def before_page():
     if request.method == "POST":
         try:
-            check_id = before.save(tw().conn, g.user["id"], before.compare_with_before(request.form.get("url", "")))
+            check_id = before.save(tw().conn, uid(), before.compare_with_before(request.form.get("url", "")))
         except sources.SourceError as exc:
             flash(str(exc), "error")
         else:
             return redirect(url_for("before_result", check_id=check_id))
-    return render_template("before.html", checks=before.checks(tw().conn, g.user["id"]),
+    return render_template("before.html", checks=before.checks(tw().conn, uid()),
                            url=request.values.get("url", ""))
 
 
 @app.get("/before/<int:check_id>")
-@login_required
 def before_result(check_id):
-    check = before.own(tw().conn, g.user["id"], check_id)
+    check = before.own(tw().conn, uid(), check_id)
     if not check:
         abort(404)
     d = db.entry_details(check)
     on_shelf = tw().conn.execute("SELECT id FROM shelf_items WHERE before_check_id = ? AND user_id = ?",
-                                 (check_id, g.user["id"])).fetchone()
+                                 (check_id, uid())).fetchone()
     return render_template("before_result.html", c=check, d=d, interesting=_interesting_changes(d, limit=8),
                            on_shelf=on_shelf)
 
 
 @app.post("/before/<int:check_id>/shelf")
-@login_required
 def before_to_shelf(check_id):
-    check = before.own(tw().conn, g.user["id"], check_id)
+    check = before.own(tw().conn, uid(), check_id)
     if not check:
         abort(404)
     try:
-        item_id = _shelf().add_link(g.user["id"], check["url"], before_check_id=check_id)
+        item_id = _shelf().add_link(uid(), check["url"], before_check_id=check_id)
     except (shelf.ShelfError, sources.SourceError) as exc:
         flash(str(exc), "error")
         return redirect(url_for("before_result", check_id=check_id))
@@ -836,19 +838,26 @@ def before_to_shelf(check_id):
 
 
 @app.post("/before/<int:check_id>/delete")
-@login_required
 def before_delete(check_id):
-    if not before.own(tw().conn, g.user["id"], check_id):
+    if not before.own(tw().conn, uid(), check_id):
         abort(404)
     tw().conn.execute("DELETE FROM before_checks WHERE id = ?", (check_id,))
     return redirect(url_for("before_page"))
 
+# What people see when they choose how often the summary is emailed.
+SUMMARY_WHEN = {"daily": "every day", "weekly": "every Monday", "monthly": "on the 1st of each month"}
+
+
+def _summary_period(user):
+    every = Tripwire.summary_every(user) if user and not user["guest"] else "weekly"
+    return every if every != "off" else "weekly"
+
 
 @app.get("/summary")
-@login_required
 def summary():
-    return render_template("summary.html", s=tw().weekly_summary(g.user["id"]), email_ready=mailer.configured(),
-                           weekly_email=bool(g.user["weekly_email"]))
+    every = Tripwire.summary_every(g.user) if g.user and not g.guest else "off"
+    return render_template("summary.html", s=tw().weekly_summary(uid(), _summary_period(g.user)),
+                           email_ready=mailer.configured(), every=every, when=SUMMARY_WHEN)
 
 
 def site_url():
@@ -857,29 +866,36 @@ def site_url():
 
 
 def send_weekly_summary(user):
-    """Email one person their weekly summary. Raises mailer.MailError if it can't be sent."""
-    s = tw().weekly_summary(user["id"])
-    context = {"s": s, "site": site_url(), "email": user["email"], "CATEGORIES": changes.CATEGORIES}
-    subject = (f"Tripwire: {len(s['entries'])} change{'s' if len(s['entries']) != 1 else ''} this week"
-               if s["entries"] else "Tripwire: a quiet week, nothing changed")
+    """Email one person their daily, weekly or monthly summary. Raises mailer.MailError if it can't be sent."""
+    s = tw().weekly_summary(user["id"], _summary_period(user))
+    span = {"daily": "today", "weekly": "this week", "monthly": "this month"}[s["every"]]
+    quiet = {"daily": "a quiet day", "weekly": "a quiet week", "monthly": "a quiet month"}[s["every"]]
+    context = {"s": s, "site": site_url(), "email": user["email"], "CATEGORIES": changes.CATEGORIES,
+               "span": span, "when": SUMMARY_WHEN[s["every"]]}
+    subject = (f"Tripwire: {len(s['entries'])} change{'s' if len(s['entries']) != 1 else ''} {span}"
+               if s["entries"] else f"Tripwire: {quiet}, nothing changed")
     mailer.send(user["email"], subject, render_template("emails/weekly.txt", **context),
                 render_template("emails/weekly.html", **context))
     tw().mark_summary_sent(user["id"])
 
 
 @app.post("/summary/email")
-@login_required
+@account_required("get summaries by email")
 def summary_email_setting():
-    on = request.form.get("weekly_email") == "on"
-    tw().set_weekly_email(g.user["id"], on)
-    flash("Weekly emails are on: one every Monday." if on else "Weekly emails are off.")
+    every = request.form.get("every", "off")
+    try:
+        tw().set_summary_every(uid(), every)
+    except ValueError as exc:
+        flash(str(exc), "error")
+    else:
+        flash(f"Summary emails are on: one {SUMMARY_WHEN[every]}." if every != "off" else "Summary emails are off.")
     return redirect(url_for("summary"))
 
 
 @app.post("/summary/send")
-@login_required
+@account_required("get summaries by email")
 def summary_send_now():
-    """Send this week's summary straight away (handy for a demo). At most once every 2 minutes."""
+    """Send the summary straight away (handy for a demo). At most once every 2 minutes."""
     if time.time() - session.get("summary_sent_now", 0) < 120:
         flash("One just went out. Give it a couple of minutes before sending another.", "error")
         return redirect(url_for("summary"))
@@ -906,7 +922,7 @@ def admin_flag():
     return {"is_admin": is_admin() if "user" in g else False}
 
 
-FEEDBACK_AREAS = ["Watching pages", "Changes", "Videos", "Books", "Stats", "Public copies", "Weekly summary",
+FEEDBACK_AREAS = ["Watching pages", "Changes", "Videos", "Books", "Stats", "Public copies", "Summary emails",
                   "The look and feel", "Something else"]
 
 
@@ -916,10 +932,11 @@ def about():
 
 
 @app.post("/feedback")
-@login_required
 def send_feedback():
+    if request.form.get("website"):  # the hidden trap field: a bot, so quietly ignore it
+        return redirect(url_for("about") + "#feedback")
     try:
-        tw().add_feedback(g.user["id"], request.form.get("tried"), request.form.get("message"))
+        tw().add_feedback(uid() or None, request.form.get("tried"), request.form.get("message"))
     except ValueError as exc:
         flash(str(exc), "error")
     else:
@@ -928,7 +945,6 @@ def send_feedback():
 
 
 @app.get("/feedback")
-@login_required
 def feedback_inbox():
     if not is_admin():
         abort(404)
@@ -936,10 +952,10 @@ def feedback_inbox():
 
 
 @app.post("/demo-data")
-@login_required
+@saves_things
 def demo_data():
     """Fill the signed-in person's own account with real examples (for pitches and exploring)."""
-    report = tw().add_demo_data(g.user["id"], deadline=time.monotonic() + 40)
+    report = tw().add_demo_data(uid(), deadline=time.monotonic() + 40)
     parts = [f"{report['watched']} Wikipedia article{'s' if report['watched'] != 1 else ''} added"
              f" ({report['changes']} with changes in the last 90 days)"]
     if report["video"]:
@@ -996,7 +1012,6 @@ def _my_numbers(user_id):
 
 
 @app.get("/stats")
-@login_required
 def stats_page():
     st = stats.Stats(tw().conn)
     traffic = st.traffic()
@@ -1029,18 +1044,16 @@ def stats_page():
                            books_missing=len(missing), books_total=total_years,
                            world_sources=stats.WORLD_SOURCES, google_count=stats.GOOGLE_2010_COUNT,
                            per_year_low=stats.NEW_TITLES_PER_YEAR_LOW, per_year_high=stats.NEW_TITLES_PER_YEAR_HIGH,
-                           mine=_my_numbers(g.user["id"]), groups=CHANGE_GROUPS)
+                           mine=_my_numbers(uid()), groups=CHANGE_GROUPS)
 
 
 @app.get("/stats/traffic.json")
-@login_required
 def stats_traffic():
     traffic = stats.Stats(tw().conn).traffic()
     return jsonify({k: traffic.get(k) for k in ("connected", "human", "bot", "updated", "error", "stale")})
 
 
 @app.post("/stats/books/fill")
-@login_required
 def stats_fill_books():
     """Fetch a few more years of book counts. The Stats page calls this until all are in."""
     missing, total, problem = stats.Stats(tw().conn).fill_book_years(seconds=20)
@@ -1066,9 +1079,10 @@ def cron():
         tw().run_book_job(job["id"])
         finished += 1
     tw().delete_book_files(older_than_days=BOOK_FILE_DAYS)
-    # Mondays: send each person who wants it their weekly summary.
+    tw().delete_old_guests()
+    # Summary emails: daily ones every day, weekly ones on Mondays, monthly ones on the 1st.
     emailed = 0
-    if mailer.configured() and time.gmtime().tm_wday == 0:
+    if mailer.configured():
         for user in tw().users_due_summary():
             if time.monotonic() > started + CRON_BUDGET:
                 break

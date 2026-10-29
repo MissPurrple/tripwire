@@ -2,33 +2,36 @@
 {% block title %}Tripwire{% endblock %}
 {% block body_class %}home{% endblock %}
 {% block content %}
-{% set menu = [('1', 'WATCHING', url_for('index'), (numbers.watching ~ (' item' if numbers.watching == 1 else ' items')) if numbers else ''),
-               ('2', 'VIDEOS', url_for('videos'), (numbers.videos ~ (' video' if numbers.videos == 1 else ' videos')) if numbers else ''),
-               ('3', 'CHANGES', url_for('change_list'), numbers.waiting ~ ' waiting' if numbers else ''),
-               ('4', 'BOOKS', url_for('book_list'), numbers.books ~ ' compared' if numbers else ''),
-               ('5', 'MY SHELF', url_for('shelf_page'), numbers.shelf ~ ' kept' if numbers else ''),
+{% set n = numbers or {} %}
+{% set menu = [('1', 'WATCHING', url_for('index'), (n.watching ~ (' item' if n.watching == 1 else ' items')) if numbers else ''),
+               ('2', 'VIDEOS', url_for('videos'), (n.videos ~ (' video' if n.videos == 1 else ' videos')) if numbers else ''),
+               ('3', 'CHANGES', url_for('change_list'), n.waiting ~ ' waiting' if numbers else ''),
+               ('4', 'BOOKS', url_for('book_list'), n.books ~ ' compared' if numbers else ''),
+               ('5', 'MY SHELF', url_for('shelf_page'), n.shelf ~ ' kept' if numbers else ''),
                ('6', 'THEN AND NOW', url_for('before_page'), ''),
                ('7', 'STATS', url_for('stats_page'), ''),
-               ('8', 'ARCHIVE', url_for('archive'), (numbers.copies ~ (' public copy' if numbers.copies == 1 else ' public copies')) if numbers else ''),
-               ('9', 'ABOUT', url_for('about'), '')] if numbers else
-              [('L', 'LOG IN', url_for('login'), ''), ('M', 'MAKE AN ACCOUNT', url_for('signup'), ''),
-               ('A', 'ABOUT TRIPWIRE', url_for('about'), '')] %}
+               ('8', 'ARCHIVE', url_for('archive'), (n.copies ~ (' public copy' if n.copies == 1 else ' public copies')) if numbers else ''),
+               ('9', 'ABOUT', url_for('about'), '')] +
+              ([] if g.user and not is_guest else
+               [('L', 'LOG IN', url_for('login'), ''), ('M', 'MAKE AN ACCOUNT', url_for('signup'), 'to keep what you add')]) %}
+{% if intro %}{% include "_intro.html" %}{% endif %}
 <div class="computer" aria-label="Tripwire, shown as an old box computer">
   <div class="monitor">
     <div class="bezel">
-      <div class="screen" id="screen">
+      <div class="screen" id="screen" {% if intro %}data-typewriter-manual{% endif %}>
         <div class="boot" id="boot" data-typewriter="14">
           <p class="screen-line dim" data-speed="6">TRIPWIRE BIOS v1.0 &nbsp;·&nbsp; Edge City Buildathon, 2026</p>
           <p class="screen-line dim" data-speed="6">MEMORY TEST ........ 640K OK</p>
           <p class="screen-line dim" data-speed="8">LOADING THE RECORD OF THE WORLD ........ OK</p>
           <p class="screen-line">&nbsp;</p>
-          {% if numbers %}
+          {% if numbers and not is_guest %}
             <p class="screen-line big" data-speed="70">WELCOME BACK.</p>
             <p class="screen-line soft" data-speed="12">Here's what Tripwire is keeping an eye on for you.</p>
           {% else %}
             <p class="screen-line big" data-speed="80">TRIPWIRE</p>
             <p class="screen-line soft" data-speed="13">Pages vanish. Articles get rewritten. Books get quietly changed.</p>
             <p class="screen-line soft" data-speed="13">Tripwire watches what you care about, and keeps a copy when it changes.</p>
+            <p class="screen-line soft" data-speed="13">No account needed to look around. Pick a line below.</p>
           {% endif %}
           <p class="screen-line">&nbsp;</p>
           <ul class="screen-menu" data-speed="5">

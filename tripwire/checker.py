@@ -4,6 +4,7 @@ save each change into the archive, and write the weekly summary."""
 import json
 import logging
 import re
+import secrets
 import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -33,7 +34,8 @@ class Tripwire:
 
     # -- accounts -----------------------------------------------------------
 
-    def create_user(self, email, password):
+    def _new_account(self, email, password):
+        """Check a new account's email and password. Returns (email, password hash)."""
         email = email.strip().lower()
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
             raise ValueError("That doesn't look like an email address.")
@@ -41,15 +43,71 @@ class Tripwire:
             raise ValueError(f"Use a password of at least {MIN_PASSWORD} characters.")
         if self.conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone():
             raise ValueError("There's already an account with that email. Try logging in.")
+        return email, generate_password_hash(password)
+
+    def create_user(self, email, password):
+        email, password_hash = self._new_account(email, password)
         return self.conn.insert("INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-                                (email, generate_password_hash(password), db.now()))
+                                (email, password_hash, db.now()))
 
     def log_in(self, email, password):
         """Returns the user if the email and password match, otherwise None."""
-        user = self.conn.execute("SELECT * FROM users WHERE email = ?", (email.strip().lower(),)).fetchone()
+        user = self.conn.execute("SELECT * FROM users WHERE email = ? AND guest = 0",
+                                 (email.strip().lower(),)).fetchone()
         if user and check_password_hash(user["password_hash"], password):
             return user
         return None
+
+    # -- guests: trying Tripwire without an account --------------------------
+
+    GUEST_DAYS = 3  # a guest's things are deleted after this long (their visit ends when the browser closes)
+
+    def create_guest(self):
+        """A visitor who added something without an account. Nobody can log in as a guest:
+        the made-up address can't receive email and '!' never matches a password."""
+        return self.conn.insert("""INSERT INTO users (email, password_hash, created_at, guest, weekly_email, summary_every)
+                                   VALUES (?, '!', ?, 1, 0, 'off')""",
+                                (f"guest-{secrets.token_hex(8)}@guest.invalid", db.now()))
+
+    def claim_guest(self, guest_id, email, password):
+        """Turn a guest into a real account, keeping everything they added."""
+        email, password_hash = self._new_account(email, password)
+        self.conn.execute("""UPDATE users SET email = ?, password_hash = ?, guest = 0, weekly_email = 1,
+                             summary_every = 'weekly', created_at = ? WHERE id = ? AND guest = 1""",
+                          (email, password_hash, db.now(), guest_id))
+        return guest_id
+
+    def merge_guest(self, guest_id, user_id):
+        """Someone added things as a guest, then logged in: move those things into their account."""
+        guest = self.user(guest_id)
+        if not guest or not guest["guest"] or guest_id == user_id:
+            return
+        for theme in self.conn.execute("SELECT * FROM themes WHERE user_id = ?", (guest_id,)).fetchall():
+            if theme["loose"] == 1:
+                target = self.single_links(user_id)
+            elif theme["loose"] == 2:
+                target = self.videos_list(user_id)
+            else:
+                same = self.conn.execute("SELECT id FROM themes WHERE user_id = ? AND loose = 0 AND LOWER(name) = ?",
+                                         (user_id, theme["name"].lower())).fetchone()
+                count = self.conn.execute("SELECT COUNT(*) AS n FROM themes WHERE user_id = ? AND loose = 0",
+                                          (user_id,)).fetchone()["n"]
+                if same:
+                    target = same["id"]
+                elif count < MAX_THEMES:
+                    self.conn.execute("UPDATE themes SET user_id = ? WHERE id = ?", (user_id, theme["id"]))
+                    continue
+                else:
+                    target = self.single_links(user_id)  # no room for another theme: keep the links anyway
+            self.conn.execute("UPDATE watches SET theme_id = ? WHERE theme_id = ?", (target, theme["id"]))
+        for table in ("book_comparisons", "book_jobs", "archive_copies", "feedback", "shelf_items", "before_checks"):
+            self.conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id = ?", (user_id, guest_id))
+        self.conn.execute("DELETE FROM users WHERE id = ?", (guest_id,))
+
+    def delete_old_guests(self):
+        """Tidy up: guests' things are deleted a few days after their visit."""
+        cutoff = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - self.GUEST_DAYS * 86400))
+        self.conn.execute("DELETE FROM users WHERE guest = 1 AND created_at < ?", (cutoff,))
 
     def user(self, user_id):
         return self.conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -176,6 +234,8 @@ class Tripwire:
         if user_id is not None:
             query += " WHERE t.user_id = ?"
             params = (user_id,)
+        else:  # the daily run: guests' things are only checked when they ask
+            query += " JOIN users u ON u.id = t.user_id WHERE u.guest = 0"
         query += " ORDER BY w.last_checked_at IS NOT NULL, w.last_checked_at, w.id"
         new_entries = []
         for watch in self.conn.execute(query, params).fetchall():
@@ -505,18 +565,39 @@ class Tripwire:
         """Delete an archive entry the person doesn't care about."""
         self.conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
 
-    # -- weekly summary email ------------------------------------------------
+    # -- summary emails: daily, weekly or monthly ------------------------------
 
-    SUMMARY_EVERY_DAYS = 6  # "weekly", with a day's slack so a late daily run never skips a week
+    # How often, and the shortest gap between two emails (with slack, so a late daily run never skips one).
+    SUMMARY_CHOICES = {"daily": ("Daily", 1, 20 / 24), "weekly": ("Weekly", 7, 6), "monthly": ("Monthly", 30, 27)}
+
+    @staticmethod
+    def summary_every(user):
+        """'daily', 'weekly', 'monthly' or 'off'. Older accounts only had a weekly on/off switch."""
+        return user["summary_every"] or ("weekly" if user["weekly_email"] else "off")
+
+    def set_summary_every(self, user_id, every):
+        if every not in self.SUMMARY_CHOICES and every != "off":
+            raise ValueError("Choose daily, weekly, monthly or off.")
+        self.conn.execute("UPDATE users SET summary_every = ?, weekly_email = ? WHERE id = ?",
+                          (every, 0 if every == "off" else 1, user_id))
 
     def set_weekly_email(self, user_id, on):
-        self.conn.execute("UPDATE users SET weekly_email = ? WHERE id = ?", (1 if on else 0, user_id))
+        self.set_summary_every(user_id, "weekly" if on else "off")
 
     def users_due_summary(self):
-        cutoff = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - self.SUMMARY_EVERY_DAYS * 86400))
-        return self.conn.execute("""SELECT * FROM users WHERE weekly_email = 1
-                                    AND (summary_sent_at IS NULL OR summary_sent_at < ?) ORDER BY id""",
-                                 (cutoff,)).fetchall()
+        """Who gets an email today: daily ones every day, weekly ones on Mondays,
+        monthly ones on the 1st (all times UTC)."""
+        today = time.gmtime()
+        due = []
+        for user in self.conn.execute("SELECT * FROM users WHERE guest = 0 ORDER BY id").fetchall():
+            every = self.summary_every(user)
+            if every == "off" or (every == "weekly" and today.tm_wday != 0) or (every == "monthly" and today.tm_mday != 1):
+                continue
+            gap = self.SUMMARY_CHOICES[every][2]
+            cutoff = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - gap * 86400))
+            if not user["summary_sent_at"] or user["summary_sent_at"] < cutoff:
+                due.append(user)
+        return due
 
     def mark_summary_sent(self, user_id):
         self.conn.execute("UPDATE users SET summary_sent_at = ? WHERE id = ?", (db.now(), user_id))
@@ -606,7 +687,7 @@ class Tripwire:
     def totals(self):
         def count(sql):
             return self.conn.execute(sql).fetchone()["n"]
-        return {"people": count("SELECT COUNT(*) AS n FROM users"),
+        return {"people": count("SELECT COUNT(*) AS n FROM users WHERE guest = 0"),
                 "watched": count("SELECT COUNT(*) AS n FROM watches"),
                 "changes": count("SELECT COUNT(*) AS n FROM entries"),
                 "books": count("SELECT COUNT(*) AS n FROM book_comparisons"),
@@ -615,7 +696,9 @@ class Tripwire:
 
     # -- weekly summary -----------------------------------------------------
 
-    def weekly_summary(self, user_id, days=7):
+    def weekly_summary(self, user_id, every="weekly"):
+        """The summary for the last day, week or month (`every`: 'daily', 'weekly' or 'monthly')."""
+        name, days, _gap = self.SUMMARY_CHOICES.get(every, self.SUMMARY_CHOICES["weekly"])
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=days)
         rows = self.conn.execute(
@@ -632,10 +715,10 @@ class Tripwire:
 
         period = f"{start:%d %b} – {end:%d %b}"
         if not rows:
-            text = f"Tripwire weekly summary ({period}): no changes across your {tracked} tracked items."
+            text = f"Tripwire {name.lower()} summary ({period}): no changes across your {tracked} tracked items."
         else:
             parts = ", ".join(f"{n} {changes.CATEGORIES[c].lower()}" for c, n in counts.most_common())
-            text = (f"Tripwire weekly summary ({period}): {len(rows)} change{'s' if len(rows) != 1 else ''} "
+            text = (f"Tripwire {name.lower()} summary ({period}): {len(rows)} change{'s' if len(rows) != 1 else ''} "
                     f"across {changed_items} of your {tracked} tracked items. {parts}.")
             if names:
                 text += " Names that changed spelling: " + "; ".join(f"{o} → {n} ({label})" for label, o, n in names[:5]) + "."
@@ -643,5 +726,6 @@ class Tripwire:
                 text += " Worth a look: " + ", ".join(dict.fromkeys(r["label"] for r in big)) + "."
         copied = {r["entry_id"] for r in self.copies(user_id)}
         offer_copy = [r for r in rows if r["category"] in ("major", "removal") and r["id"] not in copied]
-        return {"period": period, "entries": rows, "counts": counts, "changed_items": changed_items,
+        return {"every": every if every in self.SUMMARY_CHOICES else "weekly", "name": name,
+                "period": period, "entries": rows, "counts": counts, "changed_items": changed_items,
                 "tracked": tracked, "names": names, "big": big, "offer_copy": offer_copy, "text": text}

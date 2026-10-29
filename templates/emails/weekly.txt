@@ -1,8 +1,8 @@
-TRIPWIRE · WEEKLY SUMMARY · {{ s.period }}
+TRIPWIRE · {{ s.name|upper }} SUMMARY · {{ s.period }}
 
 {{ s.text }}
 {% if s.entries %}
-THIS WEEK
+{{ span|upper }}
 {% for e in (s.entries|reverse|list)[:10] %}- {{ e.label }}: {{ CATEGORIES[e.category] }}
   {{ site }}{{ url_for('entry', entry_id=e.id) }}
 {% endfor %}{% if s.entries|length > 10 %}...and {{ s.entries|length - 10 }} more.
@@ -20,5 +20,5 @@ If any of these matter to you, consider keeping a public, permanent copy with th
 {% endfor %}{% endif %}
 See everything: {{ site }}{{ url_for('summary') }}
 
-You get this once a week because weekly emails are switched on for {{ email }}.
+You get this {{ when }} because summary emails are switched on for {{ email }}.
 To switch them off, go to {{ site }}{{ url_for('summary') }}

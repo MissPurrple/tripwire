@@ -3,11 +3,13 @@
 {% block content %}
 <section class="theme auth">
   {% if mode == 'signup' %}
-    <h1>Make an account</h1>
-    <p>Watch the information you care about, and keep a copy when it changes. Once a week, Tripwire can email you a calm summary
-       (you can switch it off any time).</p>
+    <h1>{{ 'Keep what you’ve added' if is_guest else 'Make an account' }}</h1>
+    <p>You don't need an account to use Tripwire. Make one to keep what you watch after you close your browser,
+       and to get a calm summary by email: daily, weekly or monthly (you choose, and can switch it off any time).
+       {% if is_guest %}Everything you've added so far comes with you.{% endif %}</p>
   {% else %}
     <h1>Log in</h1>
+    {% if is_guest %}<p>Anything you added without an account moves into your account when you log in.</p>{% endif %}
   {% endif %}
   <form method="post">
     <label>Email

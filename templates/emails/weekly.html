@@ -4,14 +4,14 @@
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#f6f1e4;border:2px solid #2a2620;font-family:Menlo,Consolas,'Courier New',monospace;color:#221f1a;">
   <tr><td style="background:#0d1a10;color:#7cf29c;padding:18px 22px;font-size:20px;letter-spacing:2px;">
-    TRIPWIRE · WEEKLY SUMMARY<br><span style="font-size:13px;color:#4fae6a;">{{ s.period }}</span>
+    TRIPWIRE · {{ s.name|upper }} SUMMARY<br><span style="font-size:13px;color:#4fae6a;">{{ s.period }}</span>
   </td></tr>
   <tr><td style="padding:20px 22px;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.5;">
     {{ s.text }}
   </td></tr>
   {% if s.entries %}
   <tr><td style="padding:0 22px 12px;">
-    <div style="font-size:13px;font-weight:bold;letter-spacing:1px;margin-bottom:6px;">THIS WEEK</div>
+    <div style="font-size:13px;font-weight:bold;letter-spacing:1px;margin-bottom:6px;">{{ span|upper }}</div>
     {% for e in (s.entries|reverse|list)[:10] %}<div style="font-size:14px;margin:4px 0;">▸ <a href="{{ site }}{{ url_for('entry', entry_id=e.id) }}" style="color:#1f6b3c;">{{ e.label }}</a> · {{ CATEGORIES[e.category] }}</div>{% endfor %}
     {% if s.entries|length > 10 %}<div style="font-size:13px;color:#5d5649;">…and {{ s.entries|length - 10 }} more.</div>{% endif %}
   </td></tr>
@@ -39,7 +39,7 @@
     <a href="{{ site }}{{ url_for('summary') }}" style="display:inline-block;background:#1f6b3c;color:#f2fbf3;text-decoration:none;padding:10px 16px;border:2px solid #2a2620;font-size:14px;font-weight:bold;">See everything</a>
   </td></tr>
   <tr><td style="padding:14px 22px;border-top:2px solid #2a2620;font-size:12px;color:#5d5649;">
-    You get this once a week because weekly emails are switched on for {{ email }}.
+    You get this {{ when }} because summary emails are switched on for {{ email }}.
     <a href="{{ site }}{{ url_for('summary') }}" style="color:#5d5649;">Switch them off</a> any time. READY.
   </td></tr>
 </table>

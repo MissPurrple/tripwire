@@ -47,7 +47,7 @@
         with the Internet Archive's copy from about a year ago.</li>
     <li><strong>Live watch:</strong> keeps an eye on a fast-moving page, like a live news page, while you have it open, and beeps when something new appears.</li>
     <li><strong>Keeps public copies</strong> with the Internet Archive, only when you choose.</li>
-    <li><strong>Sends one calm summary a week</strong>, by email if you like, instead of a ping for every change.</li>
+    <li><strong>Sends one calm summary</strong> (daily, weekly or monthly, by email if you like) instead of a ping for every change.</li>
     <li><strong>For everyone:</strong> works with screen readers, can read every page aloud (for people who can't see well or can't read),
         has a calm mode, bigger text and strong contrast, and is starting to speak Hindi and Sesotho (drafts, with help welcome).</li>
   </ul>
@@ -62,8 +62,8 @@
     <dt>Public copies are asked for twice.</dt>
     <dd>A copy at the Internet Archive is public and very hard to remove. Tripwire only offers one for big changes, asks twice,
         and reminds you that knowledge a community keeps private or sacred may be better left uncopied.</dd>
-    <dt>A weekly summary, not a ping for every change.</dt>
-    <dd>Alerts in the middle of your day mostly cause panic. One summary a week is enough to notice what matters.</dd>
+    <dt>A summary, not a ping for every change.</dt>
+    <dd>Alerts in the middle of your day mostly cause panic. One summary a week (or a day, or a month: you choose) is enough to notice what matters.</dd>
     <dt>Names are watched closely.</dt>
     <dd>A person's or place's name spelled differently can mean a language is spreading, or fading. Tripwire flags it.</dd>
     <dt>Book files are deleted after 7 days.</dt>
@@ -71,6 +71,9 @@
     <dt>Privacy by default.</dt>
     <dd>No ads, no selling data. Fonts are served by Tripwire itself, so visitors' browsers don't contact a font company.
         The site counts anonymous visits with Vercel Web Analytics, which uses no cookies.</dd>
+    <dt>No account needed.</dt>
+    <dd>You can use everything without signing up. What you add lasts until you close your browser (and is deleted a few days later);
+        make an account only if you want to keep it.</dd>
     <dt>Our own human check.</dt>
     <dd>Signing up asks a question in words and does a little maths in the background, with no outside service watching you.
         No check stops a determined AI; this one makes automated sign-ups slow and costly.</dd>
@@ -114,8 +117,15 @@
     <li><strong>Copies you keep yourself:</strong> My shelf, downloadable as a ZIP or a Kiwix file, because a copy on a
         government website, or on Tripwire, isn't the same as a copy in your own hands. And Then and now, comparing
         Wikipedia with Kiwix's offline copy.</li>
+    <li><strong>A sign-up wall → try it first.</strong> Being made to create an account before seeing anything makes most people leave.
+        Now anyone can use Tripwire straight away; an account is only for keeping things after you close the browser, and for email summaries.</li>
+    <li><strong>One summary a week → you choose:</strong> daily, weekly or monthly.</li>
+    <li><strong>A front door.</strong> Opening Tripwire should feel like discovering a world, the way libraries and the early internet did.
+        So it opens with falling binary and a purple rabbit to follow.</li>
     <li><strong>Next: what testers tell us.</strong> {% if totals.feedback %}{{ totals.feedback }} piece{{ 's' if totals.feedback != 1 }} of feedback so far.{% else %}Leave yours below.{% endif %}</li>
   </ol>
+  <p>Tripwire is young, and built in the open. If you can see how to make it better (code, design, archiving, or knowing a community's needs),
+     <a href="#feedback">tell us below</a>. Help is very welcome.</p>
 </section>
 
 <section class="theme">
@@ -132,7 +142,6 @@
 
 <section class="theme" id="feedback">
   <h2>Tell us what you think</h2>
-  {% if g.user %}
     <p>Tried something? What worked, what confused you, what's missing? It goes straight to the person who made Tripwire.</p>
     <form method="post" action="{{ url_for('send_feedback') }}" class="feedback-form">
       <label>What did you try?
@@ -141,29 +150,26 @@
       <label>Your feedback
         <textarea name="message" rows="5" required minlength="3" placeholder="It would be better if…"></textarea>
       </label>
+      {# A field people never see. Bots that fill in every field give themselves away. #}
+      <div class="trap" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
       <button>Send feedback</button>
     </form>
-  {% else %}
-    <p><a href="{{ url_for('login') }}">Log in</a> or <a href="{{ url_for('signup') }}">make an account</a> to leave feedback.</p>
-  {% endif %}
 </section>
 
-{% if g.user %}
 <section class="theme" id="demo">
   <h2>Try it with real examples</h2>
-  <p>Fill your account with real things to explore: Wikipedia articles about Indigenous peoples and languages (with the last 90 days of real edits),
+  <p>Fill Tripwire with real things to explore: Wikipedia articles about Indigenous peoples and languages (with the last 90 days of real edits),
      a famous video, and Mary Shelley's <em>Frankenstein</em>, 1818 edition against her 1831 rewrite.</p>
   <form method="post" action="{{ url_for('demo_data') }}">
-    <button>Add the examples to my account</button>
+    <button>Add the examples</button>
   </form>
-  <p class="meta">Only your own account is changed. This takes up to a minute, because Tripwire fetches everything live.</p>
+  <p class="meta">Only your own things are changed (no account needed). This takes up to a minute, because Tripwire fetches everything live.</p>
 </section>
-{% endif %}
 
 <section class="theme">
   <h2>Made by</h2>
   <p><strong>Purple</strong>, at the Edge City Buildathon, Goa, October 2026, with Claude (an AI assistant) as a building partner.
-     The little white rabbit in the corner is Purple's signature. <img class="inline-rabbit" src="{{ url_for('static', filename='rabbit.png') }}" alt="" width="14" height="22"></p>
+     The little purple rabbit in the corner is Purple's signature. <img class="inline-rabbit" src="{{ url_for('static', filename='rabbit.png') }}" alt="" width="14" height="22"></p>
   <p class="meta">With thanks to the free, open sources Tripwire relies on: Wikipedia, the Internet Archive, Open Library, Project Gutenberg
      and Cloudflare Radar. Fonts: VT323 and IBM Plex, under the SIL Open Font License.</p>
 </section>

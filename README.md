@@ -9,7 +9,7 @@ Pick up to three themes (starting with *Indigenous communities*). Add the Wikipe
 - tells you how big the change was (punctuation only, a tiny spelling fix, an edit, a major change, a large removal, or the page disappearing),
 - **flags names whose spelling changed**, because that can be a sign of a language spreading or fading.
 
-You look through your archive whenever suits you. **Keep** what matters. **Disregard** what doesn't, and it's deleted. A **weekly summary** tells you the big picture, e.g. *"3 changes across 2 of your 8 tracked items. 2 tiny, 1 major."*
+You look through your archive whenever suits you. **Keep** what matters. **Disregard** what doesn't, and it's deleted. A **summary** (daily, weekly or monthly: you choose) tells you the big picture, e.g. *"3 changes across 2 of your 8 tracked items. 2 tiny, 1 major."*
 
 Built at the Edge City Buildathon, October 2026.
 
@@ -48,7 +48,7 @@ pip install -r requirements.txt
 ```
 python app.py
 ```
-Then open **http://localhost:5000** in your browser. You'll see the Tripwire computer boot up; choose **[M] MAKE AN ACCOUNT**. (On your laptop the account only exists on your laptop.) To stop it, go back to the terminal and press **Ctrl + C**.
+Then open **http://localhost:5000** in your browser. You'll see the opening (falling binary and the purple rabbit); click **TRIP THE WIRES** and the Tripwire computer boots up. You can use everything straight away, without an account. To keep what you add after closing the browser, choose **[M] MAKE AN ACCOUNT**. (On your laptop the account only exists on your laptop.) To see the opening again, open **http://localhost:5000/?intro**. To stop it, go back to the terminal and press **Ctrl + C**.
 
 Next time, you only need to open a terminal in the folder, run the `activate` line from step 2, then `python app.py`.
 
@@ -73,17 +73,19 @@ python -m unittest -v        # run the tests (no internet needed)
 | File | What it does |
 |---|---|
 | `app.py` | The web pages you click around in |
-| `tripwire/checker.py` | Adds watches, checks for changes, keeps/disregards entries, writes the weekly summary |
+| `tripwire/checker.py` | Accounts and guests, adds watches, checks for changes, keeps/disregards entries, writes the summaries |
 | `tripwire/changes.py` | Compares before and after text and judges how big the change is |
 | `tripwire/sources.py` | Talks to Wikipedia, ordinary websites, YouTube, TikTok and the Internet Archive |
 | `tripwire/books.py` | Reads book files (EPUB, PDF, text, Project Gutenberg) for comparing two editions |
 | `tripwire/stats.py`, `tripwire/charts.py` | The Stats page's numbers (Cloudflare Radar, Open Library) and the charts |
-| `tripwire/mailer.py`, `templates/emails/` | The weekly summary email |
+| `tripwire/mailer.py`, `templates/emails/` | The summary email (daily, weekly or monthly) |
 | `tripwire/humancheck.py` | The sign-up page's own "are you human?" check |
 | `tripwire/live.py`, `templates/live.html` | Live watch: checks a page every few minutes while it's open |
 | `tripwire/shelf.py`, `templates/export/` | My shelf, and "Take my shelf with me": the ZIP and Kiwix (ZIM) downloads |
 | `tripwire/before.py` | Then and now: compares a page with Kiwix's offline Wikipedia or the Internet Archive |
 | `tripwire/i18n.py`, `translations/` | Languages (English, plus draft Hindi and Sesotho) |
+| `templates/_intro.html`, `public/static/intro.js` | The opening: binary rain, the purple rabbit, "Trip the wires" |
+| `public/static/audio/` | Purple's welcome recording (`welcome.mp3`), played on "Trip the wires" |
 | `public/static/scan-reader.js`, `public/static/ocr/` | Reads scanned PDFs in the visitor's own browser (Tesseract and pdf.js, served by Tripwire itself) |
 | `tripwire/db.py` | Storage: a `tripwire.db` file on your laptop, or a Postgres database online |
 | `templates/`, `public/static/` | Page layouts, the retro styling, and the fonts (VT323 and IBM Plex, free under the SIL Open Font License, served by Tripwire itself) |
@@ -113,7 +115,7 @@ Vercel doesn't keep files between visits, so online Tripwire stores everything i
 
 The books-published numbers need no setup. They come from Open Library and fill in gradually the first time the Stats page is opened (and during the daily run).
 
-**Weekly summary by email (optional):** Tripwire sends email through any email service that offers "SMTP". Add these in **Settings → Environment Variables**, then **Redeploy**:
+**Summary emails (optional):** Tripwire sends email through any email service that offers "SMTP". Add these in **Settings → Environment Variables**, then **Redeploy**:
 
 | Name | What to put |
 |---|---|
@@ -127,7 +129,7 @@ The books-published numbers need no setup. They come from Open Library and fill 
 
 *Or with Resend (resend.com, free tier):* create an API key; use `SMTP_HOST` = `smtp.resend.com`, `SMTP_USER` = `resend`, `SMTP_PASSWORD` = the API key. To email anyone, verify your own domain in Resend and send from it.
 
-Summaries go out on Mondays during the daily run, to everyone who has them switched on (the Weekly summary page has the switch and an **Email it to me now** button). Optional: `SITE_URL` (e.g. `https://tripwire.vercel.app`) sets the address used in email links.
+Summaries go out during the daily run: daily ones every day, weekly ones on Mondays, monthly ones on the 1st. Each person chooses on the Summary page (daily, weekly, monthly or off), which also has an **Email it to me now** button. Visitors without an account don't get emails. Optional: `SITE_URL` (e.g. `https://tripwire.vercel.app`) sets the address used in email links.
 
 **Languages:** English, plus draft Hindi and Sesotho, chosen at the bottom of every page or in the Access panel. Translations live in `translations/`; see `CONTRIBUTING.md` to help.
 

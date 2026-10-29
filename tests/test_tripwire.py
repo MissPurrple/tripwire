@@ -1300,7 +1300,7 @@ class AccessAndLanguageTests(CheckerTests):
         self.assertIn('<html lang="hi">', page)
         self.assertIn("Hindi: still being built", page)  # the pop-up, once
         self.assertIn("send a pull request", page)
-        self.assertIn("github.com/MissPurrple/edge-buildathon", page)
+        self.assertIn("github.com/MissPurrple/tripwire", page)
         self.assertIn("यह हिंदी संस्करण अभी बन रहा है", page)  # the banner
         again = self.client.get("/about").data.decode()
         self.assertNotIn("Hindi: still being built", again)  # pop-up only right after switching

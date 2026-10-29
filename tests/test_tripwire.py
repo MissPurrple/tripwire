@@ -1278,7 +1278,7 @@ class EmailAndAboutTests(CheckerTests):
                          "Purple, Tripwire&#39;s maker", "Send feedback", "A sign-up wall → try it first"]:
             self.assertIn(expected, page.replace("Who it's for", "Who it&#39;s for").replace("Purple, Tripwire's maker", "Purple, Tripwire&#39;s maker"))
         self.assertIn("Add the examples", page)  # no account needed to try the examples
-        self.assertIn("[7] ABOUT", self.client.get("/").data.decode())
+        self.assertIn("[9] ABOUT", self.client.get("/").data.decode())
 
     def test_feedback_reaches_only_the_owner(self):
         self.client.post("/feedback", data={"tried": "Books", "message": "Loved the Frankenstein comparison!"})
@@ -1485,10 +1485,14 @@ class ShelfTests(CheckerTests):
         return self.client.post("/shelf/file", data=dict(form, file=(io.BytesIO(data), name)),
                                 content_type="multipart/form-data", follow_redirects=True)
 
-    def test_pages_need_an_account(self):
+    def test_pages_open_without_an_account(self):
+        self.upload("gazette.txt", b"Notice 12.", title="Purple's gazette")
         self.client.post("/logout")
-        for path in ["/shelf", "/shelf/1", "/shelf/download.zip", "/shelf/download.zim", "/before"]:
-            self.assertEqual(self.client.get(path).status_code, 302, path)
+        for path in ["/shelf", "/before"]:
+            page = self.client.get(path)
+            self.assertEqual(page.status_code, 200, path)
+            self.assertNotIn("Purple&#39;s gazette", page.data.decode())  # nobody else's things
+        self.assertEqual(self.client.get("/shelf/1").status_code, 404)
 
     def test_keep_a_file_search_and_open_it(self):
         words = "Government Gazette of Lesotho. Notice 12: the village of Ha Mohale is renamed. " * 3

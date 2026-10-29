@@ -152,7 +152,10 @@
   function finish() {
     intro.classList.add("leaving");
     document.documentElement.classList.remove("intro-lock");
-    setTimeout(function () { clearInterval(timer); intro.remove(); }, 700);
+    setTimeout(function () {
+      clearInterval(timer); intro.remove();
+      document.dispatchEvent(new Event("tripwire:intro-done"));   // e.g. the read-aloud question comes next
+    }, 700);
   }
 
   async function tripTheWires() {

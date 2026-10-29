@@ -171,8 +171,9 @@ window.Tripwire = window.Tripwire || {};
       if (speaking) { T.stopSpeaking(); return; }
       T.readPage();
     });
-    // The first visit: ask once whether to read aloud.
-    if (welcome && !settings.asked && !document.querySelector("dialog[open]")) {
+    // The first visit: ask once whether to read aloud (after the opening, if it's playing).
+    function askOnce() {
+      if (!welcome || settings.asked || document.querySelector("dialog[open]")) return;
       welcome.showModal();
       welcome.querySelectorAll("[data-welcome]").forEach(function (b) {
         b.addEventListener("click", function () {
@@ -185,6 +186,8 @@ window.Tripwire = window.Tripwire || {};
         });
       });
     }
+    if (document.getElementById("intro")) document.addEventListener("tripwire:intro-done", askOnce, { once: true });
+    else askOnce();
     // Read aloud: click any text to hear it; links and buttons are read when they get keyboard focus.
     document.addEventListener("click", function (event) {
       if (!html.classList.contains("a11y-read")) return;

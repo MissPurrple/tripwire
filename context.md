@@ -222,3 +222,14 @@
 - Clean-up suggestions given to Purple (not built, waiting for Purple's choice): shelf items first with add forms folded
   away; one add form on Watching instead of one per theme; fewer buttons per watched item (a "More" menu); Changes filters
   as a dropdown; shorter notes on Books & videos.
+
+## Built 30 Oct (LIVE): private test results, locked anonymous feedback, usernames
+- Purple: no new pages/buttons/menu items; additions to existing pages only. "Skip nothing. We're going for the long haul."
+- "Test against Kiwix / Internet Archive" results lock themselves with the vault (on the result page and on Watching);
+  the server keeps only "Locked comparison" + date. Without a vault: one line inviting people to make one.
+  (The other session removed "Last Kiwix test" lines from Watching, so locked results aren't shown there.)
+- Feedback: never stores who sent it; optional "sign with my username" (added by Tripwire, can't be faked).
+  Purple locks the box once, from the Feedback inbox (needs ADMIN_EMAILS set to Purple's login email + a vault).
+  After that only browser-locked feedback is accepted; older feedback is locked and its sender forgotten.
+- Everyone has a random old-internet username (e.g. xX_solarwolf_Xx); menus show it instead of the email.
+- Honest note: Postgres may keep old readable row copies in its internal free space until its routine clean-up (autovacuum).

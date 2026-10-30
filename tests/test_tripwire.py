@@ -1545,6 +1545,20 @@ class AccessAndLanguageTests(CheckerTests):
                 self.assertIn(expected, page, (path, expected))
         self.assertIn("your device's own voice", self.client.get("/").data.decode())
 
+    def test_first_time_tour(self):
+        page = self.client.get("/").data.decode()
+        self.assertIn('id="tour"', page)
+        self.assertIn("tour.js", page)
+        self.assertIn("data-tour-skip", page)  # it can always be skipped
+        self.assertIn("data-tour-start", page)  # "Take the tour" at the bottom of every page shows it again
+        steps = page.split("<template data-tour-steps>")[1].split("</template>")[0]
+        self.assertEqual(steps.count("<section"), 4)  # short: four steps
+        for link in ["/watching", "/shelf", "/changes", "/books"]:
+            self.assertIn(f'a[href="{link}"]', steps)  # each step lights up its menu item
+        self.assertIn('action="/demo-data"', page)  # the last step offers the real examples
+        for path in ["/login", "/signup", "/verify"]:
+            self.assertNotIn('id="tour"', self.client.get(path).data.decode(), path)  # not where it would get in the way
+
     def test_only_english_until_a_translation_is_checked(self):
         """The Hindi and Sesotho drafts aren't on the site until a native speaker has checked them."""
         page = self.client.get("/").data.decode()

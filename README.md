@@ -82,6 +82,7 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/humancheck.py` | The sign-up page's own "are you human?" check |
 | `tripwire/live.py`, `templates/_live.html` | Live watch (top of the Watching page): checks a page every few minutes while it's open |
 | `tripwire/shelf.py`, `templates/export/` | My shelf, and "Take my shelf with me": the ZIP and Kiwix (ZIM) downloads |
+| `templates/_tour.html`, `public/static/tour.js` | The first-time tour: four short steps around the menu, shown once per device, skippable |
 | `tripwire/stamp.py`, `templates/verify.html` | Stamps of originality: signed proof of where and when a copy was taken, and the public “Check a stamp” page |
 | `tripwire/before.py` | The “Test against Kiwix” and “Test against Internet Archive” buttons: compare a page with an older copy |
 | `tripwire/i18n.py`, `translations/` | Languages: English for now; checked translations go in `translations/` |

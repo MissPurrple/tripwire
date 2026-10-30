@@ -691,3 +691,27 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
 .stamp-facts code, code.key { overflow-wrap: anywhere; word-break: break-all; font-size: .85em; }
 .verdict-genuine { border-color: var(--ins-text); } .verdict-fake { border-color: var(--removal); }
 @media (max-width: 560px) { .stamp-facts { grid-template-columns: 1fr; } }
+
+/* The first-time tour */
+.tour { position: fixed; inset: 0; z-index: 1000; }
+.tour-shade { position: absolute; inset: 0; }
+.tour.no-target .tour-shade { background: rgba(0, 0, 0, .6); }
+.tour-spot { position: fixed; border: 3px solid var(--accent); border-radius: 8px; pointer-events: none;
+             box-shadow: 0 0 0 200vmax rgba(0, 0, 0, .6), 0 0 18px 4px var(--accent);
+             transition: left .25s, top .25s, width .25s, height .25s; }
+.tour-card { position: fixed; width: min(420px, calc(100vw - 32px)); background: var(--screen); color: var(--phosphor);
+             border: 2px solid var(--edge); border-radius: 10px; padding: 16px 18px; box-shadow: 6px 6px 0 var(--shadow);
+             left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.tour-card.below, .tour-card.above { transform: none; }
+.tour-card h2 { color: var(--phosphor); font-family: var(--font-pixel); font-weight: 400; font-size: 2rem; margin: 2px 0 6px; }
+.tour-card p { margin: 0 0 12px; line-height: 1.5; }
+.tour-count { font-family: var(--font-mono); font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; opacity: .8; }
+.tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tour-actions .link { color: var(--phosphor); opacity: .85; }
+.tour-nav { display: flex; gap: 8px; }
+.tour-end { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+@media (max-width: 639px) {   /* phones: a card at the bottom of the screen */
+  .tour-card, .tour-card.below, .tour-card.above { left: 16px; right: 16px; width: auto; top: auto; bottom: 16px; transform: none; }
+}
+.a11y-calm .tour-spot, .a11y-calm .tour-card { transition: none; }
+@media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } }

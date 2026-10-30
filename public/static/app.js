@@ -172,8 +172,10 @@ window.Tripwire = window.Tripwire || {};
       T.readPage();
     });
     // The first visit: ask once whether to read aloud (after the opening, if it's playing).
+    // Then tell the first-time tour (tour.js) it can start.
+    function welcomeDone() { setTimeout(function () { document.dispatchEvent(new Event("tripwire:welcome-done")); }, 0); }
     function askOnce() {
-      if (!welcome || settings.asked || document.querySelector("dialog[open]")) return;
+      if (!welcome || settings.asked || document.querySelector("dialog[open]")) { welcomeDone(); return; }
       welcome.showModal();
       welcome.querySelectorAll("[data-welcome]").forEach(function (b) {
         b.addEventListener("click", function () {
@@ -181,7 +183,7 @@ window.Tripwire = window.Tripwire || {};
           settings.asked = true;
           if (choice === "read") settings.read = true;
           if (choice === "calm") settings.calm = true;
-          save(settings); apply(settings); welcome.close();
+          save(settings); apply(settings); welcome.close(); welcomeDone();
           if (choice === "read") T.speak(document.title + ". Read aloud is on. Click any text to hear it, or press Read this page aloud.");
         });
       });

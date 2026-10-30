@@ -1,0 +1,41 @@
+{# The first-time tour: four short steps that light up the menu, shown once per device after the opening
+   (and the read-aloud question). Skip any time; "Take the tour" at the bottom of every page shows it again.
+   public/static/tour.js runs it. Each step lights up the first of its targets that's visible on screen. #}
+<div class="tour" id="tour" hidden>
+  <div class="tour-shade" data-tour-shade></div>
+  <div class="tour-spot" data-tour-spot aria-hidden="true"></div>
+  <div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-text">
+    <p class="tour-count" data-tour-count aria-live="polite"></p>
+    <h2 id="tour-title" data-tour-title></h2>
+    <p id="tour-text" data-tour-text></p>
+    <div class="tour-end" data-tour-end hidden>
+      <form method="post" action="{{ url_for('demo_data') }}" data-tour-finish><button>Try it with real examples</button></form>
+      <button type="button" class="secondary-button" data-tour-done>I'll explore on my own</button>
+    </div>
+    <div class="tour-actions">
+      <button type="button" class="link" data-tour-skip>Skip tour</button>
+      <span class="tour-nav">
+        <button type="button" class="secondary-button" data-tour-back>Back</button>
+        <button type="button" data-tour-next>Next</button>
+      </span>
+    </div>
+  </div>
+  <template data-tour-steps>
+    <section data-target='.nav-wide a[href="{{ url_for('index') }}"], .nav-narrow > summary' data-title="Watching">
+      Welcome! This is where you follow what matters to you: paste a Wikipedia article or any link, and Tripwire
+      checks it every day and keeps the before and after. Live watch, at the top, is for pages that change by the minute.
+    </section>
+    <section data-target='.nav-wide a[href="{{ url_for('shelf_page') }}"], .nav-narrow > summary' data-title="My shelf">
+      Your own copies: gazettes, memos, photos of documents, web pages. Each one gets a stamp of where and when it was
+      taken, and you can download the whole shelf to keep offline, even in the Kiwix app.
+    </section>
+    <section data-target='.nav-wide a[href="{{ url_for('change_list') }}"], .nav-narrow > summary' data-title="Changes">
+      When something you watch changes, it lands here: what was removed, what was added, and a short summary at the top.
+      Keep what matters; disregard the rest. No pings, ever.
+    </section>
+    <section data-target='.nav-wide a[href="{{ url_for('book_list') }}"], .nav-narrow > summary' data-title="Books &amp; videos" data-last>
+      Compare two editions of a book, word by word, or check whether a video has been taken down.
+      That's it! Want to start with some real examples, or find your own way?
+    </section>
+  </template>
+</div>

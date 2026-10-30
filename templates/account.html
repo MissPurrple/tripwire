@@ -3,7 +3,10 @@
 {% block content %}
 <section class="intro">
   <h1>Your account</h1>
-  <p>Signed in as <strong>{{ g.user.email }}</strong>. Tripwire keeps only what it needs: your email address (to log in and,
+  <p>You're <strong class="handle">{{ g.user.handle }}</strong>: a random name, given to you so that nobody, not even the person
+     who runs Tripwire, sees your email when you leave feedback or appear anywhere. Your email ({{ g.user.email }}) is only
+     shown to you, here.</p>
+  <p>Tripwire keeps only what it needs: your email address (to log in and,
      if you choose, to send your summary), your password in scrambled form (nobody can read it, not even Tripwire),
      and the things you add.</p>
 </section>

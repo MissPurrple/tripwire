@@ -4,7 +4,7 @@
   {% if watches[theme_id] %}
   <ul class="watches">
     {% for w in watches[theme_id] %}
-    <li>
+    <li data-test-url="{{ watch_link(w) }}">
       <div>
         <span class="kind">{{ 'Wikipedia' if w.kind == 'wikipedia' else 'Web page' }}</span>
         <a href="{{ watch_link(w) }}" target="_blank" rel="noopener">{{ w.label }}</a>
@@ -140,5 +140,10 @@
     <button>Add theme</button>
   </form>
 </section>
+{% endif %}
+{% if g.user and not is_guest and g.user.vault %}
+{# For the vault (vault.js): results to lock now, and locked results to open and show next to what they tested. #}
+<div hidden data-lock-checks="{{ lock_ids|join(',') }}"></div>
+{% for t in locked_tests %}<div hidden data-locked-test="{{ t.sealed_title }}" data-test-id="{{ t.id }}" data-test-date="{{ t.created_at[:10] }}"></div>{% endfor %}
 {% endif %}
 {% endblock %}

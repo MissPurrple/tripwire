@@ -28,6 +28,24 @@ LONG_PAGE_WORDS = 10_000    # more words than this (before and after together): 
 COPY_WORTHY = {"major", "removal", "page_removed"}
 
 
+# Old-internet names, given at random: everyone is known by one of these, never by their email.
+HANDLE_WORDS = (
+    ["neon", "ghost", "cipher", "phreak", "glitch", "pixel", "null", "echo", "static", "velvet", "midnight", "binary",
+     "silent", "lunar", "rogue", "chrome", "vapor", "dialup", "cosmic", "turbo", "hex", "quiet", "feral", "paper",
+     "electric", "analog", "hidden", "wired", "solar", "acid"],
+    ["rabbit", "moth", "fox", "wire", "byte", "raven", "signal", "comet", "modem", "ferret", "otter", "owl", "lynx",
+     "node", "packet", "pilot", "spark", "tiger", "wolf", "drifter", "archivist", "scribe", "oracle", "lantern",
+     "cassette", "floppy", "kernel", "daemon", "hare", "beacon"],
+)
+
+
+def new_handle():
+    first, second = secrets.choice(HANDLE_WORDS[0]), secrets.choice(HANDLE_WORDS[1])
+    number = secrets.randbelow(100)
+    return secrets.choice([f"{first}_{second}_{number:02d}", f"{first}{second.capitalize()}{number:02d}",
+                           f"xX_{first}{second}_Xx", f"{first}.{second}{number}", f"the_{first}_{second}"])
+
+
 class TooManyTries(ValueError):
     """Logging in to an account is paused for a while after too many wrong passwords."""
 
@@ -55,8 +73,24 @@ class Tripwire:
 
     def create_user(self, email, password):
         email, password_hash = self._new_account(email, password)
-        return self.conn.insert("INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-                                (email, password_hash, db.now()))
+        return self.conn.insert("INSERT INTO users (email, password_hash, created_at, handle) VALUES (?, ?, ?, ?)",
+                                (email, password_hash, db.now(), self.free_handle()))
+
+    def free_handle(self):
+        """A random old-internet name nobody else has."""
+        for _ in range(50):
+            handle = new_handle()
+            if not self.conn.execute("SELECT id FROM users WHERE handle = ?", (handle,)).fetchone():
+                return handle
+        return f"{new_handle()}_{secrets.token_hex(2)}"
+
+    def handle_of(self, user):
+        """Everyone gets one; accounts made before names existed get theirs the first time it's needed."""
+        if user["handle"]:
+            return user["handle"]
+        handle = self.free_handle()
+        self.conn.execute("UPDATE users SET handle = ? WHERE id = ? AND handle IS NULL", (handle, user["id"]))
+        return self.user(user["id"])["handle"]
 
     LOGIN_TRIES = 5            # wrong passwords in a row before an account's log-in pauses
     LOGIN_PAUSE_MINUTES = 15
@@ -110,9 +144,9 @@ class Tripwire:
     def create_guest(self):
         """A visitor who added something without an account. Nobody can log in as a guest:
         the made-up address can't receive email and '!' never matches a password."""
-        return self.conn.insert("""INSERT INTO users (email, password_hash, created_at, guest, weekly_email, summary_every)
-                                   VALUES (?, '!', ?, 1, 0, 'off')""",
-                                (f"guest-{secrets.token_hex(8)}@guest.invalid", db.now()))
+        return self.conn.insert("""INSERT INTO users (email, password_hash, created_at, guest, weekly_email, summary_every, handle)
+                                   VALUES (?, '!', ?, 1, 0, 'off', ?)""",
+                                (f"guest-{secrets.token_hex(8)}@guest.invalid", db.now(), self.free_handle()))
 
     def claim_guest(self, guest_id, email, password):
         """Turn a guest into a real account, keeping everything they added."""
@@ -663,16 +697,37 @@ class Tripwire:
 
     # -- feedback from people trying Tripwire --------------------------------
 
-    def add_feedback(self, user_id, tried, message):
+    def add_feedback(self, tried, message, signed_as=None, sealed=None):
+        """Feedback is anonymous: who sent it is never stored, unless they chose to sign it with
+        their username. Once the owner has locked the feedback box, it arrives `sealed` (locked in
+        the sender's browser to the owner's key) and nothing readable is stored at all."""
+        if sealed:
+            return self.conn.insert("""INSERT INTO feedback (tried, message, sealed, signed_as, created_at)
+                                       VALUES ('', '', ?, ?, ?)""", (sealed, signed_as, db.now()))
         message = (message or "").strip()
         if len(message) < 3:
             raise ValueError("Write a few words first.")
-        return self.conn.insert("INSERT INTO feedback (user_id, tried, message, created_at) VALUES (?, ?, ?, ?)",
-                                (user_id, (tried or "").strip()[:60], message[:4000], db.now()))
+        return self.conn.insert("INSERT INTO feedback (tried, message, signed_as, created_at) VALUES (?, ?, ?, ?)",
+                                ((tried or "").strip()[:60], message[:4000], signed_as, db.now()))
 
     def all_feedback(self):
-        return self.conn.execute("""SELECT f.*, u.email FROM feedback f LEFT JOIN users u ON u.id = f.user_id
-                                    ORDER BY f.id DESC""").fetchall()
+        return self.conn.execute("SELECT id, tried, message, sealed, signed_as, created_at FROM feedback ORDER BY id DESC").fetchall()
+
+    def lock_feedback(self, feedback_id, sealed):
+        """Replace readable feedback with its locked version (and forget who sent it)."""
+        self.conn.execute("""UPDATE feedback SET tried = '', message = '', sealed = ?, user_id = NULL
+                             WHERE id = ? AND sealed IS NULL""", (sealed, feedback_id))
+
+    # -- small site-wide settings -----------------------------------------------
+
+    def setting(self, name):
+        row = self.conn.execute("SELECT value FROM settings WHERE name = ?", (name,)).fetchone()
+        return row["value"] if row else None
+
+    def set_setting(self, name, value):
+        self.conn.execute("DELETE FROM settings WHERE name = ?", (name,))
+        if value is not None:
+            self.conn.execute("INSERT INTO settings (name, value) VALUES (?, ?)", (name, value))
 
     # -- demo data: real examples to explore (only ever added to one person's own account) --
 

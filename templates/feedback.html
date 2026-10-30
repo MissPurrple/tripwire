@@ -3,15 +3,135 @@
 {% block content %}
 <section class="intro">
   <h1>Feedback</h1>
-  <p>What people trying Tripwire have said. Only the site owner can see this page.</p>
+  <p>What people trying Tripwire have said. Only the site owner can see this page. Feedback is anonymous: Tripwire never
+     keeps who sent it. A username appears only when someone chose to sign theirs (and it's never their email).</p>
 </section>
+
+<section class="theme vault-box" id="feedback-lock"
+         {% if key %}data-public="{{ key.public }}" data-private="{{ key.private }}" data-owner="{{ key.owner }}"{% endif %}>
+  {% if not key %}
+    <h2>🔒 Lock the feedback box</h2>
+    <p>Right now, feedback is kept as readable text, so anyone who got into Tripwire's database could read it. Lock the box,
+       and every message is locked in the sender's own browser before it's sent, with a key only you hold (kept in your vault).
+       Not even Tripwire's server can read them. Feedback already here gets locked too, and any link to who sent it is erased.</p>
+    {% if not vault %}
+      <p><a href="{{ url_for('vault_page') }}">Make your vault first</a> (two minutes): the key that opens the feedback is kept in it.</p>
+    {% else %}
+      <p class="vault-alarm">Like everything in your vault: lose your vault passphrase <em>and</em> your recovery code, and locked
+         feedback can never be read again.</p>
+      <form id="lock-box" class="book-form">
+        <label id="box-secret" hidden>Vault passphrase (your vault is locked on this device)
+          <input type="password" name="secret" autocomplete="current-password"></label>
+        <button>Lock the feedback box</button>
+        <p class="meta" id="box-status" aria-live="polite"></p>
+      </form>
+    {% endif %}
+  {% elif not my_key %}
+    <h2>🔒 The feedback box is locked</h2>
+    <p>It's locked to another owner's key, so only they can read locked messages.</p>
+  {% else %}
+    <h2>🔒 The feedback box is locked: <span data-vault-state>Checking…</span></h2>
+    <p>Messages are locked in the sender's browser; they open here, on your device, with your vault.</p>
+    <form id="open-box" class="book-form" hidden>
+      <label>Vault passphrase <input type="password" name="secret" autocomplete="current-password"></label>
+      <button>Unlock</button>
+      <p class="meta" id="open-status" aria-live="polite"></p>
+    </form>
+  {% endif %}
+</section>
+
 {% for f in feedback %}
-<article class="entry">
-  <div class="entry-head"><span class="badge">{{ f.tried or 'General' }}</span><span class="when">{{ f.created_at[:16]|replace('T', ' ') }}</span></div>
-  <p class="feedback-message">{{ f.message }}</p>
-  <p class="meta">{{ 'a visitor without an account' if not f.email or f.email.endswith('@guest.invalid') else f.email }}</p>
+<article class="entry" {% if f.sealed %}data-sealed="{{ f.sealed }}"{% else %}data-plain-id="{{ f.id }}"{% endif %}>
+  <div class="entry-head"><span class="badge tried">{{ f.tried or ('🔒 Locked' if f.sealed else 'General') }}</span>
+    <span class="when">{{ f.created_at[:16]|replace('T', ' ') }}</span></div>
+  <p class="feedback-message">{{ f.message if not f.sealed else 'Locked. It opens here once your vault is unlocked on this device.' }}</p>
+  <p class="meta">{{ 'Signed: ' ~ f.signed_as if f.signed_as else 'Anonymous' }}</p>
 </article>
 {% else %}
 <p class="empty">No feedback yet. Share the About page with your testers: it has the feedback box.</p>
 {% endfor %}
+
+{% if key and my_key %}
+<section class="theme danger-zone">
+  <h2>Lost your vault? Start again</h2>
+  <p>Without your vault, locked feedback can never be read again. You can remove the lock and start over, but locked messages are deleted.</p>
+  <form method="post" action="{{ url_for('feedback_key_reset') }}" class="book-form"
+        onsubmit="return confirm('Delete the feedback lock and every locked message?')">
+    <label>Your Tripwire password <input type="password" name="password" required autocomplete="current-password"></label>
+    <label class="check"><input type="checkbox" name="sure" value="yes" required> I understand locked feedback will be deleted</label>
+    <button class="danger-button">Remove the lock and its locked messages</button>
+  </form>
+</section>
+{% endif %}
+
+<script>
+(function () {
+  var box = document.getElementById("feedback-lock"), user = "{{ g.user.id }}";
+  function say(id, text) { var el = document.getElementById(id); if (el) el.textContent = text; }
+  async function post(url, body) {
+    var response = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify(body) });
+    if (!response.ok) throw new Error((await response.json().catch(function () { return {}; })).error || "That didn't work.");
+  }
+  async function vaultKey(formId, statusId) {
+    var key = await window.Tripwire.vault.key();
+    if (key) return key;
+    var form = document.getElementById(formId), field = form.querySelector("input[name=secret]");
+    if (!field.value) { (field.closest("label") || form).hidden = false; form.hidden = false; field.focus();
+                        throw new Error("Type your vault passphrase to unlock it on this device."); }
+    say(statusId, "Unlocking on this device…");
+    key = await window.Tripwire.vault.unlock(field.value, false);
+    field.value = "";
+    return key;
+  }
+  // Older readable messages: lock them to the box's key, and forget who sent them.
+  async function lockOld(publicKey) {
+    var plain = document.querySelectorAll("[data-plain-id]");
+    for (var i = 0; i < plain.length; i++) {
+      var el = plain[i];
+      var sealed = await window.TripwireVault.lockForOwner(publicKey, JSON.stringify({
+        tried: el.querySelector(".tried").textContent, message: el.querySelector(".feedback-message").textContent }));
+      await post("/feedback/" + el.dataset.plainId + "/lock", { sealed: sealed });
+      el.dataset.sealed = sealed; delete el.dataset.plainId;
+    }
+  }
+  async function openAll(key) {
+    var V = window.TripwireVault, owner = await V.ownerKey(key, box.dataset.private, user);
+    await lockOld(box.dataset.public);
+    var locked = document.querySelectorAll("[data-sealed]");
+    for (var i = 0; i < locked.length; i++) {
+      try {
+        var note = JSON.parse(await V.openForOwner(owner, locked[i].dataset.sealed));
+        locked[i].querySelector(".tried").textContent = "🔓 " + (note.tried || "General");
+        locked[i].querySelector(".feedback-message").textContent = note.message;
+      } catch (e) { locked[i].querySelector(".feedback-message").textContent = e.message; }
+    }
+  }
+  document.addEventListener("DOMContentLoaded", async function () {
+    var setup = document.getElementById("lock-box");
+    if (setup) setup.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      try {
+        var key = await vaultKey("lock-box", "box-status");
+        say("box-status", "Making the feedback key on this device…");
+        var keys = await window.TripwireVault.newFeedbackKeys(key, user);
+        await post("{{ url_for('feedback_key_setup') }}", keys);
+        say("box-status", "Locking the feedback already here…");
+        await lockOld(keys.public);
+        window.location.reload();
+      } catch (e) { say("box-status", e.message); }
+    });
+    var open = document.getElementById("open-box");
+    if (open) {
+      open.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        try { await openAll(await vaultKey("open-box", "open-status")); open.hidden = true; } catch (e) { say("open-status", e.message); }
+      });
+      var key = await window.Tripwire.vault.key();
+      if (key) { try { await openAll(key); } catch (e) { say("open-status", e.message); open.hidden = false; } }
+      else open.hidden = false;
+    }
+  });
+})();
+</script>
 {% endblock %}

@@ -264,7 +264,7 @@ def latest_by_url(conn, user_id):
     """{(url, source): the newest check} for one person, to show next to what they watch."""
     latest = {}
     for row in conn.execute("SELECT id, url, source, before_date, summary, created_at FROM before_checks "
-                            "WHERE user_id = ? ORDER BY id", (user_id,)).fetchall():
+                            "WHERE user_id = ? AND locked = 0 ORDER BY id", (user_id,)).fetchall():
         latest[(row["url"], row["source"])] = row
     return latest
 
@@ -280,6 +280,41 @@ def save(conn, user_id, result):
         (user_id, result["url"], result["title"][:200], result["source"], result["source_name"],
          result["before_date"], result["before_link"], result["download_link"], result["category"],
          result["summary"], json.dumps(result["details"]), db.now()))
+
+
+# -- locked with the person's vault ------------------------------------------------
+# A result is first kept readable (Tripwire had to read both copies to compare them), then the
+# person's browser locks it with their vault and Tripwire swaps the readable one for the locked one.
+# After that, nothing says which page it was: only that a comparison was made, and when.
+
+SEALED = re.compile(r"[A-Za-z0-9+/]+={0,2}")
+
+
+def lock(conn, user_id, check_id, sealed_title, sealed):
+    """True if a readable result was swapped for its locked version."""
+    if not all(isinstance(v, str) and 16 <= len(v) <= limit and SEALED.fullmatch(v)
+               for v, limit in ((sealed_title, 20_000), (sealed, 8_000_000))):
+        return False
+    found = conn.execute("SELECT id FROM before_checks WHERE id = ? AND user_id = ? AND locked = 0",
+                         (check_id, user_id)).fetchone()
+    if not found:
+        return False
+    conn.execute("""UPDATE before_checks SET url = '', title = 'Locked comparison', source = '', source_name = '',
+                        before_date = NULL, before_link = NULL, download_link = NULL, category = '', summary = '',
+                        details = '{}', locked = 1, sealed_title = ?, sealed = ?
+                    WHERE id = ? AND user_id = ? AND locked = 0""", (sealed_title, sealed, check_id, user_id))
+    return True
+
+
+def locked(conn, user_id):
+    """Locked results, for the browser to open and match to what's being watched."""
+    return conn.execute("SELECT id, sealed_title, created_at FROM before_checks WHERE user_id = ? AND locked = 1 ORDER BY id",
+                        (user_id,)).fetchall()
+
+
+def unlocked_ids(conn, user_id):
+    return [r["id"] for r in conn.execute("SELECT id FROM before_checks WHERE user_id = ? AND locked = 0",
+                                          (user_id,)).fetchall()]
 
 
 def checks(conn, user_id):

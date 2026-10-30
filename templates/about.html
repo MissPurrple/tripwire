@@ -92,6 +92,10 @@
     <dt>Your own vault, locked on your device.</dt>
     <dd>Shelf items you lock are scrambled in your browser (AES-256-GCM) before they're sent, with a key only you hold.
         Tripwire stores them but can't read them, and they leave with you, still locked, in your download. No back door.</dd>
+    <dt>Nobody needs to know what you're looking into.</dt>
+        <dd>With a vault, your test results are locked too, so Tripwire forgets which pages you tested. Everyone is known by a random
+        old-internet name, never their email. Feedback is anonymous unless you sign it, and once the box is locked, only the
+        person who made Tripwire can read it, not even Tripwire's server.</dd>
     <dt>No account needed.</dt>
     <dd>You can use everything without signing up. What you add lasts until you close your browser (and is deleted a few days later);
         make an account only if you want to keep it.</dd>
@@ -183,18 +187,51 @@
 
 <section class="theme" id="feedback">
   <h2>Tell us what you think</h2>
-    <p>Tried something? What worked, what confused you, what's missing? It goes straight to the person who made Tripwire.</p>
-    <form method="post" action="{{ url_for('send_feedback') }}" class="feedback-form">
+    <p>Tried something? What worked, what confused you, what's missing? It goes straight to the person who made Tripwire.
+       <strong>It's anonymous:</strong> Tripwire doesn't keep who sent it{% if feedback_public %}, and it's locked in your browser
+       before it's sent, so only the person who made Tripwire can read it, not even Tripwire's server{% endif %}.</p>
+    <form method="post" action="{{ url_for('send_feedback') }}" class="feedback-form" id="feedback-form"
+          {% if feedback_public %}data-lock-to="{{ feedback_public }}"{% endif %}>
       <label>What did you try?
         <select name="tried">{% for area in areas %}<option>{{ area }}</option>{% endfor %}</select>
       </label>
       <label>Your feedback
         <textarea name="message" rows="5" required minlength="3" placeholder="It would be better if…"></textarea>
       </label>
+      {% if g.user and not is_guest %}
+      <label class="check"><input type="checkbox" name="sign" value="yes">
+        <span>Sign it with my username, <strong>{{ g.user.handle }}</strong> (never your email). Leave it unticked to stay anonymous.</span></label>
+      {% endif %}
       {# A field people never see. Bots that fill in every field give themselves away. #}
       <div class="trap" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
       <button>Send feedback</button>
+      {% if feedback_public %}<noscript><p class="flash error">Feedback is locked in your browser before it's sent, so it needs JavaScript.</p></noscript>{% endif %}
     </form>
+    {% if feedback_public %}
+    <script>
+    // Lock it here, then send only the locked version: the words never leave this browser readable.
+    (function () {
+      var form = document.getElementById("feedback-form"), locking = false;
+      form.addEventListener("submit", async function (event) {
+        if (locking) return;
+        event.preventDefault();
+        var button = form.querySelector("button");
+        button.disabled = true; button.textContent = "Locking…";
+        try {
+          var sealed = await window.TripwireVault.lockForOwner(form.dataset.lockTo,
+            JSON.stringify({ tried: form.tried.value, message: form.message.value }));
+          var out = document.createElement("form");
+          out.method = "post"; out.action = form.action; out.hidden = true;
+          [["sealed", sealed], ["website", form.website.value], ["sign", form.sign && form.sign.checked ? "yes" : ""]]
+            .forEach(function (pair) { var i = document.createElement("input"); i.name = pair[0]; i.value = pair[1]; out.appendChild(i); });
+          document.body.appendChild(out);
+          locking = true;
+          out.submit();
+        } catch (e) { button.disabled = false; button.textContent = "Send feedback"; alert("Couldn't lock it in this browser: " + e.message); }
+      });
+    })();
+    </script>
+    {% endif %}
 </section>
 
 <section class="theme" id="demo">

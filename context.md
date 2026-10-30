@@ -196,3 +196,6 @@
 - Possible next: lock "Then and now" results and feedback (feedback locked to Purple's own key) the same way.
 - Gmail: Purple got "verification failed" making an app password on a brand-new Gmail account (Google often blocks
   this on new accounts for a while). Paused.
+- 30 Oct: the vault is LIVE (merged into main). Added Purple's dramatic warning ("lose your passphrase and you're
+  locked out... what you've vaulted will disintegrate"; Purple said "voted", read as "vaulted") on the vault setup,
+  the recovery code step, unlocking, and the shelf.

@@ -16,6 +16,14 @@
 {% if not vault %}
 <section class="theme" id="setup">
   <h2>Make your vault</h2>
+  <div class="screen vault-warning" data-typewriter="18" role="alert">
+    <p class="screen-line dim" data-speed="8">WARNING · READ THIS BEFORE YOU CONTINUE</p>
+    <p class="screen-line big" data-speed="55">LOSE YOUR PASSPHRASE AND YOU'RE LOCKED OUT. FOREVER.</p>
+    <p class="screen-line soft">There is no "forgot my passphrase" link. No help desk. No back door. Not even Tripwire can let you in,
+      because Tripwire never had the key. If you lose your passphrase <em>and</em> your recovery code, everything you've vaulted
+      will disintegrate: still here, but unreadable to anyone, ever, including you.</p>
+    <p class="screen-line">WRITE IT DOWN. STORE IT SOMEWHERE SAFE. THEN CHECK THAT YOU DID.</p>
+  </div>
   <p>Choose a <strong>vault passphrase</strong>. Use a different one from your Tripwire password: Tripwire's server sees
      your password when you log in, but never sees this passphrase.</p>
   <form id="setup-form" class="book-form">
@@ -29,11 +37,13 @@
     <p class="meta" id="setup-status" aria-live="polite"></p>
   </form>
   <div id="recovery" hidden>
-    <h3>Your recovery code</h3>
-    <p>If you forget your passphrase, this code is the <strong>only</strong> way to open your vault. Nobody else can help:
-       not Tripwire, not Purple, not anyone. Write it on paper and keep it somewhere safe, not on this device.</p>
+    <h3>Your recovery code: your last way back in</h3>
+    <p class="vault-alarm"><strong>This is the only time you'll ever see it.</strong> If you forget your passphrase, this code is the
+       <strong>only</strong> way to open your vault. Lose both, and what you've vaulted is gone for good. Nobody can help:
+       not Tripwire, not Purple, not anyone. Write it on paper, today, and keep it somewhere safe, away from this device.</p>
     <p class="recovery-code" id="recovery-code"></p>
-    <label class="check"><input type="checkbox" id="written"> I've written it down somewhere safe</label>
+    <label class="check"><input type="checkbox" id="written"> <span>I've written down my passphrase AND this recovery code,
+      and I understand that if I lose both, my vaulted items can never be opened again</span></label>
     <button type="button" id="save-vault" disabled>Finish making my vault</button>
   </div>
 </section>
@@ -42,6 +52,8 @@
   <h2>On this device: <span data-vault-state>Checking…</span></h2>
   <p>{{ locked }} locked item{{ 's' if locked != 1 }}. Once unlocked, your vault stays open on this device for 30 minutes after
      you last use it, and locks itself when you log out.</p>
+  <p class="vault-alarm">Reminder: lose your passphrase <em>and</em> your recovery code, and what you've vaulted disintegrates.
+     Still not written down? Do it now.</p>
   <form id="unlock-form" class="book-form">
     <label><span id="secret-label">Vault passphrase</span>
       <input type="password" name="secret" required autocomplete="current-password">

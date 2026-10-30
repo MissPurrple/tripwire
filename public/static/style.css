@@ -676,3 +676,6 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
 .recovery-code { font-family: var(--font-mono); font-size: 1.3rem; letter-spacing: .08em; padding: 12px 14px; background: var(--screen);
   color: var(--phosphor); border-radius: 4px; overflow-wrap: anywhere; user-select: all; }
 [data-vault-state].unlocked { color: var(--accent); }
+.vault-warning { margin: 12px 0 16px; border-radius: 10px; }
+.vault-warning .screen-line + .screen-line { margin-top: 8px; }
+.vault-alarm { border-left: 4px solid var(--removal); background: var(--bg); padding: 10px 14px; }

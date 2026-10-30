@@ -61,6 +61,7 @@
   {% elif not g.user.vault %}
     <p>Lock documents in your own browser before they're sent, with a key only you hold. Tripwire keeps them but can't read
        them: not the file, its title, your note, or its words. <a href="{{ url_for('vault_page') }}">Make your vault</a> (two minutes).</p>
+    <p class="vault-alarm">One rule: lose your passphrase and your recovery code, and you're locked out. What you've vaulted will disintegrate.</p>
   {% else %}
     <p>Locked on this device first, then sent. Tripwire can't read any of it. Vault: <strong data-vault-state>Checking…</strong>
        (<a href="{{ url_for('vault_page') }}">manage</a>)</p>

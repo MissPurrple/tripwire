@@ -199,3 +199,18 @@
 - 30 Oct: the vault is LIVE (merged into main). Added Purple's dramatic warning ("lose your passphrase and you're
   locked out... what you've vaulted will disintegrate"; Purple said "voted", read as "vaulted") on the vault setup,
   the recovery code step, unlocking, and the shelf.
+
+## Built 30 Oct (morning)
+- Kiwix test on Basotho compared against ~59 words of what looks like a "prove you're not a bot" page (mentions AI crawlers,
+  JavaScript). Not confirmed (Claude can't reach library.kiwix.org). Fixed: read Kiwix copies from the raw address
+  (/raw/<zim>/content/<path>); page title must match the article; robot-check pages and suspiciously short copies refused;
+  results show the start of both versions + where/when each was fetched; if Kiwix blocks, offer "Wikipedia's own version from
+  the date of Kiwix's copy". Checked against the real kiwix-serve software. Purple to retry on the live site and delete the
+  old bad Basotho comparison (Delete button at the bottom of it).
+- Stamps of originality on every new shelf copy (signed, Ed25519, key from TRIPWIRE_SECRET or TRIPWIRE_STAMP_SECRET):
+  fetched-by-Tripwire vs uploaded-by-owner, time, link, Wikipedia permanent version link, fingerprints. Public /verify page.
+  In ZIP/ZIM downloads. Not for vault (locked) items yet: they'd need stamping in the browser.
+- Bug found and fixed: Books with two links (and shelf uploads of plain files) never sent since 29 Oct.
+- Test results no longer listed under watched items.
+- Examples: two articles per theme (Purple: two per section, not five); second book: Darwin's Origin of Species 1859 (#1228)
+  vs 1872 (#2009). Most famous recent case (Roald Dahl, 2023) is under copyright: no free copies to compare.

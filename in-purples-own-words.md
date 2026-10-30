@@ -349,3 +349,15 @@ closes; an account keeps them); the opening plays **once per visit**; the voice 
 > I should be able to maybe click "Test against Kiwix" or "Test against Internet Archive." I should have those two buttons there, and then I can search if that information is there, either in that exact same name, same author, or something that might be similar.
 >
 > Fine, we can shorten it, but don't make it super short, because I want it to be detailed and not notes. I would rather go read through it and see what can go and what should stay.
+
+## 18. The Kiwix test went wrong, stamps of originality, fewer examples, a second book (30 Oct 2026)
+
+> I tried Test against Kiwix on Basotho ... I have no idea where that content on keywords came from or what sort of people. A lot of it just seems to be like AI crawlers, JavaScript, or random words. Also, the changes are from 59 words to over thousands of words in the newest copy. It's very strange, very strange, so verify that you're copying against the real things.
+>
+> it would be great to have a stamping of originality to show when the copy was extracted, right, and to try to verify that it was the original copy and not just made up and created so I can put it up there and pretend it is. Can you add a verification, something like a stamp that proves that this copy was taken from this site on this date, that this was the link, right, and that it was taken via Tripwire, right?
+>
+> some of the test links, comparisons, etc., down there, specifically the links in watching, the ones that populate when you say "Start the Test," whatever: they keep popping up. We don't want to do that.
+>
+> As the sample for the most changes that were made, preferably the most recent one. Maybe we can do two books.
+>
+> There should only be two pre-population links per section/block. Right now, you're giving like five, and it just makes it so full and so messy. ... We don't want to bombard people

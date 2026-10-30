@@ -219,9 +219,9 @@
 - Four steps (Watching, My shelf, Changes, Books & videos), after the opening + read-aloud question, once per device
   (localStorage "tripwire-tour"). Skip button / Escape. "Take the tour" in the footer replays it. Last step: "Try it with
   real examples" or "I'll explore on my own". Phones: points at Menu. Files: templates/_tour.html, public/static/tour.js.
-- Clean-up suggestions given to Purple (not built, waiting for Purple's choice): shelf items first with add forms folded
-  away; one add form on Watching instead of one per theme; fewer buttons per watched item (a "More" menu); Changes filters
-  as a dropdown; shorter notes on Books & videos.
+- Clean-up suggestions: Purple said "do all 6". BUILT 30 Oct: My shelf (slim download bar, Keep a file / link / vault
+  fold out, KB sizes); Watching (one add form with "Put it in", Type/Start under More options, Check + "More" menu per item);
+  Changes ("Show" dropdown); Books & videos ("Which files work?" folded, shorter privacy note). 375 tests pass.
 
 ## Built 30 Oct (LIVE): private test results, locked anonymous feedback, usernames
 - Purple: no new pages/buttons/menu items; additions to existing pages only. "Skip nothing. We're going for the long haul."

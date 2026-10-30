@@ -369,3 +369,8 @@ closes; an account keeps them); the opening plays **once per visit**; the voice 
 > It is absolutely, absolutely necessary so that a new user knows how to make their way around, because even I sometimes get confused, especially when there are all those examples in there. We need to make it clean and easy to move around.
 >
 > if there are any sections that you feel could use some cleaning up in terms of how they move, so that it's not too clunky or too chunky or too much info, suggest them, and then we can see if we can fix them.
+
+> do all 6 please
+
+(The six clean-up suggestions: shelf items first with forms folded; one add form on Watching; a "More" menu on each item;
+one "Show" choice on Changes; file details folded on Books & videos; KB sizes for small shelves. 30 Oct 2026.)

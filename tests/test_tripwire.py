@@ -579,6 +579,29 @@ class WebAppTests(CheckerTests):
         self.assertEqual(response.status_code, 405)
         self.assertIn("WRONG KIND OF REQUEST", response.data.decode())
 
+    def test_one_add_form_puts_things_where_you_choose(self):
+        self.log_in()
+        second = self.tw.add_theme(self.user, "Language & memory")
+        page = self.client.get("/watching").data.decode()
+        self.assertEqual(page.count('action="/watches/add"'), 1)  # one form, not one per theme
+        self.assertEqual(page.count('class="add-one"'), 1)
+        self.assertIn('<option value="single">On its own (no theme)</option>', page)
+        self.client.post("/watches/add", data={"target": "Warli", "theme": str(second)})
+        self.assertEqual(self.tw.conn.execute("SELECT theme_id FROM watches WHERE target = 'Warli'").fetchone()["theme_id"], second)
+        FakeWikipedia.articles["Adivasi"] = [{"revid": 5, "user": "A", "comment": "", "text": "The Adivasi are the tribal peoples of India."}]
+        self.client.post("/watches/add", data={"target": "Adivasi", "theme": "single"})
+        theme = self.tw.conn.execute("SELECT t.loose FROM watches w JOIN themes t ON t.id = w.theme_id WHERE w.target = 'Adivasi'").fetchone()
+        self.assertEqual(theme["loose"], 1)  # on its own
+        self.assertEqual(self.client.post("/watches/add", data={"target": "Warli", "theme": "<script>"}).status_code, 400)
+        other = self.tw.create_user("other@example.org", "another password")
+        their_theme = self.tw.add_theme(other, "Theirs")
+        self.assertEqual(self.client.post("/watches/add", data={"target": "Warli", "theme": str(their_theme)}).status_code, 404)
+        page = self.client.get("/watching").data.decode()
+        row = page.split(">Warli</a>")[1].split("</li>")[0]
+        self.assertIn(">Check</button>", row)
+        self.assertIn('<details class="row-more">', row)  # the rest is folded into "More"
+        self.assertLess(row.index(">Check</button>"), row.index("row-more"))
+
     def test_pages_load(self):
         self.log_in()
         response = self.client.post(f"/themes/{self.theme}/watches", data={"target": "Warli", "days_ago": "0"},
@@ -1436,6 +1459,13 @@ class EmailAndAboutTests(CheckerTests):
         self.assertIn("Add the examples", page)  # no account needed to try the examples
         self.assertIn("[5] ABOUT", self.client.get("/").data.decode())
 
+    def test_changes_has_one_show_choice(self):
+        page = self.client.get("/changes").data.decode()
+        self.assertNotIn('<nav class="filters">', page)
+        self.assertIn('<select name="category"', page)
+        page = self.client.get("/changes?category=major").data.decode()
+        self.assertIn('<option value="major" selected>', page)
+
     def test_feedback_reaches_only_the_owner(self):
         self.client.post("/feedback", data={"tried": "Books", "message": "Loved the Frankenstein comparison!"})
         self.assertEqual(self.tw.totals()["feedback"], 1)
@@ -1691,6 +1721,19 @@ class ShelfTests(CheckerTests):
             self.assertEqual(page.status_code, 200, path)
             self.assertNotIn("Purple&#39;s gazette", page.data.decode())  # nobody else's things
         self.assertEqual(self.client.get("/shelf/1").status_code, 404)
+
+    def test_shelf_page_is_tidy(self):
+        page = self.client.get("/shelf").data.decode()
+        for panel in ['id="keep-file"', 'id="keep-link"', 'id="lock"']:
+            self.assertIn(f'<details class="add-panel', page)
+            self.assertIn(panel, page)
+        self.assertIn('<details class="add-panel" id="keep-file" open>', page)  # empty shelf: ready to keep a file
+        self.assertIn('class="take-bar"', page)
+        self.assertIn("Using 0 KB of your", page)  # not "0.0 MB"
+        self.upload("a.txt", b"Words to keep. " * 100)
+        page = self.client.get("/shelf").data.decode()
+        self.assertIn('<details class="add-panel" id="keep-file" >', page)  # folded away once there's something to see
+        self.assertIn("Using 3 KB of your", page)  # the file and its words
 
     def test_keep_a_file_search_and_open_it(self):
         words = "Government Gazette of Lesotho. Notice 12: the village of Ha Mohale is renamed. " * 3

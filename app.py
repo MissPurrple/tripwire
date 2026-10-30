@@ -430,6 +430,18 @@ def add_single_link():
     return add_watch(tw().single_links(uid()))
 
 
+@app.post("/watches/add")
+@saves_things
+def add_watch_anywhere():
+    """The one "Add something to watch" form: "Put it in" a theme, or on its own."""
+    choice = request.form.get("theme", "single")
+    if choice == "single":
+        return add_watch(tw().single_links(uid()))
+    if not choice.isdigit():
+        abort(400)
+    return add_watch(int(choice))
+
+
 @app.post("/themes/<int:theme_id>/watches")
 @saves_things
 def add_watch(theme_id):

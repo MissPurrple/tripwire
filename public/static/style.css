@@ -715,3 +715,39 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
 }
 .a11y-calm .tour-spot, .a11y-calm .tour-card { transition: none; }
 @media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } }
+
+/* My shelf: a slim download bar, and fold-out panels for adding things */
+.take-bar { border: 2px solid var(--edge); border-radius: 6px; background: var(--card); padding: 10px 14px; margin: 14px 0 22px;
+            box-shadow: 3px 3px 0 var(--shadow); }
+.take-form { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
+.take-form h2 { margin: 0; font-size: 1.4rem; flex: 0 0 auto; align-self: center; }
+.take-name { flex: 1 1 200px; }
+.take-buttons { display: flex; gap: 8px; }
+.take-help { margin-top: 6px; } .take-help summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+.shelf-actions { display: grid; gap: 8px; margin: 10px 0 16px; }
+.add-panel { border: 2px solid var(--edge); border-radius: 6px; background: var(--card); }
+.add-panel > summary { cursor: pointer; padding: 10px 14px; font-family: var(--font-mono); font-weight: 600; list-style: none; }
+.add-panel > summary::-webkit-details-marker { display: none; }
+.add-panel > summary::after { content: "▾"; float: right; transition: transform .15s; }
+.add-panel[open] > summary::after { transform: rotate(180deg); }
+.add-panel[open] > summary { border-bottom: 1px dashed var(--line); }
+.add-body { padding: 12px 14px 14px; }
+
+/* Watching: one add form, and a "More" menu on each item */
+.add-one { display: grid; grid-template-columns: 2fr 1fr auto; gap: 10px; align-items: end; }
+.add-options { grid-column: 1 / -1; } .add-options > summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+.add-options-body { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+@media (max-width: 700px) { .add-one, .add-options-body { grid-template-columns: 1fr; } }
+.row-actions { align-items: center; }
+.row-more { position: relative; }
+.row-more > summary { cursor: pointer; list-style: none; color: var(--muted); font-size: .9rem; padding: 2px 6px; text-decoration: underline; }
+.row-more > summary::-webkit-details-marker { display: none; }
+.row-more > summary::after { content: " ▾"; }
+.row-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 230px; display: grid; gap: 2px;
+            background: var(--card); border: 2px solid var(--edge); border-radius: 6px; box-shadow: 3px 3px 0 var(--shadow); padding: 6px; }
+.row-menu form, .row-menu a { display: block; } .row-menu button.link, .row-menu .link-button { text-align: left; width: 100%; padding: 6px 8px; }
+
+/* Changes: one "Show" choice beside the list */
+.list-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+.list-head .list-heading { margin: 0; }
+.filter-form select { min-width: 200px; }

@@ -41,7 +41,7 @@
   <p>Give Tripwire two editions, an older one and a newer one, and it compares them word by word: swapped words
      (like “killed” → “unalived”), renamed people and places, and removed passages. Tripwire never keeps the books
      themselves, just what changed.</p>
-  {% include "_privacy_note.html" %}
+  {% with short = True %}{% include "_privacy_note.html" %}{% endwith %}
   <form method="post" enctype="multipart/form-data" class="book-form" id="book-form">
     <label>Book title (optional)
       <input name="title" placeholder="e.g. Charlie and the Chocolate Factory">
@@ -57,10 +57,13 @@
       </label>
     </fieldset>
     {% endfor %}
-    <p class="meta">EPUB, plain text and PDF all work, including <strong>scanned PDFs</strong> (pictures of pages, like gazettes and memos).
-       Scanned pages are read on your own device: the document never leaves it, only the text it contains.
-       Uploads can be up to {{ upload_limit_mb }} MB in total (a scanned PDF only uploads its text, so it can be bigger);
-       for other big files, paste links instead. Copyrighted books are fine to compare here: the result stays private to you.</p>
+    <details class="take-help">
+      <summary>Which files work?</summary>
+      <p class="meta">EPUB, plain text and PDF all work, including <strong>scanned PDFs</strong> (pictures of pages, like gazettes and memos).
+         Scanned pages are read on your own device: the document never leaves it, only the text it contains.
+         Uploads can be up to {{ upload_limit_mb }} MB in total (a scanned PDF only uploads its text, so it can be bigger);
+         for other big files, paste links instead. Copyrighted books are fine to compare here: the result stays private to you.</p>
+    </details>
     <div class="screen scan-progress" id="scan-progress" hidden aria-live="polite">
       <p class="screen-line" id="scan-title">SCANNED PDF FOUND.</p>
       <p class="screen-line soft" id="scan-step">Getting ready to read it on this device…</p>

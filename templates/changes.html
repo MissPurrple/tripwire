@@ -5,16 +5,21 @@
   <h1>Changes</h1>
   <p>Every change Tripwire noticed, with the before and after kept safe. <strong>Keep</strong> the ones that matter.
      <strong>Disregard</strong> the ones that don't (like a typo fix), and they're deleted.</p>
-  <nav class="filters">
-    <a href="{{ url_for('change_list') }}" class="{{ 'on' if not category }}">All</a>
-    {% for key, label in CATEGORIES.items() %}
-      <a href="{{ url_for('change_list', category=key) }}" class="{{ 'on' if category == key }}">{{ label }}</a>
-    {% endfor %}
-  </nav>
 </section>
 {% include "_summary.html" %}
 {% if not entries and not category %}{% include "_try_examples.html" %}{% endif %}
-<h2 class="list-heading">Every change</h2>
+<div class="list-head">
+  <h2 class="list-heading">{{ CATEGORIES[category] if category else 'Every change' }}</h2>
+  <form method="get" class="filter-form" data-no-loading>
+    <label>Show
+      <select name="category" onchange="this.form.submit()">
+        <option value="" {% if not category %}selected{% endif %}>All changes</option>
+        {% for key, label in CATEGORIES.items() %}<option value="{{ key }}" {% if category == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <noscript><button>Show</button></noscript>
+  </form>
+</div>
 {% for e in entries %}
   {% include "_entry_card.html" %}
 {% else %}

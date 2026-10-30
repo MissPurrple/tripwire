@@ -21,6 +21,19 @@
       setTimeout(function () { button.disabled = true; }, 0);  // after the form has been sent
     }
   });
+  // A link to a folded-away part of a page (e.g. /shelf#keep-link) opens it.
+  function openTarget() {
+    var el = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (el && el.tagName === "DETAILS") el.open = true;
+  }
+  document.addEventListener("DOMContentLoaded", openTarget);
+  // Small "More" menus close when you click anywhere else (or open another one).
+  document.addEventListener("click", function (event) {
+    document.querySelectorAll("details.row-more[open]").forEach(function (menu) {
+      if (!menu.contains(event.target)) menu.open = false;
+    });
+  });
+  window.addEventListener("hashchange", openTarget);
   document.addEventListener("click", function (event) {
     var link = event.target.closest("a[href]");
     if (!link || link.target === "_blank" || event.ctrlKey || event.metaKey || event.shiftKey) return;

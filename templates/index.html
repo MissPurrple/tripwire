@@ -12,10 +12,15 @@
       </div>
       <div class="row-actions">
         <form method="post" action="{{ url_for('check_watch', watch_id=w.id) }}"><button class="link">Check</button></form>
-        {{ test_buttons(w) }}
-        {% if w.last_status != 'Removed' %}<a class="link-button" href="{{ url_for('public_copy', kind='watch', item_id=w.id) }}">Keep a public copy…</a>{% endif %}
-        <form method="post" action="{{ url_for('remove_watch', watch_id=w.id) }}"
-              onsubmit="return confirm('Stop watching this? Its changes will be deleted too. Public copies you made stay on My shelf.')"><button class="link danger">Stop watching</button></form>
+        <details class="row-more">
+          <summary>More</summary>
+          <div class="row-menu">
+            {{ test_buttons(w) }}
+            {% if w.last_status != 'Removed' %}<a class="link-button" href="{{ url_for('public_copy', kind='watch', item_id=w.id) }}">Keep a public copy…</a>{% endif %}
+            <form method="post" action="{{ url_for('remove_watch', watch_id=w.id) }}"
+                  onsubmit="return confirm('Stop watching this? Its changes will be deleted too. Public copies you made stay on My shelf.')"><button class="link danger">Stop watching</button></form>
+          </div>
+        </details>
       </div>
     </li>
     {% endfor %}
@@ -36,26 +41,6 @@
 {% endmacro %}
 
 
-{% macro add_form(action, placeholder) %}
-  <form class="add-watch" method="post" action="{{ action }}">
-    <label>Watch
-      <input name="target" required placeholder="{{ placeholder }}">
-    </label>
-    <label>Type
-      <select name="kind">
-        <option value="">Work it out from what I typed</option>
-        <option value="wikipedia">Wikipedia article</option>
-        <option value="web">Any web page</option>
-      </select>
-    </label>
-    <label>Start
-      <select name="days_ago">
-        {% for days, text in lookback %}<option value="{{ days }}">{{ text }}{% if days %} (Wikipedia only){% endif %}</option>{% endfor %}
-      </select>
-    </label>
-    <button>Add</button>
-  </form>
-{% endmacro %}
 
 {% block content %}
 {% include "_live.html" %}
@@ -75,12 +60,48 @@
 {% include "_try_examples.html" %}
 {% endif %}
 
+{# One place to add anything, instead of a form in every theme. #}
+<section class="theme add-section" id="add">
+  <h2>Add something to watch</h2>
+  <form class="add-one" method="post" action="{{ url_for('add_watch_anywhere') }}">
+    <label class="add-target">Watch
+      <input name="target" required placeholder="Paste any link, or a Wikipedia article name">
+    </label>
+    <label>Put it in
+      <select name="theme">
+        <option value="single">On its own (no theme)</option>
+        {% for t in themes %}<option value="{{ t.id }}" {% if loop.first %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <button>Add</button>
+    <details class="add-options">
+      <summary>More options</summary>
+      <div class="add-options-body">
+        <label>Type
+          <select name="kind">
+            <option value="">Work it out from what I typed</option>
+            <option value="wikipedia">Wikipedia article</option>
+            <option value="web">Any web page</option>
+          </select>
+        </label>
+        <label>Start
+          <select name="days_ago">
+            {% for days, text in lookback %}<option value="{{ days }}">{{ text }}{% if days %} (Wikipedia only){% endif %}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+    </details>
+  </form>
+  <p class="meta">YouTube and TikTok links work here too: they're listed under Videos.</p>
+</section>
+
+{% if single and watches[single.id] %}
 <section class="theme single">
   <div class="theme-head"><h2>{{ single_name }}</h2></div>
-  <p class="meta">One article or page you care about on its own, no theme needed. These don't count towards your {{ max_themes }} themes.</p>
-  {% if single %}{{ watch_list(single.id) }}{% endif %}
-  {{ add_form(url_for('add_single_link'), "Paste any link, or a Wikipedia article name") }}
+  <p class="meta">Things you watch on their own, outside a theme. They don't count towards your {{ max_themes }} themes.</p>
+  {{ watch_list(single.id) }}
 </section>
+{% endif %}
 
 {% for t in themes %}
 <section class="theme">
@@ -91,8 +112,7 @@
       <button class="link danger">Remove theme</button>
     </form>
   </div>
-  {% if watches[t.id] %}{{ watch_list(t.id) }}{% else %}<p class="empty">Nothing here yet. Add a Wikipedia article or a web page below.</p>{% endif %}
-  {{ add_form(url_for('add_watch', theme_id=t.id), "A Wikipedia article name, or paste any link") }}
+  {% if watches[t.id] %}{{ watch_list(t.id) }}{% else %}<p class="empty">Nothing here yet. Add something above, and put it in “{{ t.name }}”.</p>{% endif %}
 </section>
 {% endfor %}
 

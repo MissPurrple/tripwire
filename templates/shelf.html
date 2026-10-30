@@ -10,26 +10,34 @@
   {% include "_privacy_note.html" %}
 </section>
 
-<section class="theme" id="take">
-  <h2>Take my shelf with me</h2>
-  <p>Download everything on your shelf: the original files, their words, and a page for each, all in one file.</p>
-  <form method="get" class="book-form" data-no-loading>
-    <label>Name this copy
-      <input name="name" maxlength="80" placeholder="e.g. Lesotho gazettes 2026" value="My shelf">
-    </label>
-    <div class="actions">
-      <button formaction="{{ url_for('shelf_download', kind='zip') }}">Download as ZIP</button>
-      <button formaction="{{ url_for('shelf_download', kind='zim') }}" class="secondary-button">Download for Kiwix (ZIM)</button>
-    </div>
+<section class="take-bar" id="take" aria-labelledby="take-title">
+  <form method="get" class="take-form" data-no-loading>
+    <h2 id="take-title">Take my shelf with me</h2>
+    <label class="take-name">Name this copy <input name="name" maxlength="80" placeholder="e.g. Lesotho gazettes 2026" value="My shelf"></label>
+    <span class="take-buttons">
+      <button formaction="{{ url_for('shelf_download', kind='zip') }}">ZIP</button>
+      <button formaction="{{ url_for('shelf_download', kind='zim') }}" class="secondary-button">Kiwix (ZIM)</button>
+    </span>
   </form>
-  <p class="meta"><strong>ZIP:</strong> unzip it and open <code>index.html</code> in any web browser.
-     <strong>ZIM:</strong> open it with <a href="https://kiwix.org/en/applications/" target="_blank" rel="noopener">Kiwix</a>,
-     the free app for reading whole libraries offline, on phones and computers. It's searchable inside Kiwix, and a
-     Kiwix hotspot can share it over Wi-Fi with everyone nearby, like a school or a community centre.</p>
+  <details class="take-help">
+    <summary>Which one?</summary>
+    <p class="meta">Both hold everything on your shelf: the original files, their words, their stamps, and a page for each.
+       <strong>ZIP:</strong> unzip it and open <code>index.html</code> in any web browser.
+       <strong>Kiwix (ZIM):</strong> open it with <a href="https://kiwix.org/en/applications/" target="_blank" rel="noopener">Kiwix</a>,
+       the free app for reading whole libraries offline, on phones and computers. It's searchable inside Kiwix, and a
+       Kiwix hotspot can share it over Wi-Fi with everyone nearby, like a school or a community centre.</p>
+  </details>
 </section>
 
-<section class="theme">
-  <h2>Keep a file</h2>
+
+
+
+
+<section class="add-things" aria-label="Add to your shelf">
+  <div class="shelf-actions">
+    <details class="add-panel" id="keep-file" {% if not items and not search %}open{% endif %}>
+      <summary>+ Keep a file</summary>
+      <div class="add-body">
   <form method="post" action="{{ url_for('shelf_add_file') }}" enctype="multipart/form-data" class="book-form" id="file-form">
     <label>File (PDF, a photo of a page, EPUB, text…)
       <input type="file" name="file" required>
@@ -51,10 +59,31 @@
   </form>
   <p class="meta">Scanned PDFs and photos of pages are read on your own device, so their words can be searched.
      Files can be up to {{ upload_limit_mb }} MB. For a bigger scan, only its words are kept: keep the file itself safe on your own device.</p>
-</section>
-
-<section class="theme vault-box" id="lock">
-  <h2>🔒 Lock something in your vault</h2>
+      </div>
+    </details>
+    <details class="add-panel" id="keep-link">
+      <summary>+ Keep a copy of a link</summary>
+      <div class="add-body">
+  <form method="post" action="{{ url_for('shelf_add_link') }}" class="book-form">
+    <label>Link
+      <input name="url" type="url" required placeholder="A Wikipedia article, a web page, or a link to a PDF">
+    </label>
+    <label>Title (optional)
+      <input name="title" maxlength="200">
+    </label>
+    <label>Note (optional)
+      <input name="note" maxlength="2000">
+    </label>
+    <label class="check"><input type="checkbox" name="watch" checked> <span>Keep watching the original, and tell me if it changes or disappears</span></label>
+    <label class="check"><input type="checkbox" name="compare" checked> <span>For Wikipedia: also compare it with Kiwix's offline copy, to see what changed since then</span></label>
+    <button>Keep a copy</button>
+  </form>
+  <p class="meta">A PDF at the link is kept whole (up to 15 MB). For a web page, its words are kept.</p>
+      </div>
+    </details>
+    <details class="add-panel vault-box" id="lock">
+      <summary>🔒 Lock something in your vault</summary>
+      <div class="add-body">
   {% if not g.user or is_guest %}
     <p>With an account, you can lock documents in your browser before they're sent, with a key only you hold.
        Tripwire keeps them but can't read them. <a href="{{ url_for('signup') }}">Make an account</a> to use your own vault.</p>
@@ -84,28 +113,12 @@
     <p class="meta">Scans and photos are read on this device first, so their words are locked too. Files can be up to {{ upload_limit_mb }} MB.
        Locked items can't be searched here, watched, or put in the Kiwix file (Tripwire can't read them); they are in the ZIP download, still locked.</p>
   {% endif %}
+      </div>
+    </details>
+  </div>
 </section>
 
-<section class="theme">
-  <h2>Keep a copy of a link</h2>
-  <form method="post" action="{{ url_for('shelf_add_link') }}" class="book-form">
-    <label>Link
-      <input name="url" type="url" required placeholder="A Wikipedia article, a web page, or a link to a PDF">
-    </label>
-    <label>Title (optional)
-      <input name="title" maxlength="200">
-    </label>
-    <label>Note (optional)
-      <input name="note" maxlength="2000">
-    </label>
-    <label class="check"><input type="checkbox" name="watch" checked> <span>Keep watching the original, and tell me if it changes or disappears</span></label>
-    <label class="check"><input type="checkbox" name="compare" checked> <span>For Wikipedia: also compare it with Kiwix's offline copy, to see what changed since then</span></label>
-    <button>Keep a copy</button>
-  </form>
-  <p class="meta">A PDF at the link is kept whole (up to 15 MB). For a web page, its words are kept.</p>
-</section>
-
-<section>
+<section id="items">
   <h2>On your shelf</h2>
   <form method="get" class="inline" role="search">
     <input type="search" name="q" value="{{ search }}" placeholder="Search titles, notes and words" aria-label="Search your shelf">
@@ -135,7 +148,7 @@
   {% else %}
   <p class="empty">{{ 'Nothing found.' if search else 'Nothing here yet. Keep a file or a link above.' }}</p>
   {% endfor %}
-  <p class="meta">Using {{ '%.1f'|format(used_mb) }} MB of your {{ limit_mb }} MB shelf.</p>
+  <p class="meta">Using {{ ('%.1f MB'|format(used_mb)) if used_mb >= 1 else ('%d KB'|format((used_mb * 1024)|round(0, 'ceil'))) }} of your {{ limit_mb }} MB shelf.</p>
 </section>
 
 <section id="public-copies">

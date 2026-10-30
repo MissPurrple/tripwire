@@ -751,3 +751,10 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
 .list-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
 .list-head .list-heading { margin: 0; }
 .filter-form select { min-width: 200px; }
+
+/* About: the story in three lines */
+.in-short { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 18px 0 6px; font-size: 1.05rem; }
+.in-short dt { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+               font-size: .8rem; color: var(--accent); padding-top: 3px; }
+.in-short dd { margin: 0; }
+@media (max-width: 560px) { .in-short { grid-template-columns: 1fr; gap: 2px; } .in-short dd { margin-bottom: 8px; } }

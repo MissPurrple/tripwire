@@ -198,7 +198,8 @@
     }
     document.body.classList.add("is-loading");
     ready = true;
-    fileForm.requestSubmit ? fileForm.requestSubmit() : fileForm.submit();
+    // Send it a moment later: browsers ignore a second send while they're still handling the first click.
+    setTimeout(function () { fileForm.requestSubmit ? fileForm.requestSubmit() : fileForm.submit(); }, 0);
   });
 </script>
 {% if g.user and not is_guest and g.user.vault %}

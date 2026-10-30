@@ -155,6 +155,11 @@ CREATE TABLE IF NOT EXISTS shelf_items (
     watch_id         INTEGER REFERENCES watches(id) ON DELETE SET NULL,
     before_check_id  INTEGER REFERENCES before_checks(id) ON DELETE SET NULL,
     created_at       TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS site_keys (
+    name   TEXT PRIMARY KEY,                     -- e.g. 'stamp': the key that signs stamps of originality
+    value  TEXT NOT NULL                         -- (only used on a laptop: online it comes from TRIPWIRE_SECRET)
 )
 """
 
@@ -177,6 +182,7 @@ ADDED_COLUMNS = [
     ("shelf_items", "locked", "INTEGER NOT NULL DEFAULT 0"),    # 1 = locked in the person's browser before upload
     ("shelf_items", "sealed_title", "TEXT"),                    # locked items: the title, locked
     ("shelf_items", "sealed", "TEXT"),                          # locked items: title, note, words, file name, locked
+    ("shelf_items", "stamp", "TEXT"),                           # signed stamp of originality (JSON)
 ]
 
 

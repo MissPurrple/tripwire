@@ -118,7 +118,8 @@
   </dialog>
   <img class="signature" src="{{ url_for('static', filename='rabbit.png') }}" alt="" aria-hidden="true" width="26" height="41">
   <footer><span>TRIPWIRE</span> · keeps a copy when the information you care about changes · <a href="{{ url_for('about') }}">about</a> · <span class="ready">READY.</span>
-    <p class="footer-stats"><a href="{{ url_for('stats_page') }}">Stats</a>: humans vs bots on the internet right now, and how many books the world has published.</p>
+    <p class="footer-stats"><a href="{{ url_for('stats_page') }}">Stats</a>: humans vs bots on the internet right now, and how many books the world has published.
+      · <a href="{{ url_for('verify') }}">Check a stamp of originality</a></p>
     {% if languages|length > 1 %}
     <nav class="languages" aria-label="Language">
       {% for code, name in languages %}

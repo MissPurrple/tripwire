@@ -676,21 +676,28 @@ class Tripwire:
 
     # -- demo data: real examples to explore (only ever added to one person's own account) --
 
+    # Two per theme: enough to explore, without filling the page (Purple's choice).
     DEMO_THEMES = {
-        "Indigenous communities": ["Adivasi", "Warli", "Siddi", "Basotho", "Indigenous peoples"],
-        "Language & memory": ["Konkani language", "Sotho language", "Endangered language", "Oral tradition"],
+        "Indigenous communities": ["Basotho", "Adivasi"],
+        "Language & memory": ["Sotho language", "Endangered language"],
     }
     DEMO_SINGLE_LINKS = ["Internet Archive"]
     DEMO_VIDEO = "https://www.youtube.com/watch?v=jNQXAC9IVRw"  # "Me at the zoo", the first YouTube video (2005)
-    DEMO_BOOK = ("Frankenstein: the 1818 edition vs the 1831 rewrite",
-                 "https://www.gutenberg.org/cache/epub/41445/pg41445.txt",   # 1818 edition
-                 "https://www.gutenberg.org/cache/epub/42324/pg42324.txt")   # 1831 edition
+    DEMO_BOOKS = [
+        ("Frankenstein: the 1818 edition vs the 1831 rewrite",
+         "https://www.gutenberg.org/cache/epub/41445/pg41445.txt",    # 1818 edition
+         "https://www.gutenberg.org/cache/epub/42324/pg42324.txt"),   # 1831 edition
+        # Darwin revised it five times; "survival of the fittest" and the word "evolution" only arrive in later editions.
+        ("On the Origin of Species: the 1859 first edition vs the 1872 sixth",
+         "https://www.gutenberg.org/cache/epub/1228/pg1228.txt",      # 1st edition, 1859
+         "https://www.gutenberg.org/cache/epub/2009/pg2009.txt"),     # 6th edition, 1872
+    ]
     DEMO_LOOK_BACK_DAYS = 90
 
     def add_demo_data(self, user_id, deadline=None):
         """Add the demo examples to this person's account, skipping anything already there.
         Stops adding when `deadline` (time.monotonic()) passes. Returns a report."""
-        report = {"watched": 0, "changes": 0, "video": False, "book_job": None, "problems": [], "unfinished": False}
+        report = {"watched": 0, "changes": 0, "video": False, "book_jobs": [], "problems": [], "unfinished": False}
 
         def out_of_time():
             if deadline and time.monotonic() > deadline:
@@ -734,11 +741,11 @@ class Tripwire:
             except (ValueError, sources.SourceError) as exc:
                 report["problems"].append(f"Video: {exc}")
 
-        title, link_a, link_b = self.DEMO_BOOK
-        already = self.conn.execute("SELECT id FROM book_jobs WHERE user_id = ? AND link_a = ? AND link_b = ?",
-                                    (user_id, link_a, link_b)).fetchone()
-        if not already:
-            report["book_job"] = self.start_book_job(user_id, title, {"link": link_a}, {"link": link_b})
+        for title, link_a, link_b in self.DEMO_BOOKS:
+            already = self.conn.execute("SELECT id FROM book_jobs WHERE user_id = ? AND link_a = ? AND link_b = ?",
+                                        (user_id, link_a, link_b)).fetchone()
+            if not already:
+                report["book_jobs"].append(self.start_book_job(user_id, title, {"link": link_a}, {"link": link_b}))
         return report
 
     # -- totals for the About page (counts only, nothing personal) -----------

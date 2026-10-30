@@ -17,7 +17,6 @@
         <form method="post" action="{{ url_for('remove_watch', watch_id=w.id) }}"
               onsubmit="return confirm('Stop watching this? Its changes will be deleted too. Public copies you made stay on My shelf.')"><button class="link danger">Stop watching</button></form>
       </div>
-      {{ last_tests(w) }}
     </li>
     {% endfor %}
   </ul>
@@ -36,16 +35,6 @@
     <input type="hidden" name="next" value="{{ url_for('index') }}"><button class="link">Test against Internet Archive</button></form>
 {% endmacro %}
 
-{% macro last_tests(w) %}
-  {% set found = [] %}
-  {% for source, name in [('kiwix', 'Kiwix'), ('archive', 'Internet Archive')] %}
-    {% set t = tests.get((watch_link(w), source)) %}
-    {% if t %}{% set _ = found.append((name, t)) %}{% endif %}
-  {% endfor %}
-  {% if found %}
-  <p class="meta last-tests">{% for name, t in found %}<a href="{{ url_for('before_result', check_id=t.id) }}">Last {{ name }} test ({{ t.created_at[:10] }})</a>: {{ t.summary }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
-  {% endif %}
-{% endmacro %}
 
 {% macro add_form(action, placeholder) %}
   <form class="add-watch" method="post" action="{{ action }}">

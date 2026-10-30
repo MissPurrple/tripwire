@@ -61,7 +61,9 @@
     <li><strong>My shelf:</strong> your own copies of gazettes, memos, photos of documents and web pages, searchable,
         and <strong>Take my shelf with me</strong>: download the whole shelf as one file, a ZIP for any browser or a
         file for <a href="https://kiwix.org/en/" target="_blank" rel="noopener">Kiwix</a>, the free app that reads whole libraries with no internet.
-        Your public copies at the Internet Archive are listed there too: made only when you choose.</li>
+        Your public copies at the Internet Archive are listed there too: made only when you choose.
+        Every copy gets a signed <strong>stamp of originality</strong>: where it came from, when, whether Tripwire fetched it itself
+        or its owner uploaded it, and a fingerprint of the copy. Anyone can <a href="{{ url_for('verify') }}">check a stamp</a>.</li>
     <li><strong>Test against Kiwix, and against the Internet Archive:</strong> two buttons next to anything you watch. They compare it
         today with an older copy nobody can quietly edit: Kiwix's dated offline copy of Wikipedia, or the Internet Archive's copy from
         about a year ago. If there's no exact copy, Tripwire offers similar ones (an article under an older name, or nearby pages on the same site).</li>
@@ -103,6 +105,10 @@
         in Lesotho and many other places, aren't in anyone's totals.</dd>
     <dt>Slow on purpose.</dt>
     <dd>Text types itself out, the opening takes its time, and Books &amp; videos pauses for a moment before it opens. Preservation is patient work.</dd>
+    <dt>Stamps that tell the truth.</dt>
+    <dd>A stamp says “fetched by Tripwire” only when Tripwire fetched the copy itself. An uploaded file is stamped as uploaded:
+        Tripwire can prove when it was kept and that it hasn't changed, but not where it came from, and it says so.
+        Stamps are signed, so they can't be made or edited by anyone else, and they can be checked without Tripwire.</dd>
     <dt>Languages only once they're checked.</dt>
     <dd>A translation goes on the site only after a native speaker has checked it. A wrong translation, on a tool about keeping the
         record honest, would be its own small rewrite.</dd>
@@ -163,6 +169,12 @@
     <li><strong>Eleven pages → five.</strong> An honest review said there was too much to take in. Now: Watching (with Live watch
         and videos inside it), My shelf (with public copies), Changes (with the summary), Books &amp; videos side by side, and About.
         Stats moved to the bottom of every page, as a fun extra.</li>
+    <li><strong>A comparison against the wrong page → checks that refuse it.</strong> Testing an article against Kiwix once compared it
+        with a few dozen words of a “prove you're not a robot” page. Now Tripwire reads Kiwix's copies exactly as stored, checks the
+        page really is the article, refuses copies that are suspiciously short, shows the start of both versions, and, if Kiwix's site
+        won't let it in, offers Wikipedia's own saved version from the same date instead.</li>
+    <li><strong>Copies anyone could fake → signed stamps of originality.</strong> A copy is only useful as evidence if people can trust
+        where and when it was taken.</li>
     <li><strong>Next: what testers tell us.</strong> {% if totals.feedback %}{{ totals.feedback }} piece{{ 's' if totals.feedback != 1 }} of feedback so far.{% else %}Leave yours below.{% endif %}</li>
   </ol>
   <p>Tripwire is young, and built in the open. If you can see how to make it better (code, design, archiving, or knowing a community's needs),
@@ -200,7 +212,7 @@
 <section class="theme" id="demo">
   <h2>Try it with real examples</h2>
   <p>Fill Tripwire with real things to explore: Wikipedia articles about Indigenous peoples and languages (with the last 90 days of real edits),
-     a famous video, and Mary Shelley's <em>Frankenstein</em>, 1818 edition against her 1831 rewrite.</p>
+     a famous video, and two famous rewritten books: Mary Shelley's <em>Frankenstein</em>, 1818 against her 1831 rewrite, and Darwin's <em>On the Origin of Species</em>, 1859 against his much-revised 1872 edition.</p>
   <form method="post" action="{{ url_for('demo_data') }}">
     <button>Add the examples</button>
   </form>

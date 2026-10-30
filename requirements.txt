@@ -3,3 +3,4 @@ requests>=2.31
 psycopg[binary]>=3.2
 pypdf>=5.0
 libzim>=3.6
+cryptography>=42

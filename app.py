@@ -9,6 +9,7 @@ Online (Vercel), it needs three settings (Environment Variables):
 """
 
 import functools
+import json
 import hmac
 import json
 import os
@@ -21,7 +22,7 @@ from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_t
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.exceptions import HTTPException
 
-from tripwire import before, books, changes, charts, db, humancheck, i18n, live, mailer, shelf, sources, stats
+from tripwire import before, books, stamp as stamps, changes, charts, db, humancheck, i18n, live, mailer, shelf, sources, stats
 from tripwire.checker import BOOK_FILE_DAYS, MAX_THEMES, SINGLE_LINKS, TooManyTries, Tripwire
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
@@ -386,7 +387,7 @@ def index():
                            single_name=SINGLE_LINKS, new_count=new_count,
                            max_themes=MAX_THEMES, lookback=LOOKBACK_CHOICES,
                            videos=tw().videos(uid()), video_state=_video_state,
-                           tests=before.latest_by_url(conn, uid()), live_on="live" in request.args,
+                           live_on="live" in request.args,
                            min_seconds=live.MIN_SECONDS_BETWEEN)
 
 
@@ -962,6 +963,7 @@ def shelf_item(item_id):
     check = before.own(tw().conn, uid(), item["before_check_id"]) if item["before_check_id"] else None
     return render_template("shelf_item.html", item=item, watch=watch, check=check,
                            check_details=db.entry_details(check) if check else None,
+                           stamp=json.loads(item["stamp"]) if item["stamp"] else None,
                            scan=bool(item["file_name"]) and not item["text"]
                            and item["file_name"].lower().endswith((".pdf", ".png", ".jpg", ".jpeg", ".webp")))
 
@@ -994,6 +996,42 @@ def shelf_file(item_id):
     inline = kind in SHOW_INLINE and not request.args.get("download")
     return Response(_stream(data), mimetype=kind if inline else "application/octet-stream",
                     headers=dict(_download_headers(name, inline), **{"Content-Length": str(len(data))}))
+
+
+@app.get("/shelf/<int:item_id>/stamp.json")
+def shelf_stamp(item_id):
+    """The signed stamp of originality for one copy, to keep next to it."""
+    item = _own_item(item_id)
+    if not item["stamp"]:
+        abort(404)
+    name = f"{shelf.safe_name(item['title'], 'copy')}.stamp.json"
+    return Response(json.dumps(json.loads(item["stamp"]), indent=2, ensure_ascii=False), mimetype="application/json",
+                    headers=_download_headers(name))
+
+
+@app.route("/verify", methods=["GET", "POST"])
+def verify():
+    """Anyone can check a stamp of originality here, no account needed: is it genuine, and is
+    this file (or text) exactly the copy that was stamped?"""
+    stamper = stamps.Stamper(tw().conn)
+    result = None
+    if request.method == "POST":
+        upload = request.files.get("stamp_file")
+        raw = (upload.read().decode("utf-8", "replace") if upload and upload.filename else request.form.get("stamp", "")).strip()
+        try:
+            stamp = json.loads(raw)
+            if not isinstance(stamp, dict):
+                raise ValueError
+        except ValueError:
+            result = {"verdict": "fake", "message": "That isn't a stamp: paste the whole stamp, from { to }."}
+        else:
+            verdict, message = stamper.check(stamp)
+            result = {"verdict": verdict, "message": message, "stamp": stamp}
+            copy = request.files.get("copy")
+            if copy and copy.filename and verdict != "fake":
+                result["match"] = stamps.matches(stamp, copy.read())
+                result["copy_name"] = copy.filename
+    return render_template("verify.html", result=result, public_key=stamper.public_key, key_id=stamper.key_id)
 
 
 @app.post("/shelf/<int:item_id>/text")
@@ -1030,8 +1068,9 @@ def shelf_download(kind):
     if kind not in ("zip", "zim"):
         abort(404)
     name = request.args.get("name", "").strip()[:80] or "My shelf"
-    path = (_shelf().export_zip(uid(), name) if kind == "zip"
-            else _shelf().export_zim(uid(), name, current_language()))
+    verify_url = url_for("verify", _external=True)
+    path = (_shelf().export_zip(uid(), name, verify_url) if kind == "zip"
+            else _shelf().export_zim(uid(), name, current_language(), verify_url))
     size = os.path.getsize(path)
 
     def pieces():
@@ -1063,12 +1102,13 @@ def before_page():
     url, source = request.form.get("url", ""), request.form.get("source", "auto")
     back = safe_next(request.form.get("next", ""), url_for("index"))
     try:
-        result = before.compare_with_before(url, source if source in ("kiwix", "archive") else "auto",
+        result = before.compare_with_before(url, source if source in ("kiwix", "archive", "wikipedia_date") else "auto",
                                             kiwix_path=request.form.get("kiwix_path") or None,
-                                            archive_url=request.form.get("archive_url") or None)
+                                            archive_url=request.form.get("archive_url") or None,
+                                            on_date=request.form.get("on_date") or None)
     except before.NotFound as exc:
         return render_template("before_similar.html", url=url, problem=str(exc), source=exc.source,
-                               suggestions=exc.suggestions, back=back)
+                               suggestions=exc.suggestions, on_date=exc.on_date, blocked=exc.blocked, back=back)
     except sources.SourceError as exc:
         flash(str(exc), "error")
         return redirect(back)
@@ -1287,8 +1327,8 @@ def demo_data():
     if report["problems"]:
         message += " Couldn't add: " + "; ".join(report["problems"][:3]) + "."
     flash(message, "error" if report["problems"] and not report["watched"] else "message")
-    if report["book_job"]:
-        return redirect(url_for("book_job", job_id=report["book_job"]))
+    if report["book_jobs"]:  # both book comparisons start on the Books & videos page
+        return redirect(url_for("book_list", _anchor="books"))
     return redirect(url_for("index"))
 
 

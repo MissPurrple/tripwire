@@ -27,6 +27,23 @@
   {% endif %}
 </section>
 
+<section class="theme compared">
+  <h2>What was compared</h2>
+  <p class="meta">The start of each version, exactly as Tripwire received it, so you can check it's the real page.</p>
+  <div class="split">
+    {% for label, words, how, link in [('The older copy', d.before_preview, d.before_how, c.before_link),
+                                         ('Today', d.after_preview, d.after_how, d.after_link or c.url)] %}
+    <div>
+      <h3>{{ label }} <span class="meta">({{ '{:,}'.format((d.words_before if loop.first else d.words_after) or 0) }} words)</span></h3>
+      {% if words %}<blockquote class="preview">{{ words }}</blockquote>{% endif %}
+      <p class="meta">{% if how %}Fetched from <a href="{{ how.fetched_from }}" target="_blank" rel="noopener">{{ how.fetched_from|truncate(70) }}</a>
+        on {{ how.fetched_at[:10] }} at {{ how.fetched_at[11:16] }} UTC{% if how.page_title %}. The page's own title: “{{ how.page_title }}”{% endif %}{% if how.note %}. {{ how.note }}{% endif %}.
+        {% else %}<a href="{{ link }}" target="_blank" rel="noopener">Open it</a>{% endif %}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
 {% if interesting %}
 <section class="sources">
   <h2>Most interesting changes</h2>

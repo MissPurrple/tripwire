@@ -22,14 +22,14 @@ import zipfile
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
-from . import books, db, sources
+from . import books, db, sources, stamp as stamps
 
 MAX_FILE_BYTES = 15 * 1024 * 1024    # one original file kept from a link
 MAX_SHELF_BYTES = 60 * 1024 * 1024   # everything on one person's shelf
 GUEST_SHELF_BYTES = 10 * 1024 * 1024  # the same, for a visitor without an account (so bots can't fill the database)
 MAX_TEXT_CHARS = 2_000_000           # the words of one item (a long book is about 1 million)
 LIST_COLUMNS = ["id", "user_id", "title", "note", "source_url", "file_name", "file_size", "text_from",
-                "watch_id", "before_check_id", "created_at", "locked", "sealed_title"]
+                "watch_id", "before_check_id", "created_at", "locked", "sealed_title", "stamp"]
 # Locked items arrive already locked (see tripwire/export_files/vault-core.js): text that looks like
 # this, and nothing else. Tripwire can't read them; it only checks they're the right shape and size.
 SEALED = re.compile(r"[A-Za-z0-9+/]+={0,2}")
@@ -110,15 +110,22 @@ class Shelf:
                              "Download it to keep everything, then remove a few big items to make room.")
 
     def _insert(self, user_id, title, note, text, text_from, source_url=None, file_name=None, data=None,
-                watch_id=None, before_check_id=None):
+                watch_id=None, before_check_id=None, how="uploaded", wikipedia_version=None):
+        """Keep a copy, with its signed stamp of originality. how: "fetched" (Tripwire fetched it
+        itself from source_url) or "uploaded" (its owner gave it to Tripwire)."""
         text = (text or "")[:MAX_TEXT_CHARS]
+        title = title.strip()[:200] or "Untitled"
         self._check_room(user_id, len(data or b"") + len(text))
+        taken_at = db.now()
+        stamp = stamps.Stamper(self.conn).for_copy(
+            title=title, how=how, text=text, data=data, file_name=file_name, source_url=source_url,
+            text_from=text_from, wikipedia_version=wikipedia_version, taken_at=taken_at)
         return self.conn.insert(
             """INSERT INTO shelf_items (user_id, title, note, source_url, file_name, file_size, file_data,
-                   text, text_from, watch_id, before_check_id, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, title.strip()[:200] or "Untitled", note.strip()[:2000], source_url, file_name,
-             len(data or b""), data, text, text_from, watch_id, before_check_id, db.now()))
+                   text, text_from, watch_id, before_check_id, created_at, stamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, title, note.strip()[:2000], source_url, file_name,
+             len(data or b""), data, text, text_from, watch_id, before_check_id, taken_at, json.dumps(stamp)))
 
     def add_file(self, user_id, filename, data, title="", note="", read_text=None, pages=None):
         """Keep an uploaded file. `read_text` is the text of a scanned PDF or a photo,
@@ -149,7 +156,8 @@ class Shelf:
             return self._insert(user_id, title or rev["title"], note, text,
                                 f"Wikipedia, version of {rev['timestamp'][:10]}",
                                 source_url=wiki.article_url(rev["title"]), watch_id=watch_id,
-                                before_check_id=before_check_id)
+                                before_check_id=before_check_id, how="fetched",
+                                wikipedia_version=wiki.revision_url(rev["revid"]))
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
         try:
@@ -167,13 +175,13 @@ class Shelf:
                 text, text_from = "", None  # scanned: the person can read it on their device
             return self._insert(user_id, title or os.path.splitext(filename)[0], note, text, text_from,
                                 source_url=url, file_name=filename, data=data, watch_id=watch_id,
-                                before_check_id=before_check_id)
+                                before_check_id=before_check_id, how="fetched")
         page = books._decode(data)
         found = re.search(r"<title[^>]*>(.*?)</title>", page, re.S | re.I)
         text = sources.html_to_text(page) if page.lstrip()[:1] == "<" else page
         page_title = sources.html_to_text(found.group(1)) if found else url.split("://", 1)[1]
         return self._insert(user_id, title or page_title, note, text, f"The web page, as it was on {db.now()[:10]}",
-                            source_url=url, watch_id=watch_id, before_check_id=before_check_id)
+                            source_url=url, watch_id=watch_id, before_check_id=before_check_id, how="fetched")
 
     def add_locked(self, user_id, sealed_title, sealed, data=None):
         """Keep an item that was locked in the person's browser. Tripwire stores it as it
@@ -208,9 +216,15 @@ class Shelf:
         """Words read later on the person's device, for a scan that had none."""
         text = (text or "")[:MAX_TEXT_CHARS]
         self._check_room(user_id, len(text))
-        self.conn.execute("UPDATE shelf_items SET text = ?, text_from = ? WHERE id = ? AND user_id = ? AND locked = 0",
-                          (text, f"Read on your device (scanned, {pages} page{'s' if int(pages) != 1 else ''})" if pages else "Read on your device",
-                           item_id, user_id))
+        text_from = f"Read on your device (scanned, {pages} page{'s' if int(pages) != 1 else ''})" if pages else "Read on your device"
+        row = self.conn.execute("SELECT stamp FROM shelf_items WHERE id = ? AND user_id = ?", (item_id, user_id)).fetchone()
+        stamp = json.loads(row["stamp"]) if row and row["stamp"] else None
+        if stamp:  # the stamp now covers the words too, and says they were read later, on the owner's device
+            fields = {k: v for k, v in stamp.items() if k not in ("kind", "version", "public_key", "key_id", "signature")}
+            fields.update(text_sha256=stamps.fingerprint(text), text_from=text_from, text_added_at=db.now())
+            stamp = stamps.Stamper(self.conn).make(**fields)
+        self.conn.execute("UPDATE shelf_items SET text = ?, text_from = ?, stamp = ? WHERE id = ? AND user_id = ? AND locked = 0",
+                          (text, text_from, json.dumps(stamp) if stamp else None, item_id, user_id))
 
     def update(self, user_id, item_id, title, note):
         self.conn.execute("UPDATE shelf_items SET title = ?, note = ? WHERE id = ? AND user_id = ? AND locked = 0",
@@ -221,7 +235,7 @@ class Shelf:
 
     # -- taking it with you -------------------------------------------------
 
-    def _export_pages(self, user_id, name):
+    def _export_pages(self, user_id, name, verify_url=None):
         """Every page and file of the download, as (path, title, mimetype, content, is_page)."""
         env = Environment(loader=FileSystemLoader(EXPORT_TEMPLATES), autoescape=select_autoescape())
         rows = self.conn.execute("SELECT * FROM shelf_items WHERE user_id = ? AND locked = 0 ORDER BY id",
@@ -240,12 +254,17 @@ class Shelf:
                           "page": f"items/{stem}.html", "text_path": f"text/{stem}.txt",
                           "file_path": f"files/{n:04d}-{safe_name(row['file_name'])}" if row["file_name"] and row["file_data"] is not None else None,
                           "data": bytes(row["file_data"]) if row["file_data"] is not None else None,
-                          "check": checks.get(row["before_check_id"]), "watch": watches.get(row["watch_id"])})
+                          "check": checks.get(row["before_check_id"]), "watch": watches.get(row["watch_id"]),
+                          "stamp": json.loads(row["stamp"]) if row["stamp"] else None,
+                          "stamp_path": f"stamps/{stem}.stamp.json" if row["stamp"] else None})
         files = [("index.html", name, "text/html",
                   env.get_template("index.html").render(name=name, items=items, made=made), True)]
         for item in items:
             files.append((item["page"], item["title"], "text/html",
-                          env.get_template("item.html").render(name=name, item=item, made=made), True))
+                          env.get_template("item.html").render(name=name, item=item, made=made, verify_url=verify_url), True))
+            if item["stamp"]:
+                files.append((item["stamp_path"], f"Stamp: {item['title']}", "application/json",
+                              json.dumps(item["stamp"], indent=2, ensure_ascii=False), False))
             if item["file_path"]:
                 files.append((item["file_path"], item["file_name"], file_type(item["file_name"]), item["data"], False))
         for path in ("fonts/vt323-latin-400-normal.woff2", "fonts/LICENSE-VT323.txt", "rabbit.png"):
@@ -254,9 +273,9 @@ class Shelf:
                               f.read(), False))
         return items, files
 
-    def export_zip(self, user_id, name):
+    def export_zip(self, user_id, name, verify_url=None):
         """Write the shelf as a ZIP file. Returns its path (delete it when done)."""
-        items, files = self._export_pages(user_id, name)
+        items, files = self._export_pages(user_id, name, verify_url)
         handle, path = tempfile.mkstemp(suffix=".zip")
         os.close(handle)
         folder = safe_name(name, "my-shelf")
@@ -268,7 +287,7 @@ class Shelf:
             for item in items:
                 z.writestr(f"{folder}/{item['text_path']}", item["text"] or "")
             listing = [{k: item[k] for k in ("title", "note", "source_url", "created_at", "text_from", "file_name",
-                                             "page", "text_path", "file_path")} for item in items]
+                                             "page", "text_path", "file_path", "stamp_path")} for item in items]
             z.writestr(f"{folder}/shelf.json", json.dumps({"name": name, "made": db.now(), "items": listing},
                                                           indent=2, ensure_ascii=False))
             z.writestr(f"{folder}/README.txt", README.format(name=name, made=db.now()[:10], count=len(items)))
@@ -291,7 +310,7 @@ class Shelf:
                 z.writestr(f"{folder}/locked/unlock.html", page)
         return path
 
-    def export_zim(self, user_id, name, lang="en"):
+    def export_zim(self, user_id, name, lang="en", verify_url=None):
         """Write the shelf as a ZIM file for Kiwix. Returns its path (delete it when done)."""
         from libzim.writer import Creator, Hint, Item, StringProvider
 
@@ -315,7 +334,7 @@ class Shelf:
             def get_hints(self):
                 return {Hint.FRONT_ARTICLE: self.front}
 
-        items, files = self._export_pages(user_id, name)
+        items, files = self._export_pages(user_id, name, verify_url)
         handle, path = tempfile.mkstemp(suffix=".zim")
         os.close(handle)
         os.remove(path)  # libzim makes the file itself
@@ -346,6 +365,8 @@ To read it: open index.html in any web browser. It works with no internet.
   items/   one page per document or web page, with its words
   files/   the original files (PDFs, photos...), exactly as they were kept
   text/    the words of each item as plain text, to search or copy
+  stamps/  each item's signed stamp of originality: where it came from, when, and a
+           fingerprint of the copy. Check one on Tripwire's "Check a stamp" page.
   shelf.json   the list of items, for other programs
   locked/      items you locked in your vault, still locked: open locked/unlock.html
                in any browser and type your vault passphrase (works with no internet)

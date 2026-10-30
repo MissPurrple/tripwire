@@ -17,6 +17,20 @@
   {% if item.watch %}<p class="meta">Tripwire was watching the original. Last check ({{ (item.watch.last_checked_at or '')[:10] }}): {{ item.watch.last_status }}.</p>{% endif %}
   {% if item.file_path %}<p><a href="../{{ item.file_path }}">Open the original file</a> <span class="meta">({{ item.file_name }})</span></p>{% endif %}
 
+  {% if item.stamp %}
+  {% set s = item.stamp %}
+  <h2>Stamp of originality</h2>
+  <div class="card">
+    <p><strong>{{ 'Fetched by Tripwire itself' if s.how == 'fetched' else 'Uploaded by its owner' }}</strong>{% if s.source_url %} from {{ s.source_url }}{% endif %},
+       on {{ s.taken_at[:10] }} at {{ s.taken_at[11:19] }} UTC.</p>
+    {% if s.wikipedia_version %}<p>Exact Wikipedia version: <a href="{{ s.wikipedia_version }}">{{ s.wikipedia_version }}</a></p>{% endif %}
+    {% if s.file_sha256 %}<p class="meta">Fingerprint of the file: <code>{{ s.file_sha256 }}</code></p>{% endif %}
+    {% if s.text_sha256 %}<p class="meta">Fingerprint of the words: <code>{{ s.text_sha256 }}</code></p>{% endif %}
+    <p class="meta">Signed by Tripwire (key {{ s.key_id }}). The full signed stamp is in <a href="../{{ item.stamp_path }}">{{ item.stamp_path }}</a>.
+      {% if verify_url %}Check it at {{ verify_url }}.{% endif %}</p>
+  </div>
+  {% endif %}
+
   {% if item.check %}
   {% set c = item.check %}
   <h2>Compared with an older copy</h2>

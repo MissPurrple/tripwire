@@ -3,12 +3,22 @@
 {% block content %}
 <p class="meta"><a href="{{ back }}">← Back</a></p>
 <section class="intro">
-  <h1>No exact copy in {{ 'Kiwix' if source == 'kiwix' else 'the Internet Archive' }}</h1>
+  <h1>{% if blocked %}Kiwix's site didn't let Tripwire in{% else %}No exact copy in {{ 'Kiwix' if source == 'kiwix' else 'the Internet Archive' }}{% endif %}</h1>
   <p>{{ problem }}</p>
   <p class="meta">Looking for: <a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a></p>
 </section>
 
 <section class="theme">
+  {% if source == 'kiwix' and on_date %}
+  <h2>Compare with Wikipedia's own copy from the same date</h2>
+  <p>Kiwix's copy was made from Wikipedia on {{ on_date }}, and Wikipedia keeps every version of every article.
+     So Tripwire can compare today's article with the version Wikipedia itself saved on that date. Anyone can check it:
+     the result links to that exact version on Wikipedia.</p>
+  <form method="post" action="{{ url_for('before_page') }}"><input type="hidden" name="url" value="{{ url }}">
+    <input type="hidden" name="source" value="wikipedia_date"><input type="hidden" name="on_date" value="{{ on_date }}">
+    <input type="hidden" name="next" value="{{ back }}">
+    <button>Compare with Wikipedia's version from {{ on_date }}</button></form>
+  {% endif %}
   {% if suggestions %}
   <h2>Similar {{ 'articles' if source == 'kiwix' else 'saved pages' }}</h2>
   <p>{% if source == 'kiwix' %}These have similar names in Kiwix's offline copy. The article may have been called something else then.
@@ -28,7 +38,7 @@
     </li>
     {% endfor %}
   </ul>
-  {% else %}
+  {% elif not on_date %}
   <p>Nothing similar was found either.</p>
   {% endif %}
   {% if source == 'kiwix' %}

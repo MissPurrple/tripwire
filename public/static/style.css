@@ -679,3 +679,15 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
 .vault-warning { margin: 12px 0 16px; border-radius: 10px; }
 .vault-warning .screen-line + .screen-line { margin-top: 8px; }
 .vault-alarm { border-left: 4px solid var(--removal); background: var(--bg); padding: 10px 14px; }
+
+.preview { margin: 6px 0; padding: 10px 12px; border-left: 4px solid var(--line); background: var(--bg); font-size: .92rem; overflow-wrap: anywhere; }
+
+/* Stamps of originality */
+.stamp { border: 3px double var(--accent); border-radius: 6px; padding: 12px 16px; position: relative; background: var(--bg); }
+.stamp-seal { font-family: var(--font-mono); font-weight: 700; letter-spacing: .12em; color: var(--accent); margin: 0 0 8px;
+              display: inline-block; border: 2px solid var(--accent); padding: 2px 8px; transform: rotate(-1.5deg); }
+.stamp-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 10px 0 0; }
+.stamp-facts dt { color: var(--muted); } .stamp-facts dd { margin: 0; overflow-wrap: anywhere; }
+.stamp-facts code, code.key { overflow-wrap: anywhere; word-break: break-all; font-size: .85em; }
+.verdict-genuine { border-color: var(--ins-text); } .verdict-fake { border-color: var(--removal); }
+@media (max-width: 560px) { .stamp-facts { grid-template-columns: 1fr; } }

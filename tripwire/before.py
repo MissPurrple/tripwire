@@ -28,6 +28,35 @@ WIKIPEDIA_NAMES = {"en": "English", "hi": "Hindi", "st": "Sesotho", "zu": "Zulu"
 NS = {"atom": "http://www.w3.org/2005/Atom", "dc": "http://purl.org/dc/terms/"}
 # mwoffliner (which makes Kiwix's Wikipedia copies) adds this licence line at the end of every article.
 KIWIX_FOOTER = re.compile(r"\n[^\n]*(This article is issued from|Retrieved from) Wikipedia.*$", re.S | re.I)
+# Words found on "prove you're not a robot" pages (Anubis, Cloudflare and the like), which some
+# sites show to automated visitors such as Tripwire's server instead of the page itself.
+CHALLENGE = re.compile(r"not a (?:ro)?bot|anubis|proof[- ]of[- ]work|checking your browser|just a moment|"
+                       r"enable javascript and cookies|cf-challenge|challenge-platform|captcha|"
+                       r"\bAI (?:companies|crawlers|scrapers)", re.I)
+# An older copy this short, next to a page many times longer today, is almost certainly not the
+# real page (an error or robot-check page): Tripwire refuses to compare it.
+TOO_SHORT_WORDS = 150
+TOO_SHORT_RATIO = 8
+PREVIEW_WORDS = 80
+
+
+class Blocked(sources.SourceError):
+    """A site showed a robot check (or another page) instead of the copy Tripwire asked for."""
+
+
+def page_title(html):
+    """The page's own title and first heading, as plain text, lower case."""
+    found = [re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I), re.search(r"<h1[^>]*>(.*?)</h1>", html, re.S | re.I)]
+    return " | ".join(sources.html_to_text(m.group(1)).lower() for m in found if m)
+
+
+def same_title(title, html):
+    return title.replace("_", " ").strip().lower() in page_title(html).replace("_", " ")
+
+
+def preview(text, words=PREVIEW_WORDS):
+    parts = text.split()
+    return " ".join(parts[:words]) + (" …" if len(parts) > words else "")
 
 
 def kiwix_copy(lang):
@@ -69,17 +98,42 @@ def parse_catalog(xml):
     return copies
 
 
+def kiwix_fetch(copy, path, title):
+    """Read the page at `path` in a Kiwix copy and check it really is the article called `title`.
+    Uses Kiwix's "raw" address, which sends the page exactly as stored in the offline copy.
+    Returns (text, link to read it, how it was fetched) or (None, None, None) if it isn't there.
+    Raises Blocked if Kiwix's site sent a robot check instead."""
+    path = path.lstrip("/")
+    read_link = f"{copy['content_url']}/{path}"
+    blocked = False
+    for url in (f"{KIWIX}/raw/{kiwix_name(copy)}/content/{path}", read_link):
+        response = sources._get(url)
+        if response.status_code != 200 or "html" not in response.headers.get("Content-Type", "html"):
+            continue
+        html = response.text
+        redirected = bool(getattr(response, "history", None))  # an article under its old name points to the new one
+        if not (same_title(title, html) or (redirected and page_title(html))):
+            blocked = blocked or bool(CHALLENGE.search(html))
+            continue
+        text = KIWIX_FOOTER.sub("", sources.html_to_text(html)).strip()
+        if text:
+            return text, read_link, {"fetched_from": response.url or url, "status": response.status_code,
+                                     "page_title": page_title(html)[:200], "fetched_at": db.now()}
+    if blocked:
+        raise Blocked("Kiwix's online library showed Tripwire a robot check (a “prove you're not a bot” page) "
+                      "instead of the article, so Tripwire couldn't read its copy.")
+    return None, None, None
+
+
 def kiwix_article(copy, title):
-    """The text of one article in a Kiwix copy, and the link to read it there.
-    Returns (None, None) if the copy doesn't have it (for example, it's newer)."""
+    """The text of one article in a Kiwix copy, the link to read it there, and how it was fetched.
+    Returns (None, None, None) if the copy doesn't have it (for example, it's newer)."""
     path = quote(title.replace(" ", "_"), safe="()_,'!-.")
     for candidate in (f"A/{path}", path):  # older copies keep articles under A/
-        response = sources._get(f"{copy['content_url']}/{candidate}")
-        if response.status_code == 200 and "html" in response.headers.get("Content-Type", "html"):
-            text = KIWIX_FOOTER.sub("", sources.html_to_text(response.text)).strip()
-            if text:
-                return text, response.url
-    return None, None
+        found = kiwix_fetch(copy, candidate, title)
+        if found[0]:
+            return found
+    return None, None, None
 
 
 def archive_copy(url, days_ago=ARCHIVE_DAYS_AGO):
@@ -98,10 +152,15 @@ def archive_copy(url, days_ago=ARCHIVE_DAYS_AGO):
     if page.status_code >= 400:
         return None
     if "pdf" in page.headers.get("Content-Type", "").lower() or page.content[:5] == b"%PDF-":
-        text = sources.pdf_text(page.content)
+        text, title = sources.pdf_text(page.content), ""
     else:
-        text = sources.html_to_text(page.text)
-    return {"text": text, "date": f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}", "link": closest["url"]}
+        text, title = sources.html_to_text(page.text), page_title(page.text)
+        if CHALLENGE.search(page.text) and len(text.split()) < 400:
+            raise Blocked("The copy the Internet Archive saved is a robot check (a “prove you're not a bot” page), "
+                          "not the page itself, so Tripwire can't compare it.")
+    return {"text": text, "date": f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}", "link": closest["url"],
+            "how": {"fetched_from": f"https://web.archive.org/web/{stamp}id_/{url}", "status": page.status_code,
+                    "page_title": title[:200], "fetched_at": db.now()}}
 
 
 def month_name(date):
@@ -115,9 +174,9 @@ class NotFound(sources.SourceError):
     """No copy of exactly this page. `suggestions` lists similar ones to try instead:
     [{"label", "kiwix_path" or "archive_url"}]."""
 
-    def __init__(self, message, source, suggestions):
+    def __init__(self, message, source, suggestions, on_date=None, blocked=False):
         super().__init__(message)
-        self.source, self.suggestions = source, suggestions
+        self.source, self.suggestions, self.on_date, self.blocked = source, suggestions, on_date, blocked
 
 
 def kiwix_name(copy):
@@ -126,13 +185,8 @@ def kiwix_name(copy):
 
 
 def kiwix_page(copy, path):
-    """The text of the page at `path` inside a Kiwix copy, and its link (or None, None)."""
-    response = sources._get(f"{copy['content_url']}/{path.lstrip('/')}")
-    if response.status_code == 200 and "html" in response.headers.get("Content-Type", "html"):
-        text = KIWIX_FOOTER.sub("", sources.html_to_text(response.text)).strip()
-        if text:
-            return text, response.url
-    return None, None
+    """The text of the page at `path` inside a Kiwix copy (chosen from Kiwix's suggestions)."""
+    return kiwix_fetch(copy, path, path.rsplit("/", 1)[-1].replace("_", " "))
 
 
 def kiwix_similar(copy, title, limit=6):
@@ -174,12 +228,13 @@ def archive_similar(url, limit=6):
     return found[:limit]
 
 
-def compare_with_before(target, source="auto", kiwix_path=None, archive_url=None):
+def compare_with_before(target, source="auto", kiwix_path=None, archive_url=None, on_date=None):
     """Compare a page today with an older copy of it. `target` is a Wikipedia
     link (or article title) or any web link.
 
     source: "kiwix" (Kiwix's offline Wikipedia), "archive" (the Internet Archive),
-            or "auto" (Kiwix first for Wikipedia, then the Internet Archive).
+            "wikipedia_date" (Wikipedia's own saved version from `on_date`, e.g. the date of
+            Kiwix's copy), or "auto" (Kiwix first for Wikipedia, then the Internet Archive).
     kiwix_path / archive_url: compare with this similar page instead (chosen from
             the suggestions of a NotFound).
     Raises NotFound (with similar pages to try) or sources.SourceError. Returns a
@@ -196,6 +251,8 @@ def compare_with_before(target, source="auto", kiwix_path=None, archive_url=None
         title, url = rev["title"], wiki.article_url(rev["title"])
         today = wiki.text_of(rev["revid"])
         after_link = wiki.revision_url(rev["revid"])
+        after_how = {"fetched_from": after_link, "status": 200, "page_title": title,
+                     "fetched_at": db.now(), "note": f"Wikipedia's version {rev['revid']}, saved {rev['timestamp'][:10]}"}
     else:
         url = target if "://" in target else "https://" + target
         page = sources.fetch_page(url)
@@ -203,39 +260,60 @@ def compare_with_before(target, source="auto", kiwix_path=None, archive_url=None
             raise sources.SourceError("That page doesn't exist any more (it answered 'not found'). "
                                       "Try “Test against Internet Archive” to see if an older copy was saved.")
         title, today, after_link = url.split("://", 1)[1].rstrip("/"), page["text"], url
+        after_how = {"fetched_from": url, "status": 200, "page_title": "", "fetched_at": db.now()}
 
-    if source == "kiwix" and not wikipedia:
+    if source in ("kiwix", "wikipedia_date") and not wikipedia:
         raise sources.SourceError("Kiwix keeps offline copies of whole collections, like Wikipedia, not of single "
                                   "websites. For this page, use “Test against Internet Archive”.")
+    if source == "wikipedia_date":
+        try:
+            moment = datetime.strptime((on_date or "")[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError as exc:
+            raise sources.SourceError("That date doesn't look right.") from exc
+        old = wiki.revision_at(asked, days_ago=max(1, (datetime.now(timezone.utc) - moment).days))
+        if old["timestamp"][:10] > on_date[:10]:
+            raise sources.SourceError(f"The article didn't exist on Wikipedia yet on {on_date[:10]}.")
+        found = {"source": "wikipedia", "text": wiki.text_of(old["revid"]), "before_date": old["timestamp"][:10],
+                 "before_link": wiki.revision_url(old["revid"]), "download_link": None,
+                 "source_name": f"Wikipedia's own saved version from {old['timestamp'][:10]} "
+                                f"(as it was on {on_date[:10]}, the date of Kiwix's copy)",
+                 "how": {"fetched_from": wiki.revision_url(old["revid"]), "status": 200, "page_title": old["title"],
+                         "fetched_at": db.now(), "note": f"Wikipedia's version {old['revid']}"}}
     if wikipedia and source in ("kiwix", "auto"):
         copy = kiwix_copy(lang)
         if not copy and source == "kiwix":
             raise sources.SourceError(f"Kiwix doesn't have an offline copy of the {WIKIPEDIA_NAMES.get(lang, lang)} "
                                       "Wikipedia yet. Try “Test against Internet Archive”.")
         if copy:
-            if kiwix_path:
-                text, link = kiwix_page(copy, kiwix_path)
-                compared_with = kiwix_path.rsplit("/", 1)[-1].replace("_", " ")
-            else:
-                text, link = kiwix_article(copy, title)
-                if text is None and title != asked:
-                    text, link = kiwix_article(copy, asked)  # the article may have had another name then
-                compared_with = None
+            try:
+                if kiwix_path:
+                    text, link, how = kiwix_page(copy, kiwix_path)
+                    compared_with = kiwix_path.rsplit("/", 1)[-1].replace("_", " ")
+                else:
+                    text, link, how = kiwix_article(copy, title)
+                    if text is None and title != asked:
+                        text, link, how = kiwix_article(copy, asked)  # the article may have had another name then
+                    compared_with = None
+            except Blocked as exc:
+                if source != "kiwix":
+                    text = None
+                else:
+                    raise NotFound(str(exc), "kiwix", [], on_date=copy["date"], blocked=True) from exc
             if text:
                 where = f"Kiwix's offline {WIKIPEDIA_NAMES.get(lang, lang)} Wikipedia ({month_name(copy['date'])})"
                 found = {"source": "kiwix", "text": text, "before_date": copy["date"], "before_link": link,
-                         "download_link": copy["download"],
+                         "download_link": copy["download"], "how": how,
                          "source_name": f"“{compared_with}” in {where}" if compared_with else where}
             elif source == "kiwix":
                 raise NotFound(f"Kiwix's offline copy ({month_name(copy['date'])}) has no article called “{title}”. "
                                "It may be newer than the copy, or have had another name then.",
-                               "kiwix", kiwix_similar(copy, title))
+                               "kiwix", kiwix_similar(copy, title), on_date=copy["date"])
     if not found and source in ("archive", "auto"):
         old = archive_copy(archive_url or url)
         if old:
             other = f" of {archive_url}" if archive_url else ""
             found = {"source": "archive", "text": old["text"], "before_date": old["date"],
-                     "before_link": old["link"], "download_link": None,
+                     "before_link": old["link"], "download_link": None, "how": old["how"],
                      "source_name": f"the Internet Archive's copy{other} ({month_name(old['date'])})"}
         elif source == "archive":
             raise NotFound("The Internet Archive has no saved copy of this exact address.", "archive",
@@ -244,6 +322,12 @@ def compare_with_before(target, source="auto", kiwix_path=None, archive_url=None
         raise sources.SourceError("Tripwire couldn't find an older copy of that page, in Kiwix or the "
                                   "Internet Archive. You can keep a copy from today in My shelf.")
 
+    words_before, words_after = len(found["text"].split()), len(today.split())
+    if words_before < TOO_SHORT_WORDS and words_after >= TOO_SHORT_RATIO * max(words_before, 1):
+        raise sources.SourceError(
+            f"The older copy Tripwire received is only {words_before} words long, against {words_after:,} today, so it's "
+            "almost certainly not the real page (more likely an error or a robot-check page). Tripwire won't compare it. "
+            f"You can look at it yourself: {found['before_link']}")
     result = changes.compare_long(found["text"], today)
     swaps = changes.swap_counts(result["replacements"])
     if not result["hunks"]:
@@ -252,21 +336,13 @@ def compare_with_before(target, source="auto", kiwix_path=None, archive_url=None
         summary = changes.describe(result)
     details = {"swaps": swaps[:30], "hunks": result["hunks"][:200], "hunk_count": len(result["hunks"]),
                "kinds": changes.kind_counts(result["hunks"]), "name_changes": result["name_changes"],
-               "words_before": len(found["text"].split()), "words_after": len(today.split()),
-               "after_link": after_link}
+               "words_before": words_before, "words_after": words_after, "after_link": after_link,
+               "before_preview": preview(found["text"]), "after_preview": preview(today),
+               "before_how": found["how"], "after_how": after_how}
     return {"url": url, "title": title, "source": found["source"], "source_name": found["source_name"],
             "before_date": found["before_date"], "before_link": found["before_link"],
             "download_link": found["download_link"], "category": result["category"],
             "summary": summary, "details": details}
-
-
-def latest_by_url(conn, user_id):
-    """{(url, source): the newest check} for one person, to show next to what they watch."""
-    latest = {}
-    for row in conn.execute("SELECT id, url, source, before_date, summary, created_at FROM before_checks "
-                            "WHERE user_id = ? ORDER BY id", (user_id,)).fetchall():
-        latest[(row["url"], row["source"])] = row
-    return latest
 
 
 # -- keeping the results --------------------------------------------------------

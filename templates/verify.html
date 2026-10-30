@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Check a stamp · Tripwire{% endblock %}
+{% block content %}
+<section class="intro">
+  <h1>Check a stamp of originality</h1>
+  <p>Every copy kept on a Tripwire shelf comes with a stamp: where it came from, when it was taken, whether Tripwire fetched
+     it itself or its owner uploaded it, and a fingerprint of the copy. Tripwire signs each stamp, so nobody can make or
+     change one. Paste a stamp here (or choose the <code>.stamp.json</code> file) to check it. Add the copy too, to check
+     it's exactly the one that was stamped.</p>
+</section>
+
+{% if result %}
+<section class="theme verdict verdict-{{ result.verdict }}" aria-live="polite">
+  <h2>{{ {'genuine': '✓ Genuine stamp', 'other_site': 'Genuine, from another Tripwire', 'fake': '✗ Not a genuine stamp'}[result.verdict] }}</h2>
+  <p>{{ result.message }}</p>
+  {% if result.stamp and result.verdict != 'fake' %}
+  {% set s = result.stamp %}
+  <dl class="stamp-facts">
+    <dt>What</dt><dd>{{ s.title }}</dd>
+    <dt>How</dt><dd>{{ 'Fetched by Tripwire itself' if s.how == 'fetched' else 'Uploaded by its owner' }}</dd>
+    {% if s.source_url %}<dt>From</dt><dd>{{ s.source_url }}</dd>{% endif %}
+    <dt>When</dt><dd>{{ s.taken_at[:10] }} at {{ s.taken_at[11:19] }} UTC</dd>
+    {% if s.wikipedia_version %}<dt>Exact Wikipedia version</dt><dd><a href="{{ s.wikipedia_version }}" target="_blank" rel="noopener">{{ s.wikipedia_version }}</a></dd>{% endif %}
+  </dl>
+  {% if result.copy_name %}
+    {% if result.match == 'file' %}<p><strong>✓ “{{ result.copy_name }}” is exactly the stamped file.</strong></p>
+    {% elif result.match == 'text' %}<p><strong>✓ “{{ result.copy_name }}” holds exactly the stamped words.</strong></p>
+    {% else %}<p><strong>✗ “{{ result.copy_name }}” is not the stamped copy:</strong> it differs, even if only by a letter.</p>{% endif %}
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="theme">
+  <form method="post" enctype="multipart/form-data" class="book-form">
+    <label>The stamp (paste it)
+      <textarea name="stamp" rows="6" placeholder='{"kind": "Tripwire copy stamp", …}'></textarea>
+    </label>
+    <label>… or choose the stamp file
+      <input type="file" name="stamp_file" accept=".json,application/json">
+    </label>
+    <label>The copy, to check it matches (optional: the original file, or its words as a .txt file)
+      <input type="file" name="copy">
+    </label>
+    <button>Check</button>
+  </form>
+</section>
+
+<section class="theme">
+  <h2>Checking without Tripwire</h2>
+  <p class="meta">A stamp is signed with Ed25519. The signature covers every field except <code>signature</code> itself, written as
+     JSON with the keys in alphabetical order and no spaces. This Tripwire's public key is
+     <code class="key">{{ public_key }}</code> (key <code>{{ key_id }}</code>), and each stamp carries it too, so anyone can check the
+     signature with standard tools, even if this site is gone. The fingerprints are SHA-256.</p>
+</section>
+{% endblock %}

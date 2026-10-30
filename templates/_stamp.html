@@ -1,0 +1,32 @@
+{# The stamp of originality on a shelf item: what it proves, in plain words, and how to check it. #}
+<section class="theme stamp-box" id="stamp">
+  <h2>Stamp of originality</h2>
+  {% if stamp %}
+  <div class="stamp">
+    <p class="stamp-seal" aria-hidden="true">TRIPWIRE · STAMPED · {{ stamp.taken_at[:10] }}</p>
+    {% if stamp.how == 'fetched' %}
+      <p><strong>Fetched by Tripwire itself</strong> from <a href="{{ stamp.source_url }}" target="_blank" rel="noopener">{{ stamp.source_url }}</a>
+         on {{ stamp.taken_at[:10] }} at {{ stamp.taken_at[11:19] }} UTC.</p>
+    {% else %}
+      <p><strong>Uploaded by its owner</strong> on {{ stamp.taken_at[:10] }} at {{ stamp.taken_at[11:19] }} UTC.
+         Tripwire didn't fetch this one itself, so the stamp proves when it was kept and that it hasn't changed since, not where it came from.</p>
+    {% endif %}
+    {% if stamp.wikipedia_version %}<p>The exact Wikipedia version: <a href="{{ stamp.wikipedia_version }}" target="_blank" rel="noopener">{{ stamp.wikipedia_version }}</a>
+       (anyone can open it on Wikipedia and compare).</p>{% endif %}
+    <dl class="stamp-facts">
+      {% if stamp.file_sha256 %}<dt>Fingerprint of the file</dt><dd><code>{{ stamp.file_sha256 }}</code> ({{ stamp.file_name }})</dd>{% endif %}
+      {% if stamp.text_sha256 %}<dt>Fingerprint of the words</dt><dd><code>{{ stamp.text_sha256 }}</code>{% if stamp.text_added_at %} (words read on the owner's device on {{ stamp.text_added_at[:10] }}){% endif %}</dd>{% endif %}
+      <dt>Signed by</dt><dd>Tripwire, key <code>{{ stamp.key_id }}</code></dd>
+    </dl>
+  </div>
+  <p class="meta">A fingerprint changes completely if even one letter of the copy changes, and only Tripwire can sign a stamp.
+     So the stamp shows this exact copy was {{ 'fetched' if stamp.how == 'fetched' else 'kept' }} on this date and hasn't been touched since.
+     For extra proof that doesn't depend on Tripwire, also keep a public copy with the Internet Archive.</p>
+  <div class="actions">
+    <a class="button" href="{{ url_for('shelf_stamp', item_id=item.id) }}">Download the stamp</a>
+    <a class="link-button" href="{{ url_for('verify') }}">How to check a stamp</a>
+  </div>
+  {% else %}
+  <p class="meta">This copy was kept before stamps existed, so it has none. Copies kept from now on are stamped.</p>
+  {% endif %}
+</section>

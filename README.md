@@ -82,6 +82,7 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/humancheck.py` | The sign-up page's own "are you human?" check |
 | `tripwire/live.py`, `templates/_live.html` | Live watch (top of the Watching page): checks a page every few minutes while it's open |
 | `tripwire/shelf.py`, `templates/export/` | My shelf, and "Take my shelf with me": the ZIP and Kiwix (ZIM) downloads |
+| `tripwire/stamp.py`, `templates/verify.html` | Stamps of originality: signed proof of where and when a copy was taken, and the public “Check a stamp” page |
 | `tripwire/before.py` | The “Test against Kiwix” and “Test against Internet Archive” buttons: compare a page with an older copy |
 | `tripwire/i18n.py`, `translations/` | Languages: English for now; checked translations go in `translations/` |
 | `templates/_intro.html`, `public/static/intro.js` | The opening: binary rain, the purple rabbit, "Trip the wires" |
@@ -142,6 +143,8 @@ Summaries go out during the daily run: daily ones every day, weekly ones on Mond
 **Visitors without an account (optional setting):** anyone can try Tripwire without signing up. To stop bots flooding the database, at most 300 new guest visits a hour are allowed across the whole site (nobody is tracked to do this); after that, visitors are asked to make an account. Change the number with a `GUESTS_PER_HOUR` setting. Guests' shelves hold 10 MB, and their things are deleted 3 days after their visit.
 
 **Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
+
+**Stamps of originality:** no setup needed. Stamps are signed with a key made from `TRIPWIRE_SECRET`, so keep that setting the same: if it changes, older stamps will show as "made by a different Tripwire site". (To keep stamps working even if you change `TRIPWIRE_SECRET`, set `TRIPWIRE_STAMP_SECRET` once and never change it.)
 
 **My shelf and Kiwix:** no setup needed. My shelf keeps people's own copies (up to 60 MB each, in the database). "Take my shelf with me" downloads it as a ZIP (open `index.html` in any browser) or a ZIM file for **[Kiwix](https://kiwix.org/en/)**, the free app that reads whole libraries offline. The “Test against Kiwix” and “Test against Internet Archive” buttons (next to everything you watch) read older Wikipedia articles from library.kiwix.org and older web pages from the Internet Archive, and offer similar ones when there's no exact copy.
 

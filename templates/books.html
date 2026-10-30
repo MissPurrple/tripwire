@@ -185,7 +185,8 @@
     document.getElementById("book-wait").hidden = false;
     document.body.classList.add("is-loading");
     ready = true;
-    bookForm.requestSubmit ? bookForm.requestSubmit() : bookForm.submit();
+    // Send it a moment later: browsers ignore a second send while they're still handling the first click.
+    setTimeout(function () { bookForm.requestSubmit ? bookForm.requestSubmit() : bookForm.submit(); }, 0);
   });
   // Pick up any comparison that was interrupted (for example, the page was closed early).
   document.querySelectorAll("[data-unfinished]").forEach(function (el) {

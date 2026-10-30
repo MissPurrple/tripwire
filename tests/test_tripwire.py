@@ -117,7 +117,7 @@ class CheckerTests(unittest.TestCase):
         if self.db_path.startswith("postgres"):
             import psycopg
             with psycopg.connect(self.db_path, autocommit=True) as conn:
-                conn.execute("DROP TABLE IF EXISTS shelf_items, before_checks, feedback, stats_cache, book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
+                conn.execute("DROP TABLE IF EXISTS site_keys, shelf_items, before_checks, feedback, stats_cache, book_jobs, book_comparisons, archive_copies, entries, watches, themes, users CASCADE")
         self.tw = Tripwire(self.db_path)
         self.user = self.tw.create_user("purple@example.org", "correct horse")
         FakeWikipedia.articles = {"Warli": [
@@ -1455,18 +1455,23 @@ class EmailAndAboutTests(CheckerTests):
                                   for n, title in enumerate(sum(self.tw.DEMO_THEMES.values(), []) + self.tw.DEMO_SINGLE_LINKS)}
         with mock.patch.object(sources, "_get", fake_video_site(player=youtube_player(title="Me at the zoo"))):
             response = self.client.post("/demo-data")
-        self.assertIn("/books/jobs/", response.headers["Location"])  # straight to the Frankenstein comparison
+        self.assertTrue(response.headers["Location"].endswith("/books#books"))  # both book comparisons start there
         totals = self.tw.totals()
-        self.assertEqual(totals["watched"], 11)  # 10 articles + 1 video
-        self.assertEqual(totals["changes"], 10)
-        job = self.tw.conn.execute("SELECT title, link_a, link_b FROM book_jobs").fetchone()
-        self.assertIn("Frankenstein", job["title"])
-        self.assertIn("41445", job["link_a"])
+        self.assertEqual(totals["watched"], 6)  # two articles per theme, one single link, one video
+        self.assertEqual(totals["changes"], 5)
+        for theme in self.tw.DEMO_THEMES.values():
+            self.assertEqual(len(theme), 2)  # never more than two per section
+        jobs = self.tw.conn.execute("SELECT title, link_a, link_b FROM book_jobs ORDER BY id").fetchall()
+        self.assertEqual(len(jobs), 2)
+        self.assertIn("Frankenstein", jobs[0]["title"])
+        self.assertIn("41445", jobs[0]["link_a"])
+        self.assertIn("Origin of Species", jobs[1]["title"])
+        self.assertTrue(jobs[1]["link_a"].endswith("/pg1228.txt") and jobs[1]["link_b"].endswith("/pg2009.txt"))
         # Pressing it again adds nothing new.
         with mock.patch.object(sources, "_get", fake_video_site(player=youtube_player(title="Me at the zoo"))):
             self.client.post("/demo-data")
-        self.assertEqual(self.tw.totals()["watched"], 11)
-        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM book_jobs").fetchone()["n"], 1)
+        self.assertEqual(self.tw.totals()["watched"], 6)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM book_jobs").fetchone()["n"], 2)
         # Only this account was touched.
         other = self.tw.create_user("other@example.org", "another password")
         self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM themes WHERE user_id = ?", (other,)).fetchone()["n"], 0)
@@ -1596,17 +1601,23 @@ KIWIX_CATALOG = """<?xml version="1.0" encoding="UTF-8"?>
 
 def fake_response(status=200, text="", content=None, content_type="text/html", url="", data=None):
     return mock.Mock(status_code=status, text=text, content=content if content is not None else text.encode(),
-                     headers={"Content-Type": content_type}, url=url, json=lambda: data or {})
+                     headers={"Content-Type": content_type}, url=url, json=lambda: data or {}, history=[])
 
 
-def fake_kiwix_and_archive(kiwix_article=None, archive_text=None):
-    """A pretend library.kiwix.org and Internet Archive."""
+def fake_kiwix_and_archive(kiwix_article=None, archive_text=None, kiwix_raw=None):
+    """A pretend library.kiwix.org and Internet Archive. `kiwix_raw` is what Kiwix's raw
+    address sends instead of the article (a robot check, say)."""
+    seen = []
+
     def get(url, params=None, **kwargs):
+        seen.append(url)
         if url.endswith("/catalog/v2/entries"):
             name = params["name"]
             return fake_response(text=KIWIX_CATALOG if name == "wikipedia_en_all" else "<feed xmlns='http://www.w3.org/2005/Atom'/>",
                                  content_type="application/atom+xml")
-        if "/content/wikipedia_en_all_maxi_2024-01/" in url:
+        if "wikipedia_en_all_maxi_2024-01/" in url:
+            if kiwix_raw is not None:
+                return fake_response(text=kiwix_raw, url=url)
             if kiwix_article and url.endswith("/A/Warli"):
                 return fake_response(text=kiwix_article, url=url)
             if kiwix_article and url.endswith("/A/Warli_people"):
@@ -1632,6 +1643,7 @@ def fake_kiwix_and_archive(kiwix_article=None, archive_text=None):
         if url.startswith("https://web.archive.org/web/20251020120000id_/"):
             return fake_response(text=archive_text or "<p>Clinic hours: every day.</p>")
         raise AssertionError("unexpected request: " + url)
+    get.seen = seen
     return get
 
 
@@ -1850,7 +1862,7 @@ class ShelfTests(CheckerTests):
         self.assertIn("every day", page)
 
     def test_test_against_kiwix_offers_similar_articles(self):
-        kiwix_page = "<html><body><p>The Warli are an Adivasi people of Maharashtra.</p></body></html>"
+        kiwix_page = "<html><head><title>Warli</title></head><body><p>The Warli are an Adivasi people of Maharashtra.</p></body></html>"
         self.edit_warli()
         with mock.patch.object(sources, "_get", fake_kiwix_and_archive(kiwix_article=None)):
             page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "kiwix"}).data.decode()
@@ -1863,6 +1875,57 @@ class ShelfTests(CheckerTests):
             page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "kiwix",
                                                      "kiwix_path": "A/Warli_people"}, follow_redirects=True).data.decode()
         self.assertIn("“Warli people” in Kiwix&#39;s offline English Wikipedia (January 2024)", page)
+
+    def test_kiwix_is_read_from_its_raw_address(self):
+        """Kiwix's "raw" address sends the page exactly as stored in the offline copy."""
+        page = "<html><head><title>Warli</title></head><body><h1>Warli</h1><p>The Warli are an Adivasi people of Maharashtra.</p></body></html>"
+        self.edit_warli()
+        fake = fake_kiwix_and_archive(kiwix_article=page)
+        with mock.patch.object(sources, "_get", fake):
+            result = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "kiwix"},
+                                      follow_redirects=True).data.decode()
+        self.assertIn("https://library.kiwix.org/raw/wikipedia_en_all_maxi_2024-01/content/A/Warli", fake.seen)
+        self.assertIn("What was compared", result)
+        self.assertIn("The Warli are an Adivasi people of Maharashtra.", result)  # the older copy's own words
+        self.assertIn("The page's own title: “warli", result)
+        self.assertIn("Wikipedia&#39;s version 2", result)  # today's exact version, which anyone can open
+
+    def test_robot_check_pages_are_never_compared(self):
+        """Basotho was once compared with ~59 words of a "prove you're not a bot" page. Never again."""
+        robot_check = ("<html><head><title>Making sure you&#39;re not a bot!</title></head><body><h1>Making sure you're not a bot!</h1>"
+                       "<p>You are seeing this because the administrator has set up Anubis to protect the server against AI companies "
+                       "aggressively scraping websites. Please enable JavaScript.</p></body></html>")
+        self.edit_warli()
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive(kiwix_raw=robot_check)):
+            page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "kiwix"}).data.decode()
+        self.assertIn("robot check", page)
+        self.assertNotIn("What was compared", page)
+        self.assertIn("Compare with Wikipedia's version from 2024-01-15", page)
+        self.assertIn("Kiwix's site didn't let Tripwire in", page)  # an honest way round it
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM before_checks").fetchone()["n"], 0)
+
+    def test_a_page_with_the_wrong_title_is_not_the_article(self):
+        other = "<html><head><title>Main Page</title></head><body><p>Welcome to Wikipedia, the free encyclopedia.</p></body></html>"
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive(kiwix_raw=other)):
+            page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "kiwix"}).data.decode()
+        self.assertIn("has no article called “Warli”", page)
+
+    def test_a_suspiciously_short_older_copy_is_refused(self):
+        FakeWikipedia.articles["Warli"].append({"revid": 3, "user": "C", "comment": "long", "text": "The Warli paint. " * 400})
+        tiny = "<html><head><title>Warli</title></head><body><p>Warli. Loading.</p></body></html>"
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive(kiwix_article=tiny)):
+            page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "kiwix"},
+                                    follow_redirects=True).data.decode()
+        self.assertIn("almost certainly not the real page", page)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM before_checks").fetchone()["n"], 0)
+
+    def test_compare_with_wikipedias_own_version_from_a_date(self):
+        self.edit_warli()
+        page = self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "wikipedia_date",
+                                                 "on_date": "2026-10-15"}, follow_redirects=True).data.decode()
+        self.assertIn("Wikipedia&#39;s own saved version from 2026-10-01 (as it was on 2026-10-15, the date of Kiwix&#39;s copy)", page)
+        self.assertIn("https://en.wikipedia.org/w/index.php?oldid=1", page)  # the exact old version, on Wikipedia itself
+        self.assertIn("Gujarat", page)
 
     def test_kiwix_is_only_for_wikipedia(self):
         pages = {"https://news.example.org/": {"status": "ok", "text": "Today's news."}}
@@ -1888,7 +1951,87 @@ class ShelfTests(CheckerTests):
         old = "<html><body><p>The Warli are an Adivasi people.</p></body></html>"
         with mock.patch.object(sources, "_get", fake_kiwix_and_archive(archive_text=old)):
             self.client.post("/before", data={"url": "https://en.wikipedia.org/wiki/Warli", "source": "archive"})
-        self.assertIn("Last Internet Archive test", self.client.get("/watching").data.decode())  # the result, next to it
+        self.assertNotIn("Last Internet Archive test", self.client.get("/watching").data.decode())  # results don't pile up there
+
+    def stamp_of(self, item_id):
+        return self.client.get(f"/shelf/{item_id}/stamp.json")
+
+    def test_uploaded_copies_are_stamped_honestly(self):
+        import io, json
+        words = b"Government Gazette, Notice 12: the road to Semonkong will close. " * 3
+        page = self.upload("gazette.txt", words).data.decode()
+        self.assertIn("Stamp of originality", page)
+        self.assertIn("Uploaded by its owner", page)  # Tripwire didn't fetch it, and says so
+        item = self.tw.conn.execute("SELECT id FROM shelf_items").fetchone()["id"]
+        stamp_file = self.stamp_of(item)
+        self.assertIn("attachment", stamp_file.headers["Content-Disposition"])
+        stamp = json.loads(stamp_file.data)
+        self.assertEqual((stamp["kind"], stamp["how"], stamp["file_name"]), ("Tripwire copy stamp", "uploaded", "gazette.txt"))
+        from tripwire import stamp as stamps
+        self.assertEqual(stamp["file_sha256"], stamps.fingerprint(words))
+        # Anyone can check it, no account needed.
+        self.client.post("/logout")
+        result = self.client.post("/verify", data={"stamp": stamp_file.data.decode(), "copy": (io.BytesIO(words), "gazette.txt")},
+                                  content_type="multipart/form-data").data.decode()
+        self.assertIn("✓ Genuine stamp", result)
+        self.assertIn("is exactly the stamped file", result)
+        result = self.client.post("/verify", data={"stamp": stamp_file.data.decode(), "copy": (io.BytesIO(words + b"!"), "edited.txt")},
+                                  content_type="multipart/form-data").data.decode()
+        self.assertIn("is not the stamped copy", result)  # one extra character, and it no longer matches
+
+    def test_a_changed_stamp_is_caught(self):
+        import json
+        self.upload("memo.txt", b"Memo from the Ministry of Local Government. " * 3)
+        item = self.tw.conn.execute("SELECT id FROM shelf_items").fetchone()["id"]
+        stamp = json.loads(self.stamp_of(item).data)
+        for field, fake in [("taken_at", "2020-01-01T00:00:00Z"), ("source_url", "https://gov.example.ls/real.pdf"), ("how", "fetched")]:
+            forged = dict(stamp, **{field: fake})
+            result = self.client.post("/verify", data={"stamp": json.dumps(forged)}).data.decode()
+            self.assertIn("✗ Not a genuine stamp", result, field)
+        self.assertIn("isn&#39;t a stamp", self.client.post("/verify", data={"stamp": "hello"}).data.decode())
+        from tripwire import stamp as stamps
+        with mock.patch.dict(os.environ, {"TRIPWIRE_STAMP_SECRET": "another site"}):
+            other = stamps.Stamper(self.tw.conn).make(title="x", how="uploaded", taken_at="2026-10-30T00:00:00Z")
+        self.assertIn("different Tripwire site", self.client.post("/verify", data={"stamp": json.dumps(other)}).data.decode())
+
+    def test_copies_fetched_by_tripwire_say_where_from(self):
+        import json
+        self.edit_warli()
+        with mock.patch.object(sources, "_get", fake_kiwix_and_archive()):
+            page = self.client.post("/shelf/link", data={"url": "https://en.wikipedia.org/wiki/Warli"}, follow_redirects=True).data.decode()
+        self.assertIn("Fetched by Tripwire itself", page)
+        item = self.tw.conn.execute("SELECT id FROM shelf_items").fetchone()["id"]
+        stamp = json.loads(self.stamp_of(item).data)
+        self.assertEqual(stamp["how"], "fetched")
+        self.assertEqual(stamp["source_url"], "https://en.wikipedia.org/wiki/Warli")
+        self.assertEqual(stamp["wikipedia_version"], "https://en.wikipedia.org/w/index.php?oldid=2")  # anyone can open it
+
+    def test_words_read_later_are_added_to_the_stamp(self):
+        import json
+        self.upload("photo.jpg", b"\xff\xd8\xff fake photo")
+        item = self.tw.conn.execute("SELECT id FROM shelf_items").fetchone()["id"]
+        before = json.loads(self.stamp_of(item).data)
+        self.assertIsNone(before["text_sha256"])
+        self.client.post(f"/shelf/{item}/text", json={"text": "Words in the photo.", "pages": 1})
+        after = json.loads(self.stamp_of(item).data)
+        self.assertEqual(after["taken_at"], before["taken_at"])  # still the moment it was kept
+        self.assertEqual(after["file_sha256"], before["file_sha256"])
+        self.assertIn("text_added_at", after)
+        self.assertIn("✓ Genuine stamp", self.client.post("/verify", data={"stamp": json.dumps(after)}).data.decode())
+
+    def test_stamps_travel_with_the_download(self):
+        import io, json, zipfile
+        self.upload("gazette.txt", b"Ha Mohale is renamed. " * 10, title="Gazette 12")
+        z = zipfile.ZipFile(io.BytesIO(self.client.get("/shelf/download.zip").data))
+        stamp_path = "My-shelf/stamps/0001-Gazette-12.stamp.json"
+        self.assertIn(stamp_path, z.namelist())
+        self.assertIn("Stamp of originality", z.read("My-shelf/items/0001-Gazette-12.html").decode())
+        self.assertIn("/verify", z.read("My-shelf/items/0001-Gazette-12.html").decode())
+        # The words in the download can be checked against the stamp.
+        result = self.client.post("/verify", data={"stamp": z.read(stamp_path).decode(),
+                                                   "copy": (io.BytesIO(z.read("My-shelf/text/0001-Gazette-12.txt")), "words.txt")},
+                                  content_type="multipart/form-data").data.decode()
+        self.assertIn("holds exactly the stamped words", result)
 
     def test_kiwix_catalogue(self):
         from tripwire import before

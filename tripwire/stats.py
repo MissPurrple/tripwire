@@ -218,5 +218,5 @@ def _open_library_year(year):
                 "digital": count(f"first_publish_year:{span} AND has_fulltext:true")}
     except sources.SourceError as exc:
         return str(exc)
-    except ValueError:
+    except (ValueError, TypeError, AttributeError):
         return "Open Library's answer wasn't in the expected format."

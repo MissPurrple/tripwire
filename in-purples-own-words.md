@@ -361,3 +361,11 @@ closes; an account keeps them); the opening plays **once per visit**; the voice 
 > As the sample for the most changes that were made, preferably the most recent one. Maybe we can do two books.
 >
 > There should only be two pre-population links per section/block. Right now, you're giving like five, and it just makes it so full and so messy. ... We don't want to bombard people
+
+## 19. A first-time tour (30 Oct 2026)
+
+> We need to add a FTUE flow so that a new user gets a general idea of how to use the site, how it functions, how it moves, etc. Don't show too many steps in the FTUE, but it should be there. It should, however, also have a skip option in case somebody doesn't want to watch it.
+>
+> It is absolutely, absolutely necessary so that a new user knows how to make their way around, because even I sometimes get confused, especially when there are all those examples in there. We need to make it clean and easy to move around.
+>
+> if there are any sections that you feel could use some cleaning up in terms of how they move, so that it's not too clunky or too chunky or too much info, suggest them, and then we can see if we can fix them.

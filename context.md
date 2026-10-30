@@ -214,3 +214,11 @@
 - Test results no longer listed under watched items.
 - Examples: two articles per theme (Purple: two per section, not five); second book: Darwin's Origin of Species 1859 (#1228)
   vs 1872 (#2009). Most famous recent case (Roald Dahl, 2023) is under copyright: no free copies to compare.
+
+## Built 30 Oct: first-time tour
+- Four steps (Watching, My shelf, Changes, Books & videos), after the opening + read-aloud question, once per device
+  (localStorage "tripwire-tour"). Skip button / Escape. "Take the tour" in the footer replays it. Last step: "Try it with
+  real examples" or "I'll explore on my own". Phones: points at Menu. Files: templates/_tour.html, public/static/tour.js.
+- Clean-up suggestions given to Purple (not built, waiting for Purple's choice): shelf items first with add forms folded
+  away; one add form on Watching instead of one per theme; fewer buttons per watched item (a "More" menu); Changes filters
+  as a dropdown; shorter notes on Books & videos.

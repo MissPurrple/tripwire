@@ -1473,6 +1473,13 @@ class EmailAndAboutTests(CheckerTests):
         self.assertIn('href="#feedback">Tried it? Tell us what you think', about)
         self.assertIn('id="feedback"', about)
 
+    def test_about_tells_the_artizen_case_honestly(self):
+        page = self.client.get("/about").data.decode()
+        self.assertIn("A real case: Artizen (October 2026)", page)
+        self.assertIn("github.com/ZAODEVZ/zaoartizen", page)  # sourced
+        self.assertIn("haven&#39;t been confirmed by Artizen", page.replace("haven't", "haven&#39;t"))
+        self.assertIn("One honest limit", page)  # no claim Tripwire would have caught a page it can't read
+
     def test_feedback_reaches_only_the_owner(self):
         self.client.post("/feedback", data={"tried": "Books", "message": "Loved the Frankenstein comparison!"})
         self.assertEqual(self.tw.totals()["feedback"], 1)

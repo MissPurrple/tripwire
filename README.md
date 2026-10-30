@@ -155,3 +155,6 @@ Summaries go out during the daily run: daily ones every day, weekly ones on Mond
 ## Next up
 - **"Watch this with Tripwire" browser extension:** one click to add the page you're on.
 - **A Sesotho voice** for read aloud, and Sesotho-trained text reading for scanned pages.
+
+## Licence
+Tripwire is free and open source under the [MIT License](LICENSE) (wording from [mit-license.org](https://mit-license.org/)): anyone may use, copy, change and share it, as long as the copyright notice stays with it. The fonts keep their own licence (SIL Open Font License).

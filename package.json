@@ -2,6 +2,7 @@
   "name": "tripwire-browser-reading",
   "private": true,
   "description": "Only for api/render.js: reading pages the way a browser does. The rest of Tripwire is Python.",
+  "license": "MIT",
   "engines": { "node": ">=20.11.0" },
   "dependencies": {
     "@sparticuz/chromium": "149.0.0",

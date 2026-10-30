@@ -26,21 +26,32 @@ Feedback inbox). Stats is linked at the bottom of every page. The summary + emai
    Phone: the screen recorder in the quick settings.
 9. **Just before:** Do Not Disturb on, other tabs closed, browser zoomed to 125% so the back row can read it, charger in.
 
-## The demo (3 minutes)
+## The demo (aim: 3 min 45 s; the slot is about 5 minutes)
+
+Measured on the real site: the opening takes ~8 s before TRIP THE WIRES appears (+3 s to the computer). The green
+"entering unrestricted knowledge preservation" screen holds ~5 s every time you arrive at Books & videos from another page:
+talk over it. Have each tab already open so you only switch tabs (no loading, no waiting).
 
 | Time | Show (click) | Say (in your own words) |
 |---|---|---|
-| 0:00–0:20 | **The opening** in the private window: binary rain, TRIPWIRE, ARCHIVE & PRESERVE, the purple rabbit hops in. Click **TRIP THE WIRES**. | "The record of the world is quietly changing. Pages vanish, articles are rewritten, books are edited between editions, and most of the time nobody notices." |
-| 0:20–0:40 | The box computer boots. | "Tripwire is for the people whose stories are thinnest online and easiest to rewrite: Indigenous communities and the people who document them, independent journalists, archivists. As AI learns from whatever survives, whoever edits last decides what's true." |
-| 0:40–1:20 | **Changes** → your star change: before and after, the name-spelling flag. Then the **email** in your inbox. | "Tripwire watches what you choose. When something changes, it keeps the before and after, judges how big it is, and flags names spelled differently, because that can mean a language is spreading or fading. It doesn't ping you: one calm summary, daily, weekly or monthly." |
-| 1:20–1:40 | **The Kiwix result.** | "And it can check today's article against Kiwix's offline copy of Wikipedia: a dated copy nobody can quietly edit." |
-| 1:40–2:05 | **Books & videos** → Frankenstein: the chart of change types, the most interesting changes. | "Mary Shelley rewrote her own book between 1818 and 1831. Tripwire shows exactly how. Imagine the quiet rewrites nobody is checking." |
-| 2:05–2:40 | **My shelf:** the stamp of originality, then the **locked vault item**, then the **download** (ZIP / Kiwix). | "Keep your own copy, stamped with when and where it came from. Lock the most private things in your vault: they're scrambled on your device, and Tripwire can't read them. And take everything with you as one file that works with no internet, on a phone, a USB stick, or a Kiwix hotspot in a village." |
-| 2:40–3:00 | **About** → Deliberate choices, How Tripwire changed. | "No AI inside, on purpose. No account needed. Everyone gets a random name, never their email. Feedback is anonymous and only I can read it. This is a tool built for truth, so it's built to not need trust. It's live today, and I'd love help: testers, translators, Wikipedians, archivists." |
+| 0:00–0:25 | **The opening** (private window, press Enter in the address bar): rain, TRIPWIRE, ARCHIVE & PRESERVE, the rabbit hops in. Click **TRIP THE WIRES**. | While it plays: "The record of the world is quietly changing. Pages vanish, articles get rewritten to tell a different story, books change between editions, and most of the time, nobody notices." |
+| 0:25–0:50 | The computer boots. (If the read-aloud question pops up, click "No, thanks"; if the tour starts, "Skip tour".) | "Tripwire is for the people whose stories are thinnest online and easiest to rewrite: Indigenous communities and the people who document them, independent journalists, archivists. As AI learns from whatever survives, whoever edits last decides what's true." |
+| 0:50–1:40 | Tab: **Changes** (the summary at the top), then your **star change** (the name flag, red and green). Then the **email** tab. | "Tripwire watches what you choose. When something changes, it keeps the before and after, judges how big it is, and flags names spelled differently: here Moshoeshoe became Moshweshwe (or your real example), which can mean a language is spreading, or fading. No pings: one calm summary, daily, weekly or monthly." |
+| 1:40–2:00 | Tab: **the Kiwix result**. | "And it can test today's article against Kiwix's dated offline copy of Wikipedia: a copy nobody can quietly edit." |
+| 2:00–2:30 | Tab: **the Frankenstein result** (already open, so no entry screen): the chart, the most interesting changes. | "Books too. Mary Shelley rewrote her own book between 1818 and 1831; Darwin changed his six times. Tripwire shows exactly how. Imagine the quiet rewrites nobody is checking." |
+| 2:30–3:15 | Tab: **My shelf** → the item with its **stamp of originality**; then the **locked vault item**; then point at **Download (ZIP / Kiwix)**. | "Keep your own copy, stamped with when and where it came from, so anyone can check it later. Lock the most private things in your vault: scrambled on your device, Tripwire can't read them. And take it all with you as one file that works with no internet: a phone, a USB stick, a Kiwix hotspot in a village." |
+| 3:15–3:45 | Tab: **About** (the three lines at the top, then Deliberate choices). | "No AI inside, on purpose. No account needed. Everyone gets a random name, never their email. Feedback is anonymous, and only I can read it. A tool for truth should not need your trust. It's live today: I'd love testers, translators, Wikipedians and archivists." + your tester's quote. |
 
-**Shorter slot (2 minutes):** skip the Kiwix result and the books. **Longer (5 minutes):** add Stats (humans vs bots
-right now; books nobody counted, like in Lesotho), the access tools (read aloud, calm mode), and a public copy at the
-Internet Archive ("asked twice, because some knowledge should stay private").
+Spare ~1 minute for questions, or add one of: **Stats** (humans vs bots right now; books nobody counted, like in
+Lesotho) or **the Access button** (read aloud, calm mode). If you run long, cut the Kiwix tab first, then the book.
+
+## Found on the walkthrough (30 Oct)
+- Everything on the demo path works, on a laptop and on a phone. The one real problem (the Stats page could crash on an
+  odd answer from Open Library) is fixed and live.
+- "Try it with real examples" lands on Books & videos (with the green entry screen) while the books compare in the
+  background; the Wikipedia examples are on Watching. Give it a few minutes before the pitch.
+- "Test against Kiwix" is inside each watched item's **More ▾** menu.
+- First visit order: the opening → the read-aloud question → the 4-step tour. In the pitch window, answer/skip them quickly.
 
 ## How it maps to the judging
 - **Value (30%):** name the people; show a real change on a real Indigenous-community article; your tester's quote.

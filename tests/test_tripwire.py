@@ -200,7 +200,7 @@ class CheckerTests(unittest.TestCase):
 
     def test_web_page_change_and_removal(self):
         pages = {"https://example.org/history": {"status": "ok", "text": "Founded by the village elders in 1902."}}
-        with mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+        with mock.patch.object(sources, "fetch_page", lambda url, browser=None: pages[url]):
             watch = self.tw.add_watch(self.theme, "https://example.org/history")
             self.assertIsNone(self.tw.check_watch(watch))
             pages["https://example.org/history"] = {"status": "ok", "text": "Founded in 1902."}
@@ -265,7 +265,7 @@ class CheckerTests(unittest.TestCase):
     def test_every_visit_noise_is_not_a_change(self):
         """Bits like "updated 5 minutes ago" change on every visit; the daily check ignores them."""
         pages = {"https://news.example.org/lesotho": {"status": "ok", "text": "Lesotho news\nUpdated 5 minutes ago\nThe dam opened."}}
-        with mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+        with mock.patch.object(sources, "fetch_page", lambda url, browser=None: pages[url]):
             watch = self.tw.add_watch(self.theme, "https://news.example.org/lesotho")
             pages["https://news.example.org/lesotho"]["text"] = "Lesotho news\nUpdated 2 hours ago\n1,204 people watching now\nThe dam opened."
             self.assertIsNone(self.tw.check_watch(watch))
@@ -279,7 +279,7 @@ class CheckerTests(unittest.TestCase):
     def test_long_pages_are_compared_whole(self):
         long_text = " ".join(f"Chapter {i} tells of the river and the old stone house." for i in range(4000)) + " The end."
         pages = {"https://books.example.org/b.txt": {"status": "ok", "text": long_text}}
-        with mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+        with mock.patch.object(sources, "fetch_page", lambda url, browser=None: pages[url]):
             watch = self.tw.add_watch(self.theme, "https://books.example.org/b.txt")
             pages["https://books.example.org/b.txt"]["text"] = long_text.replace("The end.", "The new end.")
             self.assertIsNotNone(self.tw.check_watch(watch))  # a change after the first 200,000 characters
@@ -1478,7 +1478,7 @@ class EmailAndAboutTests(CheckerTests):
         self.assertIn("A real case: Artizen (October 2026)", page)
         self.assertIn("github.com/ZAODEVZ/zaoartizen", page)  # sourced
         self.assertIn("haven&#39;t been confirmed by Artizen", page.replace("haven't", "haven&#39;t"))
-        self.assertIn("One honest limit", page)  # no claim Tripwire would have caught a page it can't read
+        self.assertIn("the way a browser does", page)  # pages that fill in their words late can be read now
 
     def test_feedback_reaches_only_the_owner(self):
         self.client.post("/feedback", data={"tried": "Books", "message": "Loved the Frankenstein comparison!"})
@@ -1532,7 +1532,7 @@ class LiveWatchTests(CheckerTests):
         self.client = webapp.app.test_client()
         self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
         self.pages = {"https://news.example.org/live": {"status": "ok", "text": "Live: election day\nPolls opened at 7am. Updated 2 minutes ago"}}
-        fetch = mock.patch.object(sources, "fetch_page", lambda url: self.pages[url])
+        fetch = mock.patch.object(sources, "fetch_page", lambda url, browser=None: self.pages[url])
         fetch.start()
         self.addCleanup(fetch.stop)
 
@@ -1912,7 +1912,7 @@ class ShelfTests(CheckerTests):
         old = "<html><body><p>The clinic in Ha Mohale is open every day. Nurses: four.</p></body></html>"
         pages = {"https://health.example.ls/clinics": {"status": "ok", "text": "The clinic in Ha Mohale is open on Mondays. Nurses: one."}}
         with mock.patch.object(sources, "_get", fake_kiwix_and_archive(archive_text=old)), \
-                mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+                mock.patch.object(sources, "fetch_page", lambda url, browser=None: pages[url]):
             page = self.client.post("/before", data={"url": "https://health.example.ls/clinics", "source": "archive"},
                                     follow_redirects=True).data.decode()
         self.assertIn("the Internet Archive&#39;s copy (October 2025)", page)
@@ -1923,7 +1923,7 @@ class ShelfTests(CheckerTests):
     def test_internet_archive_offers_similar_saved_pages(self):
         pages = {"https://health.example.ls/clinics": {"status": "ok", "text": "Clinic hours: on Mondays."}}
         with mock.patch.object(sources, "_get", fake_kiwix_and_archive()), \
-                mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+                mock.patch.object(sources, "fetch_page", lambda url, browser=None: pages[url]):
             page = self.client.post("/before", data={"url": "https://health.example.ls/clinics", "source": "archive"}).data.decode()
             self.assertIn("No exact copy in the Internet Archive", page)
             self.assertIn('value="https://health.example.ls/clinic-hours"', page)  # a similar saved page
@@ -2004,7 +2004,7 @@ class ShelfTests(CheckerTests):
     def test_kiwix_is_only_for_wikipedia(self):
         pages = {"https://news.example.org/": {"status": "ok", "text": "Today's news."}}
         with mock.patch.object(sources, "_get", fake_kiwix_and_archive()), \
-                mock.patch.object(sources, "fetch_page", lambda url: pages[url]):
+                mock.patch.object(sources, "fetch_page", lambda url, browser=None: pages[url]):
             page = self.client.post("/before", data={"url": "https://news.example.org/", "source": "kiwix"},
                                     follow_redirects=True).data.decode()
         self.assertIn("Kiwix keeps offline copies of whole collections", page)
@@ -2149,6 +2149,123 @@ class BookLinkTests(CheckerTests):
         response = mock.Mock(status_code=200, headers={"Content-Type": "application/epub+zip"}, content=epub, url="https://b.example.org/x.epub")
         with mock.patch.object(sources, "_get", return_value=response):
             self.assertIn("Augustus Gloop was enormously fat", sources.fetch_page("https://b.example.org/x.epub")["text"])
+
+
+APP_SHELL_PAGE = ("<html><head><title>Playbook</title><script src='/app.js'></script></head>"
+                  "<body><div id=\"root\"></div><noscript>You need to enable JavaScript to run this app.</noscript></body></html>")
+RULES_TODAY = ("The Playbook. Creators sell Artifacts. Each sale can unlock match funding. "
+               "Early Exit is the creator's own choice. ") * 20
+
+
+def fake_site(pages):
+    """A pretend website: {url: html}."""
+    def get(url, **kwargs):
+        html = pages[url]
+        return mock.Mock(status_code=200, headers={"Content-Type": "text/html"}, text=html, content=html.encode(), url=url)
+    return get
+
+
+class BrowserReadingTests(CheckerTests):
+    """Pages that fill in their words after they open (like the Artizen Playbook) are read the way a browser does."""
+
+    def setUp(self):
+        super().setUp()
+        from tripwire import render
+        self.render = render
+        self.rendered = {"https://play.example.org/": RULES_TODAY}
+        self.calls = []
+
+        def fake_render(url):
+            self.calls.append(url)
+            if url not in self.rendered:
+                raise render.RenderError("Tripwire's browser couldn't be reached. It will try again next time.")
+            return {"text": self.rendered[url], "title": "Playbook", "url": url}
+        for name, value in (("render", fake_render), ("available", lambda: True)):
+            patcher = mock.patch.object(render, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.site = mock.patch.object(sources, "_get", fake_site({"https://play.example.org/": APP_SHELL_PAGE,
+                                                                     "https://news.example.org/": "<p>" + "Plain news. " * 200 + "</p>"}))
+        self.site.start()
+        self.addCleanup(self.site.stop)
+
+    def test_knows_which_pages_fill_in_later(self):
+        self.assertTrue(self.render.looks_unfinished(APP_SHELL_PAGE, sources.html_to_text(APP_SHELL_PAGE)))
+        normal = "<html><body>" + "<p>An ordinary article with its words in it.</p>" * 40 + "</body></html>"
+        self.assertFalse(self.render.looks_unfinished(normal, sources.html_to_text(normal)))
+
+    def test_a_page_that_fills_in_later_is_read_like_a_browser(self):
+        page = sources.fetch_page("https://play.example.org/")
+        self.assertTrue(page["browser"])
+        self.assertIn("Early Exit is the creator's own choice", page["text"])
+        plain = sources.fetch_page("https://news.example.org/")
+        self.assertFalse(plain["browser"])  # ordinary pages: no browser needed
+        self.assertEqual(self.calls, ["https://play.example.org/"])
+
+    def test_the_choice_is_remembered_and_failures_are_not_changes(self):
+        watch = self.tw.add_watch(self.theme, "https://play.example.org/")
+        row = self.tw.conn.execute("SELECT browser, baseline_text FROM watches WHERE id = ?", (watch,)).fetchone()
+        self.assertEqual(row["browser"], 1)
+        self.assertIn("Early Exit is the creator's own choice", row["baseline_text"])
+        # The wording changes: a real change, read the same way.
+        self.rendered["https://play.example.org/"] = RULES_TODAY.replace("Early Exit is the creator's own choice.",
+                                                                         "Artizen may elect Early Exit for any or all projects.")
+        entry = self.tw.check_watch(watch)
+        details = self.tw.conn.execute("SELECT details FROM entries WHERE id = ?", (entry,)).fetchone()["details"]
+        self.assertIn("Artizen may elect", details)
+        self.assertIn("for any or all projects", details)
+        # The browser is down one day: that day is skipped, never recorded as "everything was removed".
+        del self.rendered["https://play.example.org/"]
+        self.assertIsNone(self.tw.check_watch(watch))
+        status = self.tw.conn.execute("SELECT last_status FROM watches WHERE id = ?", (watch,)).fetchone()["last_status"]
+        self.assertIn("Couldn't check", status)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM entries").fetchone()["n"], 1)
+
+    def test_live_watch_keeps_reading_the_same_way(self):
+        from tripwire import live
+        first = live.check("https://play.example.org/")
+        self.assertTrue(first["browser"])
+        again = live.check("https://play.example.org/", first["text"], browser=True)
+        self.assertFalse(again["changed"])
+
+    def test_shelf_keeps_what_a_browser_shows(self):
+        from tripwire import shelf
+        with mock.patch("tripwire.books.fetch_book", return_value=("index.html", APP_SHELL_PAGE.encode())):
+            item = shelf.Shelf(self.tw.conn).add_link(self.user, "https://play.example.org/")
+        row = self.tw.conn.execute("SELECT text, text_from FROM shelf_items WHERE id = ?", (item,)).fetchone()
+        self.assertIn("Early Exit is the creator's own choice", row["text"])
+        self.assertIn("as a browser shows it", row["text_from"])
+
+
+class BrowserFunctionCallTests(unittest.TestCase):
+    """How Tripwire calls its own browser function (api/render.js)."""
+
+    def test_online_it_calls_its_own_browser_with_a_key(self):
+        from tripwire import render
+        env = {"VERCEL": "1", "TRIPWIRE_SECRET": "s3cret", "VERCEL_PROJECT_PRODUCTION_URL": "tripwire.example.org"}
+        sent = {}
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            sent.update(url=url, json=json, headers=headers)
+            return mock.Mock(status_code=200, json=lambda: {"text": "Words.", "title": "T", "url": json["url"]})
+        with mock.patch.dict(os.environ, env), mock.patch("requests.post", fake_post), \
+                mock.patch.object(sources, "_check_public", lambda url: None):
+            self.assertTrue(render.available())
+            self.assertEqual(render.render("https://play.example.org/")["text"], "Words.")
+        self.assertEqual(sent["url"], "https://tripwire.example.org/api/render")
+        self.assertEqual(sent["headers"]["X-Tripwire-Render"], render.key("s3cret"))
+        self.assertNotIn("s3cret", str(sent))  # the secret itself is never sent
+
+    def test_refusals_and_private_addresses(self):
+        from tripwire import render
+        env = {"TRIPWIRE_RENDER_URL": "https://render.example.org/api/render", "TRIPWIRE_SECRET": "s"}
+        with mock.patch.dict(os.environ, env), mock.patch.object(sources, "_check_public", lambda url: None), \
+                mock.patch("requests.post", return_value=mock.Mock(status_code=403, json=lambda: {"error": "Not allowed."})):
+            with self.assertRaises(render.RenderError) as caught:
+                render.render("https://play.example.org/")
+        self.assertIn("Not allowed", str(caught.exception))
+        with self.assertRaises(sources.SourceError):
+            render.render("http://127.0.0.1/admin")  # never inside a private network
 
 
 class SetupTests(unittest.TestCase):

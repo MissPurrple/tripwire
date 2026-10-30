@@ -59,8 +59,10 @@
   </ul>
   <p><strong>This is what Tripwire is for:</strong> watching the pages that hold the rules, keeping the before and after when the
      wording changes, and keeping your own stamped copy of the rules as they stood, so nobody has to piece them together after the
-     money is gone. One honest limit: a page that loads its words only after it opens, as the Playbook reportedly did, is hard for
-     Tripwire to read too. For a page like that, save it from your browser (as a PDF) and keep it on <a href="{{ url_for('shelf_page') }}">My shelf</a>.</p>
+     money is gone. And because the Playbook reportedly loaded its words only after it opened (which is why many archived copies are
+     empty), Tripwire now reads pages like that the way a browser does: it opens them in a real browser and keeps the words a person
+     would see. If that ever fails, Tripwire skips that day rather than recording an empty page, and you can always save a page from
+     your own browser (as a PDF) and keep it on <a href="{{ url_for('shelf_page') }}">My shelf</a>.</p>
   <p class="meta">Sources: The ZAO's public record of Artizen, with dated copies of the Playbook
      (<a href="https://github.com/ZAODEVZ/zaoartizen" target="_blank" rel="noopener">github.com/ZAODEVZ/zaoartizen</a>), and
      <a href="https://cryptobriefing.com/artizen-pauses-operations-art-usdc-withdrawals/" target="_blank" rel="noopener">Crypto Briefing</a>
@@ -216,6 +218,9 @@
         where and when it was taken.</li>
     <li><strong>Hard to find your way → a four-step tour.</strong> Even Tripwire's maker got lost sometimes. Now a first visit ends with
         a short tour of the menu (skip it any time, or take it again from the bottom of any page).</li>
+    <li><strong>Pages that fill in their words late → read the way a browser does.</strong> The Artizen case showed how a rules
+        page can load its words after it opens, so a plain download (and many archived copies) finds it empty. Now Tripwire opens
+        pages like that in a real browser, and keeps reading each page the same way every time, so the method never looks like a change.</li>
     <li><strong>Busy pages → calmer ones.</strong> One “Add something to watch” form instead of one per theme; the rarer actions on each
         watched item folded into “More”; your shelf's items near the top, with the forms folded away until you need them;
         one “Show” choice on Changes instead of nine buttons.</li>

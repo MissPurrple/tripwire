@@ -290,7 +290,7 @@ class Tripwire:
             row = dict(kind="wikipedia", lang=lang, target=rev["title"],
                        label=rev["title"] if lang == "en" else f"{rev['title']} ({lang} Wikipedia)",
                        baseline_ref=str(rev["revid"]), baseline_text=wiki.text_of(rev["revid"]),
-                       baseline_at=rev["timestamp"])
+                       baseline_at=rev["timestamp"], browser=0)
         else:
             if "://" not in target:
                 target = "https://" + target
@@ -298,16 +298,16 @@ class Tripwire:
             if page["status"] == "removed":
                 raise sources.SourceError("That page doesn't exist (it answered 'not found').")
             parsed = urlparse(target)
-            row = dict(kind="web", lang=None, target=target,
+            row = dict(kind="web", lang=None, target=target, browser=1 if page.get("browser") else 0,
                        label=(parsed.netloc + parsed.path).rstrip("/"),
                        baseline_ref=None, baseline_text=live.steady_text(page["text"], limit=None), baseline_at=db.now())
 
         return self.conn.insert(
             """INSERT INTO watches (theme_id, kind, label, lang, target, baseline_ref,
-                   baseline_text, baseline_at, last_status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Watching', ?)""",
+                   baseline_text, baseline_at, last_status, created_at, browser)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Watching', ?, ?)""",
             (theme_id, row["kind"], row["label"], row["lang"], row["target"], row["baseline_ref"],
-             row["baseline_text"], row["baseline_at"], db.now()))
+             row["baseline_text"], row["baseline_at"], db.now(), row["browser"]))
 
     def remove_watch(self, watch_id):
         self.conn.execute("DELETE FROM watches WHERE id = ?", (watch_id,))
@@ -371,7 +371,8 @@ class Tripwire:
                    "after_link": wiki.revision_url(latest["revid"])})
 
     def _check_web(self, watch):
-        page = sources.fetch_page(watch["target"])
+        # Always read the same way as when watching started, so a change of method never looks like a change.
+        page = sources.fetch_page(watch["target"], browser=bool(watch["browser"]))
         if page["status"] == "removed":
             return self._record_removal(watch, f"Page removed (answered {page['code']} not found)")
         # Leave out bits that change on every visit ("updated 5 minutes ago"), so they're never reported as changes.

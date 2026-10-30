@@ -25,16 +25,19 @@ def steady_text(text, limit=MAX_TEXT):
     return text[:limit] if limit else text
 
 
-def check(url, previous=None):
+def check(url, previous=None, browser=None):
     """Fetch the page now and compare it with `previous` (the text from the last
-    check). Returns {"text", "changed", "hunks", "added", "removed"} or
+    check). `browser` is what the first check decided (read like a browser or not),
+    sent back each time so every check reads the page the same way.
+    Returns {"text", "changed", "hunks", "added", "removed", "browser"} or
     {"gone": True} if the page no longer exists."""
-    page = sources.fetch_page(url)
+    page = sources.fetch_page(url, browser=browser)
     if page["status"] == "removed":
         return {"gone": True, "changed": previous is not None}
     text = steady_text(page["text"])
+    used = page.get("browser", False)
     if previous is None or text == previous:
-        return {"text": text, "changed": False, "hunks": [], "added": 0, "removed": 0}
+        return {"text": text, "changed": False, "hunks": [], "added": 0, "removed": 0, "browser": used}
     result = changes.compare(previous, text)
     return {"text": text, "changed": bool(result["hunks"]), "hunks": result["hunks"][:30],
-            "added": result["words_added"], "removed": result["words_removed"]}
+            "added": result["words_added"], "removed": result["words_removed"], "browser": used}

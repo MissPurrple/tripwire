@@ -244,9 +244,13 @@ class Wikipedia:
 # Ordinary web pages
 # ---------------------------------------------------------------------------
 
-def fetch_page(url):
-    """Download a web page. Returns {"status": "ok", "text": ...} or
-    {"status": "removed", "code": 404} when the page is gone."""
+def fetch_page(url, browser=None):
+    """Download a web page. Returns {"status": "ok", "text": ..., "browser": bool} or
+    {"status": "removed", "code": 404} when the page is gone.
+
+    browser: True = read it the way a browser does (this page fills in its words after it
+    opens; see render.py), False = never, None = decide now: only if the plain download
+    looks unfinished and a browser finds clearly more. "browser" in the result says which was used."""
     response = _get(url)
     if response.status_code in (404, 410):
         return {"status": "removed", "code": response.status_code}
@@ -262,8 +266,20 @@ def fetch_page(url):
         except books.BookError as exc:
             raise SourceError(str(exc)) from exc
     if kind.startswith("text/plain"):
-        return {"status": "ok", "text": response.text.strip()}
-    return {"status": "ok", "text": html_to_text(response.text)}
+        return {"status": "ok", "text": response.text.strip(), "browser": False}
+    html = response.text
+    text = html_to_text(html)
+    from . import render
+    if browser or (browser is None and render.looks_unfinished(html, text) and render.available()):
+        try:
+            seen = render.render(url)
+        except render.RenderError:
+            if browser:
+                raise  # this page needs a browser: better to skip today's check than record an empty page
+        else:
+            if browser or render.better(text, seen["text"]):
+                return {"status": "ok", "text": seen["text"].strip(), "browser": True}
+    return {"status": "ok", "text": text, "browser": False}
 
 
 def pdf_text(data):

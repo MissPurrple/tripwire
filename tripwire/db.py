@@ -194,6 +194,7 @@ ADDED_COLUMNS = [
     ("before_checks", "sealed", "TEXT"),                        # locked: the whole comparison, locked
     ("feedback", "sealed", "TEXT"),                             # locked to the site owner's key: only they can read it
     ("feedback", "signed_as", "TEXT"),                          # a username, only if the sender chose to sign
+    ("watches", "browser", "INTEGER NOT NULL DEFAULT 0"),           # 1 = read like a browser (the page fills in its words late)
 ]
 
 

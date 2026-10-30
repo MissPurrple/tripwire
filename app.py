@@ -545,7 +545,8 @@ def live_check():
         return jsonify(error="Checking too often. Tripwire waits at least a minute between checks."), 429
     session["live_last_check"] = time.time()
     try:
-        return jsonify(live.check(url, data.get("previous")))
+        browser = data.get("browser")
+        return jsonify(live.check(url, data.get("previous"), browser if isinstance(browser, bool) else None))
     except sources.SourceError as exc:
         return jsonify(error=str(exc)), 502
 

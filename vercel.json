@@ -1,6 +1,14 @@
 {
   "framework": "flask",
   "crons": [
-    { "path": "/cron", "schedule": "17 3 * * *" }
-  ]
+    {
+      "path": "/cron",
+      "schedule": "17 3 * * *"
+    }
+  ],
+  "functions": {
+    "api/render.js": {
+      "maxDuration": 30
+    }
+  }
 }

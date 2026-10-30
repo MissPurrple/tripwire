@@ -180,7 +180,17 @@ class Shelf:
         found = re.search(r"<title[^>]*>(.*?)</title>", page, re.S | re.I)
         text = sources.html_to_text(page) if page.lstrip()[:1] == "<" else page
         page_title = sources.html_to_text(found.group(1)) if found else url.split("://", 1)[1]
-        return self._insert(user_id, title or page_title, note, text, f"The web page, as it was on {db.now()[:10]}",
+        how = f"The web page, as it was on {db.now()[:10]}"
+        from . import render
+        if page.lstrip()[:1] == "<" and render.looks_unfinished(page, text) and render.available():
+            try:  # the page fills in its words after it opens: keep what a browser shows
+                seen = render.render(url)
+                if render.better(text, seen["text"]):
+                    text, how = seen["text"].strip(), f"The web page as a browser shows it, on {db.now()[:10]}"
+                    page_title = seen["title"] or page_title
+            except render.RenderError:
+                how += " (it may fill in more words in a browser)"
+        return self._insert(user_id, title or page_title, note, text, how,
                             source_url=url, watch_id=watch_id, before_check_id=before_check_id, how="fetched")
 
     def add_locked(self, user_id, sealed_title, sealed, data=None):

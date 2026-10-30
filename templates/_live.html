@@ -50,7 +50,7 @@
   var form = document.getElementById("live-form"), log = document.getElementById("live-log");
   var status = document.getElementById("live-status"), start = document.getElementById("live-start");
   var stop = document.getElementById("live-stop"), notifyButton = document.getElementById("live-notify");
-  var timer = null, countdown = null, previous = null, url = "", every = 120, endsAt = 0, unseen = 0;
+  var timer = null, countdown = null, previous = null, browser = null, url = "", every = 120, endsAt = 0, unseen = 0;
   var baseTitle = document.title;
 
   function now() { return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
@@ -96,7 +96,7 @@
     setStatus("CHECKING " + url + " …");
     fetch("{{ url_for('live_check') }}", {
       method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: url, previous: previous })
+      body: JSON.stringify({ url: url, previous: previous, browser: browser })
     }).then(function (r) { return r.json(); }).then(function (result) {
       if (result.error) { addEntry([line("[" + now() + "] " + result.error, "dim")]); }
       else if (result.gone) { addEntry([line("[" + now() + "] THE PAGE IS GONE (not found).", "big")]); beep(); finish("Live watch ended: the page no longer exists."); return; }
@@ -104,6 +104,7 @@
         if (previous === null) addEntry([line("[" + now() + "] Watching. First copy taken: " + result.text.split(/\s+/).length + " words.", "dim")]);
         else if (result.changed) showChange(result);
         previous = result.text;
+        browser = !!result.browser;   // keep reading it the same way every time
       }
       schedule();
     }).catch(function () { addEntry([line("[" + now() + "] Couldn't reach Tripwire. Trying again next time.", "dim")]); schedule(); });
@@ -129,7 +130,7 @@
   form.addEventListener("submit", function (event) {
     event.preventDefault();
     url = form.elements.url.value.trim(); every = +form.elements.every.value;
-    endsAt = Date.now() + form.elements["for"].value * 60000; previous = null; log.innerHTML = "";
+    endsAt = Date.now() + form.elements["for"].value * 60000; previous = null; browser = null; log.innerHTML = "";
     start.hidden = true; stop.hidden = false;
     form.querySelectorAll("input:not([name=sound]), select").forEach(function (el) { el.disabled = true; });
     check();

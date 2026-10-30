@@ -83,6 +83,7 @@ python -m unittest -v        # run the tests (no internet needed)
 | `tripwire/live.py`, `templates/_live.html` | Live watch (top of the Watching page): checks a page every few minutes while it's open |
 | `tripwire/shelf.py`, `templates/export/` | My shelf, and "Take my shelf with me": the ZIP and Kiwix (ZIM) downloads |
 | `templates/_tour.html`, `public/static/tour.js` | The first-time tour: four short steps around the menu, shown once per device, skippable |
+| `tripwire/render.py`, `api/render.js` | Reading pages the way a browser does, for pages that fill in their words after they open (a small headless Chromium on Vercel) |
 | `tripwire/stamp.py`, `templates/verify.html` | Stamps of originality: signed proof of where and when a copy was taken, and the public “Check a stamp” page |
 | `tripwire/before.py` | The “Test against Kiwix” and “Test against Internet Archive” buttons: compare a page with an older copy |
 | `tripwire/i18n.py`, `translations/` | Languages: English for now; checked translations go in `translations/` |
@@ -144,6 +145,8 @@ Summaries go out during the daily run: daily ones every day, weekly ones on Mond
 **Visitors without an account (optional setting):** anyone can try Tripwire without signing up. To stop bots flooding the database, at most 300 new guest visits a hour are allowed across the whole site (nobody is tracked to do this); after that, visitors are asked to make an account. Change the number with a `GUESTS_PER_HOUR` setting. Guests' shelves hold 10 MB, and their things are deleted 3 days after their visit.
 
 **Daily checking:** `vercel.json` tells Vercel to visit `/cron` once a day (around 08:47 India time). Each run checks the items that have waited longest, stopping after about 50 seconds so it never runs over Vercel's time limit. Anything that doesn't fit is picked up the next day. If your Vercel plan allows longer runs, set `CRON_BUDGET_SECONDS` to a bigger number.
+
+**Reading pages the way a browser does:** no setup needed. Some pages arrive almost empty and fill in their words with JavaScript after they open. For those, Tripwire uses its own small browser function (`api/render.js`, a headless Chromium) on the same Vercel site; only Tripwire can call it (a key made from `TRIPWIRE_SECRET`), and it never visits private network addresses. It calls the site's production address (or `SITE_URL`, if set), because preview addresses sit behind Vercel's login. On a laptop: `pip install playwright`, then `playwright install chromium`.
 
 **Stamps of originality:** no setup needed. Stamps are signed with a key made from `TRIPWIRE_SECRET`, so keep that setting the same: if it changes, older stamps will show as "made by a different Tripwire site". (To keep stamps working even if you change `TRIPWIRE_SECRET`, set `TRIPWIRE_STAMP_SECRET` once and never change it.)
 

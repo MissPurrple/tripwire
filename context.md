@@ -235,3 +235,13 @@
 - Honest note: Postgres may keep old readable row copies in its internal free space until its routine clean-up (autovacuum).
 - 30 Oct: EMAIL WORKS on the live site (Gmail SMTP + ADMIN_EMAILS set by Purple; the confirmation email arrived).
   The summary and email settings are at the top of the Changes page now (not under Account).
+
+## Built 30 Oct: reading pages the way a browser does
+- Purple: "make Tripwire read pages the way a browser does" (after the Artizen case: the Playbook loaded its words late).
+- api/render.js (Node, @sparticuz/chromium 149 + puppeteer-core 25.1, maxDuration 30) + tripwire/render.py. Used only when a
+  plain download looks unfinished and the browser finds clearly more. Remembered per watch (watches.browser). Browser failure
+  = day skipped, never an empty "removal". Key from TRIPWIRE_SECRET; private addresses refused (tested, incl. 169.254.169.254).
+- Tested end to end here with real Chromium AND the server Chromium build: a JS-filled page read in full (plain download: empty).
+- NOT yet tested on Vercel itself. To check after deploy: watch a page that fills in late, and look at Vercel's Logs for
+  "Tripwire browser reading failed" if it doesn't work. Calls go to the production address (or SITE_URL): previews are behind
+  Vercel's login, so browser reading won't work on preview deployments (it falls back safely).

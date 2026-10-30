@@ -35,3 +35,7 @@ keep it on My shelf (stamped as uploaded). Future: read pages the way a browser 
 ## Pitch line
 "Artizen's rules changed quietly, then the site went, and creators pieced the rules back together from their own copies.
 Tripwire keeps those copies for you: watched, stamped, and yours to carry offline."
+
+## Update (30 Oct): Tripwire now reads pages the way a browser does
+The honest limit above is addressed: pages that fill in their words after they open are read with a real (headless) browser.
+Verified locally; not yet on the live site.

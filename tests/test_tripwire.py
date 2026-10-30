@@ -491,7 +491,10 @@ class WebAppTests(CheckerTests):
         self.assertTrue(self.client.get("/welcome").headers["Location"].endswith("/"))  # not again
         response = self.client.get("/")
         self.assertIn(b"WELCOME BACK", response.data)  # then the computer
-        self.assertIn(b"new@example.org", response.data)
+        handle = self.tw.log_in("new@example.org", "long enough")["handle"]
+        self.assertTrue(handle)
+        self.assertIn(handle.encode(), response.data)          # known by a random username...
+        self.assertNotIn(b"new@example.org", response.data)    # ...not by their email
         self.assertIn(b"Start with a theme", self.client.get("/watching").data)
         self.client.post("/logout")
         self.assertIn(b"don&#39;t match", self.log_in(password="wrong").data)
@@ -2253,3 +2256,121 @@ class VaultTests(CheckerTests):
         response = self.client.get("/vault-core.js")
         self.assertIn(b"TripwireVault", response.data)
         self.assertIn("javascript", response.headers["Content-Type"])
+
+
+class PrivacyTests(CheckerTests):
+    """Usernames instead of emails; anonymous, locked feedback; locked "Test against" results."""
+
+    SEALED = "TG9ja2VkIGluIHRoZSBicm93c2VyLCBub3QgcmVhZGFibGUgaGVyZQ=="
+
+    def setUp(self):
+        super().setUp()
+        import app as webapp
+        webapp.app.config.update(DB_URL=self.db_path, TESTING=True)
+        self.client = webapp.app.test_client()
+        self.client.post("/login", data={"email": "purple@example.org", "password": "correct horse"})
+
+    def test_everyone_gets_a_random_old_internet_name(self):
+        from tripwire.checker import new_handle
+        names = {new_handle() for _ in range(200)}
+        self.assertGreater(len(names), 150)
+        self.assertTrue(all("@" not in n and n.isascii() for n in names))
+        other = self.tw.create_user("someone@example.org", "a long password")
+        self.assertNotEqual(self.tw.user(other)["handle"], self.tw.user(self.user)["handle"])
+        # An account made before names existed gets one on its next visit.
+        self.tw.conn.execute("UPDATE users SET handle = NULL WHERE id = ?", (self.user,))
+        page = self.client.get("/account").data.decode()
+        self.assertTrue(self.tw.user(self.user)["handle"])
+        self.assertIn(self.tw.user(self.user)["handle"], page)
+
+    def test_feedback_is_anonymous_unless_signed(self):
+        handle = self.tw.user(self.user)["handle"]
+        self.client.post("/feedback", data={"tried": "Books", "message": "Unsigned thoughts"})
+        self.client.post("/feedback", data={"tried": "Stats", "message": "Signed thoughts", "sign": "yes"})
+        rows = self.tw.conn.execute("SELECT user_id, signed_as, message FROM feedback ORDER BY id").fetchall()
+        self.assertEqual([(r["user_id"], r["signed_as"]) for r in rows], [(None, None), (None, handle)])
+        with mock.patch.dict(os.environ, {"ADMIN_EMAILS": "purple@example.org"}):
+            page = self.client.get("/feedback").data.decode()
+        self.assertIn("Anonymous", page)
+        self.assertIn("Signed: " + handle, page)
+        self.assertNotIn("purple@example.org", page.split("<main")[1])
+        # A visitor without an account can't sign (there's no name to sign with).
+        self.client.post("/logout")
+        self.client.post("/feedback", data={"message": "Visitor thoughts", "sign": "yes"})
+        self.assertIsNone(self.tw.conn.execute("SELECT signed_as FROM feedback ORDER BY id DESC").fetchone()["signed_as"])
+
+    def lock_the_box(self):
+        self.tw.conn.execute("UPDATE users SET vault = '{}' WHERE id = ?", (self.user,))
+        with mock.patch.dict(os.environ, {"ADMIN_EMAILS": "purple@example.org"}):
+            return self.client.post("/feedback/key", json={"public": "QmFzZTY0UHVibGljS2V5", "private": "TG9ja2VkUHJpdmF0ZUtleQ=="})
+
+    def test_locked_feedback_box_takes_only_locked_messages(self):
+        self.client.post("/feedback", data={"message": "Written before the lock"})
+        self.assertEqual(self.client.post("/feedback/key", json={"public": "x", "private": "y"}).status_code, 404)  # not the owner
+        self.assertEqual(self.lock_the_box().json, {"ok": True})
+        self.assertEqual(self.lock_the_box().status_code, 409)  # can't be swapped for another key
+        self.assertIn('data-lock-to="QmFzZTY0UHVibGljS2V5"', self.client.get("/about").data.decode())
+        # Readable feedback is refused now: it has to be locked in the browser.
+        page = self.client.post("/feedback", data={"message": "Readable words"}, follow_redirects=True).data.decode()
+        self.assertIn("needs JavaScript", page)
+        self.assertEqual(self.tw.totals()["feedback"], 1)
+        self.client.post("/feedback", data={"sealed": self.SEALED})
+        row = self.tw.conn.execute("SELECT * FROM feedback ORDER BY id DESC").fetchone()
+        self.assertEqual((row["message"], row["tried"], row["sealed"], row["user_id"]), ("", "", self.SEALED, None))
+        # The older readable message gets locked by the owner's browser.
+        first = self.tw.conn.execute("SELECT id FROM feedback ORDER BY id").fetchone()["id"]
+        with mock.patch.dict(os.environ, {"ADMIN_EMAILS": "purple@example.org"}):
+            self.assertEqual(self.client.post(f"/feedback/{first}/lock", json={"sealed": self.SEALED}).json, {"ok": True})
+            page = self.client.get("/feedback").data.decode()
+        self.assertNotIn("Written before the lock", page)
+        self.assertEqual(self.tw.conn.execute("SELECT COUNT(*) AS n FROM feedback WHERE message != ''").fetchone()["n"], 0)
+
+    def test_starting_the_feedback_lock_again(self):
+        self.lock_the_box()
+        self.client.post("/feedback", data={"sealed": self.SEALED})
+        with mock.patch.dict(os.environ, {"ADMIN_EMAILS": "purple@example.org"}):
+            self.client.post("/feedback/key/reset", data={"password": "wrong", "sure": "yes"})
+            self.assertEqual(self.tw.totals()["feedback"], 1)
+            self.client.post("/feedback/key/reset", data={"password": "correct horse", "sure": "yes"})
+        self.assertEqual(self.tw.totals()["feedback"], 0)
+        self.assertIsNone(self.tw.setting("feedback_key"))
+
+    def make_check(self, user_id=None):
+        from tripwire import before
+        return before.save(self.tw.conn, user_id or self.user, {
+            "url": "https://en.wikipedia.org/wiki/Warli", "title": "Warli", "source": "kiwix",
+            "source_name": "Kiwix's offline Wikipedia (January 2024)", "before_date": "2024-01-15",
+            "before_link": "https://library.kiwix.org/x", "download_link": None, "category": "edit",
+            "summary": "12 words changed", "details": {"words_before": 100, "words_after": 104, "hunk_count": 1,
+                                                        "hunks": [{"removed": "old", "added": "new", "before": "", "after": ""}]}})
+
+    def test_test_results_get_locked_and_forgotten(self):
+        check = self.make_check()
+        self.assertEqual(self.client.get(f"/before/{check}/record").status_code, 404)  # no vault: nothing to lock with
+        self.assertIn("Make a vault", self.client.get(f"/before/{check}").data.decode())
+        self.tw.conn.execute("UPDATE users SET vault = '{}' WHERE id = ?", (self.user,))
+        self.assertIn(f'data-lock-checks="{check}"', self.client.get(f"/before/{check}").data.decode())
+        self.assertIn(f'data-lock-checks="{check}"', self.client.get("/watching").data.decode())
+        record = self.client.get(f"/before/{check}/record").json
+        self.assertEqual((record["url"], record["category_name"]), ("https://en.wikipedia.org/wiki/Warli", "Edit"))
+        self.assertEqual(self.client.post(f"/before/{check}/lock", json={"sealed_title": "plain words", "sealed": "x"}).status_code, 400)
+        self.assertEqual(self.client.post(f"/before/{check}/lock", json={"sealed_title": self.SEALED, "sealed": self.SEALED}).json, {"ok": True})
+        row = self.tw.conn.execute("SELECT * FROM before_checks").fetchone()
+        for column in ("url", "source", "source_name", "summary", "category"):
+            self.assertEqual(row[column], "", column)
+        self.assertEqual((row["title"], row["details"], row["before_link"]), ("Locked comparison", "{}", None))
+        page = self.client.get(f"/before/{check}").data.decode()
+        self.assertIn("Tripwire doesn't know which page this was", page)
+        self.assertNotIn("Warli", page)
+        self.assertEqual(self.client.get(f"/before/{check}/sealed").json["sealed"], self.SEALED)
+        self.assertEqual(self.client.post(f"/before/{check}/shelf").status_code, 404)  # Tripwire no longer knows the page
+
+    def test_nobody_else_can_lock_or_read_my_results(self):
+        check = self.make_check()
+        self.tw.conn.execute("UPDATE users SET vault = '{}'")
+        self.tw.create_user("other@example.org", "other password")
+        other = __import__("app").app.test_client()
+        other.post("/login", data={"email": "other@example.org", "password": "other password"})
+        self.assertEqual(other.get(f"/before/{check}/record").status_code, 404)
+        self.assertEqual(other.post(f"/before/{check}/lock", json={"sealed_title": self.SEALED, "sealed": self.SEALED}).status_code, 400)
+        self.assertEqual(self.tw.conn.execute("SELECT locked FROM before_checks").fetchone()["locked"], 0)

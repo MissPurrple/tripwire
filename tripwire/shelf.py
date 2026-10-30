@@ -241,7 +241,7 @@ class Shelf:
         rows = self.conn.execute("SELECT * FROM shelf_items WHERE user_id = ? AND locked = 0 ORDER BY id",
                                  (user_id,)).fetchall()
         checks = {r["id"]: dict(r, details=db.entry_details(r)) for r in self.conn.execute(
-            "SELECT * FROM before_checks WHERE user_id = ?", (user_id,)).fetchall()}
+            "SELECT * FROM before_checks WHERE user_id = ? AND locked = 0", (user_id,)).fetchall()}
         watches = {r["id"]: r for r in self.conn.execute(
             "SELECT w.id, w.last_status, w.last_checked_at FROM watches w JOIN themes t ON t.id = w.theme_id "
             "WHERE t.user_id = ?", (user_id,)).fetchall()}

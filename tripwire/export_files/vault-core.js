@@ -120,7 +120,47 @@
     }
   }
 
+  // -- Feedback, locked so only the site owner can read it --------------------------------
+  // The owner's browser makes a key pair (ECDH P-256). The public half can only lock; it's given
+  // to every visitor. The private half can unlock; it's kept locked with the owner's vault key.
+  // Each message: a fresh one-off key pair + ECDH + HKDF-SHA256 -> an AES-256-GCM key.
+  // Packed as base64(one-off public key (65 bytes) + iv (12) + ciphertext).
+  var EC = { name: "ECDH", namedCurve: "P-256" }, FEEDBACK = enc.encode("tripwire-feedback");
+
+  async function sharedKey(privateKey, publicKey, usage) {
+    var bits = await subtle.deriveBits({ name: "ECDH", public: publicKey }, privateKey, 256);
+    var base = await subtle.importKey("raw", bits, "HKDF", false, ["deriveKey"]);
+    return subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(32), info: FEEDBACK },
+                            base, { name: "AES-GCM", length: 256 }, false, [usage]);
+  }
+  async function newFeedbackKeys(vaultKey, userId) {
+    var pair = await subtle.generateKey(EC, true, ["deriveBits"]);
+    return { public: b64(await subtle.exportKey("raw", pair.publicKey)),
+             private: b64(await seal(vaultKey, await subtle.exportKey("pkcs8", pair.privateKey), userId, "feedback-key")) };
+  }
+  async function lockForOwner(publicB64, text) {
+    var owner = await subtle.importKey("raw", unb64(publicB64), EC, false, []);
+    var once = await subtle.generateKey(EC, true, ["deriveBits"]);
+    var iv = random(12);
+    var locked = await subtle.encrypt({ name: "AES-GCM", iv: iv, additionalData: FEEDBACK },
+                                      await sharedKey(once.privateKey, owner, "encrypt"), enc.encode(text));
+    return b64(join(join(new Uint8Array(await subtle.exportKey("raw", once.publicKey)), iv), new Uint8Array(locked)));
+  }
+  async function ownerKey(vaultKey, privateSealed, userId) {
+    var pkcs8 = await unseal(vaultKey, privateSealed, userId, "feedback-key");
+    return subtle.importKey("pkcs8", pkcs8, EC, false, ["deriveBits"]);
+  }
+  async function openForOwner(privateKey, packed) {
+    var bytes = unb64(packed);
+    var once = await subtle.importKey("raw", bytes.subarray(0, 65), EC, false, []);
+    try {
+      return dec.decode(await subtle.decrypt({ name: "AES-GCM", iv: bytes.subarray(65, 77), additionalData: FEEDBACK },
+                                             await sharedKey(privateKey, once, "decrypt"), bytes.subarray(77)));
+    } catch (e) { throw new Error("This message couldn't be unlocked with this key."); }
+  }
+
   root.TripwireVault = {
+    newFeedbackKeys: newFeedbackKeys, lockForOwner: lockForOwner, ownerKey: ownerKey, openForOwner: openForOwner,
     ITERATIONS: ITERATIONS, available: !!subtle,
     create: create, open: open, relock: relock,
     seal: seal, unseal: unseal,

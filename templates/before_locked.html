@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Locked comparison · Tripwire{% endblock %}
+{% block content %}
+<p class="meta"><a href="{{ url_for('index') }}">← Watching</a></p>
+<section class="intro">
+  <h1 id="c-title">🔒 Locked comparison</h1>
+  <p class="meta">Made {{ check.created_at[:10] }} · locked in your vault: Tripwire doesn't know which page this was.</p>
+  <form id="open-form" class="book-form">
+    <label>Vault passphrase <input type="password" name="secret" required autocomplete="current-password"></label>
+    <button>Unlock</button>
+    <p class="meta" id="open-status" aria-live="polite"></p>
+  </form>
+  <div id="c-open" hidden>
+    <p id="c-compared"></p>
+    <p class="summary"><span class="badge" id="c-badge"></span> <span id="c-summary"></span></p>
+    <div class="tiles">
+      <div class="stat-tile"><span>Words then</span><strong id="c-then"></strong></div>
+      <div class="stat-tile"><span>Words now</span><strong id="c-now"></strong></div>
+      <div class="stat-tile"><span>Changes</span><strong id="c-count"></strong></div>
+    </div>
+    <div class="actions">
+      <a class="link-button" id="c-before" target="_blank" rel="noopener" hidden>Read the older copy</a>
+      <a class="link-button" id="c-today" target="_blank" rel="noopener">Read it today</a>
+    </div>
+  </div>
+</section>
+<section class="sources" id="c-interesting-box" hidden><h2>Most interesting changes</h2><ul class="interesting" id="c-interesting"></ul></section>
+<section class="sources" id="c-all-box" hidden><h2>Every change</h2>
+  <p class="meta">Struck-through words were in the older copy; green words are new.</p><ul class="interesting" id="c-all"></ul></section>
+
+<form method="post" action="{{ url_for('before_delete', check_id=check.id) }}" onsubmit="return confirm('Delete this comparison?')">
+  <button class="link danger">Delete this comparison</button>
+</form>
+
+<script>
+(function () {
+  function el(tag, text, cls) { var e = document.createElement(tag); if (text) e.textContent = text; if (cls) e.className = cls; return e; }
+  function cut(text, n) { text = text || ""; return text.length > n ? text.slice(0, n) + "…" : text; }
+  function change(list, c, n) {   // the same layout as a readable result, built with plain text only
+    var li = el("li");
+    if (c.kind) li.appendChild(el("span", c.kind, "badge"));
+    if (c.before) li.appendChild(el("span", "… " + c.before + " ", "meta"));
+    if (c.removed) li.appendChild(el("del", cut(c.removed, n)));
+    if (c.added) li.appendChild(el("ins", cut(c.added, n)));
+    if (c.after) li.appendChild(el("span", " " + c.after + " …", "meta"));
+    list.appendChild(li);
+  }
+  function safeLink(a, url) { if (/^https?:\/\//i.test(url || "")) { a.href = url; a.hidden = false; } else a.hidden = true; }
+  async function show(key) {
+    var V = window.TripwireVault;
+    var data = await (await fetch("{{ url_for('before_sealed', check_id=check.id) }}", { credentials: "same-origin" })).json();
+    var c = JSON.parse(await V.unsealText(key, data.sealed, window.Tripwire.vault.user(), "check")), d = c.details || {};
+    document.getElementById("c-title").textContent = c.title;
+    document.title = c.title + " · Tripwire";
+    document.getElementById("c-compared").textContent = "Compared with " + c.source_name +
+      (c.before_date ? ", made on " + c.before_date : "") + ", and the page today (" + (c.created_at || "").slice(0, 10) + ").";
+    var badge = document.getElementById("c-badge"); badge.textContent = c.category_name; badge.className = "badge cat-" + c.category;
+    document.getElementById("c-summary").textContent = c.summary;
+    document.getElementById("c-then").textContent = (d.words_before || 0).toLocaleString();
+    document.getElementById("c-now").textContent = (d.words_after || 0).toLocaleString();
+    document.getElementById("c-count").textContent = (d.hunk_count || 0).toLocaleString();
+    safeLink(document.getElementById("c-before"), c.before_link);
+    safeLink(document.getElementById("c-today"), c.url);
+    (c.interesting || []).forEach(function (i) { change(document.getElementById("c-interesting"), i, 400); });
+    document.getElementById("c-interesting-box").hidden = !(c.interesting || []).length;
+    (d.hunks || []).forEach(function (h) { change(document.getElementById("c-all"), h, 600); });
+    document.getElementById("c-all-box").hidden = !(d.hunks || []).length;
+    document.getElementById("open-form").hidden = true;
+    document.getElementById("c-open").hidden = false;
+  }
+  document.addEventListener("DOMContentLoaded", async function () {
+    var form = document.getElementById("open-form");
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      document.getElementById("open-status").textContent = "Unlocking on this device…";
+      try { await show(await window.Tripwire.vault.unlock(form.secret.value, false)); form.secret.value = ""; }
+      catch (e) { document.getElementById("open-status").textContent = e.message; }
+    });
+    var key = await window.Tripwire.vault.key();
+    if (key) { try { await show(key); } catch (e) { document.getElementById("open-status").textContent = e.message; } }
+  });
+})();
+</script>
+{% endblock %}

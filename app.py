@@ -81,6 +81,9 @@ def load_user():
     g.user = tw().user(session["user_id"]) if "user_id" in session else None
     if g.user is None:
         session.pop("user_id", None)  # e.g. a guest whose things were tidied away
+    if g.user and not g.user["handle"]:
+        tw().handle_of(g.user)
+        g.user = tw().user(g.user["id"])
     g.guest = bool(g.user and g.user["guest"])
 
 
@@ -388,6 +391,7 @@ def index():
                            max_themes=MAX_THEMES, lookback=LOOKBACK_CHOICES,
                            videos=tw().videos(uid()), video_state=_video_state,
                            live_on="live" in request.args,
+                           lock_ids=before.unlocked_ids(conn, uid()) if g.user and g.user["vault"] else [],
                            min_seconds=live.MIN_SECONDS_BETWEEN)
 
 
@@ -1120,6 +1124,8 @@ def before_result(check_id):
     check = before.own(tw().conn, uid(), check_id)
     if not check:
         abort(404)
+    if check["locked"]:
+        return render_template("before_locked.html", check=check)
     d = db.entry_details(check)
     on_shelf = tw().conn.execute("SELECT id FROM shelf_items WHERE before_check_id = ? AND user_id = ?",
                                  (check_id, uid())).fetchone()
@@ -1127,10 +1133,47 @@ def before_result(check_id):
                            on_shelf=on_shelf)
 
 
+def _check_record(check):
+    """Everything the result page shows, for the person's browser to lock with their vault."""
+    d = db.entry_details(check)
+    return {"url": check["url"], "title": check["title"], "source": check["source"], "source_name": check["source_name"],
+            "before_date": check["before_date"], "before_link": check["before_link"],
+            "download_link": check["download_link"], "category": check["category"],
+            "category_name": changes.CATEGORIES.get(check["category"], ""), "summary": check["summary"],
+            "created_at": check["created_at"], "details": d, "interesting": _interesting_changes(d, limit=8)}
+
+
+@app.get("/before/<int:check_id>/record")
+@account_required("keep your results private")
+def before_record(check_id):
+    check = before.own(tw().conn, uid(), check_id)
+    if not check or check["locked"] or not g.user["vault"]:
+        abort(404)
+    return jsonify(_check_record(check))
+
+
+@app.post("/before/<int:check_id>/lock")
+@account_required("keep your results private")
+def before_lock(check_id):
+    data = request.get_json(silent=True) or {}
+    if not g.user["vault"] or not before.lock(tw().conn, uid(), check_id, data.get("sealed_title"), data.get("sealed")):
+        return jsonify(error="That didn't arrive whole."), 400
+    return jsonify(ok=True)
+
+
+@app.get("/before/<int:check_id>/sealed")
+@account_required("keep your results private")
+def before_sealed(check_id):
+    check = before.own(tw().conn, uid(), check_id)
+    if not check or not check["locked"]:
+        abort(404)
+    return jsonify(sealed=check["sealed"], created_at=check["created_at"])
+
+
 @app.post("/before/<int:check_id>/shelf")
 def before_to_shelf(check_id):
     check = before.own(tw().conn, uid(), check_id)
-    if not check:
+    if not check or check["locked"]:
         abort(404)
     try:
         item_id = _shelf().add_link(uid(), check["url"], before_check_id=check_id)
@@ -1287,29 +1330,99 @@ FEEDBACK_AREAS = ["Watching pages", "Changes", "Videos", "Books", "Stats", "Publ
                   "The look and feel", "Something else"]
 
 
+def feedback_key():
+    """The feedback box's lock, once the site owner has set it up: {public, private (locked), owner}."""
+    value = tw().setting("feedback_key")
+    return json.loads(value) if value else None
+
+
 @app.get("/about")
 def about():
-    return render_template("about.html", totals=tw().totals(), areas=FEEDBACK_AREAS)
+    key = feedback_key()
+    return render_template("about.html", totals=tw().totals(), areas=FEEDBACK_AREAS,
+                           feedback_public=key["public"] if key else None)
 
 
 @app.post("/feedback")
 def send_feedback():
+    """Anonymous: who sent it is never stored. Only if they tick "sign it", Tripwire adds their
+    username (Tripwire adds it, so nobody can sign as someone else). Once the owner has locked
+    the box, only messages locked in the sender's browser are accepted."""
     if request.form.get("website"):  # the hidden trap field: a bot, so quietly ignore it
         return redirect(url_for("about") + "#feedback")
+    signed_as = g.user["handle"] if g.user and not g.guest and request.form.get("sign") == "yes" else None
+    sealed = request.form.get("sealed", "")
+    if feedback_key() and not (sealed and len(sealed) < 40_000 and SEALED_PIECE_LONG.fullmatch(sealed)):
+        flash("Feedback is locked in your browser before it's sent, so it needs JavaScript switched on.", "error")
+        return redirect(url_for("about") + "#feedback")
     try:
-        tw().add_feedback(uid() or None, request.form.get("tried"), request.form.get("message"))
+        tw().add_feedback(request.form.get("tried"), request.form.get("message"), signed_as=signed_as,
+                          sealed=sealed if feedback_key() else None)
     except ValueError as exc:
         flash(str(exc), "error")
     else:
-        flash("Thank you! Your feedback went straight to the person who made Tripwire.")
+        flash("Thank you! Your feedback went straight to the person who made Tripwire"
+              + (", locked so only they can read it." if feedback_key() else "."))
     return redirect(url_for("about") + "#feedback")
+
+
+SEALED_PIECE_LONG = re.compile(r"[A-Za-z0-9+/]+={0,2}")
+
+
+def _admin_only():
+    if not is_admin():
+        abort(404)
 
 
 @app.get("/feedback")
 def feedback_inbox():
-    if not is_admin():
-        abort(404)
-    return render_template("feedback.html", feedback=tw().all_feedback())
+    _admin_only()
+    key = feedback_key()
+    return render_template("feedback.html", feedback=tw().all_feedback(), key=key,
+                           my_key=bool(key and key["owner"] == g.user["id"]), vault=bool(g.user["vault"]))
+
+
+@app.post("/feedback/key")
+def feedback_key_setup():
+    """The owner's browser made a key pair; keep the public half, and the private half (locked by their vault)."""
+    _admin_only()
+    data = request.get_json(silent=True) or {}
+    if feedback_key():
+        return jsonify(error="The feedback box is already locked."), 409
+    if not g.user["vault"] or not all(isinstance(data.get(k), str) and SEALED_PIECE_LONG.fullmatch(data[k])
+                                      and len(data[k]) < 2000 for k in ("public", "private")):
+        return jsonify(error="That didn't arrive whole. Please try again."), 400
+    tw().set_setting("feedback_key", json.dumps({"public": data["public"], "private": data["private"], "owner": uid()}))
+    return jsonify(ok=True)
+
+
+@app.post("/feedback/<int:feedback_id>/lock")
+def feedback_lock(feedback_id):
+    """Older, readable feedback: replaced by its locked version, and who sent it forgotten."""
+    _admin_only()
+    sealed = (request.get_json(silent=True) or {}).get("sealed", "")
+    if not feedback_key() or not (isinstance(sealed, str) and len(sealed) < 40_000 and SEALED_PIECE_LONG.fullmatch(sealed)):
+        return jsonify(error="That didn't arrive whole."), 400
+    tw().lock_feedback(feedback_id, sealed)
+    return jsonify(ok=True)
+
+
+@app.post("/feedback/key/reset")
+def feedback_key_reset():
+    """Lost the key: start again. Locked feedback can never be read again, so it's deleted."""
+    _admin_only()
+    try:
+        right_password = tw().log_in(g.user["email"], request.form.get("password", ""))
+    except TooManyTries as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("feedback_inbox"))
+    if request.form.get("sure") != "yes" or not right_password:
+        flash("That password doesn't match, so nothing was deleted.", "error")
+        return redirect(url_for("feedback_inbox"))
+    tw().conn.execute("DELETE FROM feedback WHERE sealed IS NOT NULL")
+    tw().set_setting("feedback_key", None)
+    flash("The feedback lock and its locked messages are gone. You can lock the box again any time.")
+    return redirect(url_for("feedback_inbox"))
 
 
 @app.post("/demo-data")

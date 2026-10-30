@@ -32,7 +32,13 @@
 
 {% include "_stamp.html" %}
 
-{% if check %}
+
+{% if check and check.locked %}
+<section class="theme">
+  <h2>Compared with an older copy</h2>
+  <p>🔒 Locked in your vault. <a href="{{ url_for('before_result', check_id=check.id) }}">Open the comparison</a></p>
+</section>
+{% elif check %}
 <section class="theme">
   <h2>Compared with an older copy</h2>
   <p>Compared with {{ check.source_name }}{% if check.before_date %}, from {{ check.before_date }}{% endif %}:

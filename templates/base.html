@@ -29,7 +29,7 @@
                         ('about', 'About', ['about'])] %}
   {% macro account_links() %}
     {% if g.user and not is_guest %}
-      <span class="who">{{ g.user.email }}</span>
+      <span class="who" title="Your Tripwire name: random, so nobody sees your email">{{ g.user.handle }}</span>
       <a href="{{ url_for('account') }}">{{ t('Your account') }}</a>
       <a href="{{ url_for('vault_page') }}">{{ t('Your vault') }}</a>
       {% if is_admin %}<a href="{{ url_for('feedback_inbox') }}">Feedback inbox</a>{% endif %}

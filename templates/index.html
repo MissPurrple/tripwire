@@ -130,4 +130,8 @@
   </form>
 </section>
 {% endif %}
+{% if g.user and not is_guest and g.user.vault %}
+{# For the vault (vault.js): test results to lock now. #}
+<div hidden data-lock-checks="{{ lock_ids|join(',') }}"></div>
+{% endif %}
 {% endblock %}

@@ -21,6 +21,15 @@
     {% if c.before_link %}<a class="link-button" href="{{ c.before_link }}" target="_blank" rel="noopener">Read the older copy</a>{% endif %}
     <a class="link-button" href="{{ c.url }}" target="_blank" rel="noopener">Read it today</a>
   </div>
+  {% if g.user and not is_guest and g.user.vault %}
+    <p class="meta vault-line" data-lock-note>🔒 Locking this result in your vault… (it happens once your vault is unlocked on this device)</p>
+    <div hidden data-lock-checks="{{ c.id }}"></div>
+  {% elif g.user and not is_guest %}
+    <p class="meta vault-line">Want nobody to know which pages you test, not even Tripwire? <a href="{{ url_for('vault_page') }}">Make a vault</a>,
+       and results like this are locked with it.</p>
+  {% else %}
+    <p class="meta vault-line">With an account and a vault, results like this are locked so nobody knows which pages you test.</p>
+  {% endif %}
   {% if c.download_link %}
   <p class="meta">Want the whole offline Wikipedia that this older copy comes from, to keep yourself?
      <a href="{{ c.download_link }}" rel="noopener">Download it from Kiwix</a> (it's big: open it with the free Kiwix app).</p>

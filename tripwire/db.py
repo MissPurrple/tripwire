@@ -125,6 +125,11 @@ CREATE TABLE IF NOT EXISTS book_jobs (
     files_deleted_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    name   TEXT PRIMARY KEY,                     -- e.g. 'feedback_key': the public key that locks feedback
+    value  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS before_checks (
     id             {id},
     user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -183,6 +188,12 @@ ADDED_COLUMNS = [
     ("shelf_items", "sealed_title", "TEXT"),                    # locked items: the title, locked
     ("shelf_items", "sealed", "TEXT"),                          # locked items: title, note, words, file name, locked
     ("shelf_items", "stamp", "TEXT"),                           # signed stamp of originality (JSON)
+    ("users", "handle", "TEXT"),                                # a random old-internet name, shown instead of the email
+    ("before_checks", "locked", "INTEGER NOT NULL DEFAULT 0"),  # 1 = locked with the person's vault
+    ("before_checks", "sealed_title", "TEXT"),                  # locked: which page and the one-line summary, locked
+    ("before_checks", "sealed", "TEXT"),                        # locked: the whole comparison, locked
+    ("feedback", "sealed", "TEXT"),                             # locked to the site owner's key: only they can read it
+    ("feedback", "signed_as", "TEXT"),                          # a username, only if the sender chose to sign
 ]
 
 

@@ -233,3 +233,5 @@
   After that only browser-locked feedback is accepted; older feedback is locked and its sender forgotten.
 - Everyone has a random old-internet username (e.g. xX_solarwolf_Xx); menus show it instead of the email.
 - Honest note: Postgres may keep old readable row copies in its internal free space until its routine clean-up (autovacuum).
+- 30 Oct: EMAIL WORKS on the live site (Gmail SMTP + ADMIN_EMAILS set by Purple; the confirmation email arrived).
+  The summary and email settings are at the top of the Changes page now (not under Account).

@@ -758,3 +758,7 @@ html.a11y-calm *, html.a11y-calm *::before, html.a11y-calm *::after { animation:
                font-size: .8rem; color: var(--accent); padding-top: 3px; }
 .in-short dd { margin: 0; }
 @media (max-width: 560px) { .in-short { grid-template-columns: 1fr; gap: 2px; } .in-short dd { margin-bottom: 8px; } }
+
+/* Feedback: easy to find from every page */
+.footer-feedback { margin: 8px 0 0; }
+.footer-feedback a { font-weight: 700; color: var(--accent); }

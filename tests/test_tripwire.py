@@ -1466,6 +1466,13 @@ class EmailAndAboutTests(CheckerTests):
         page = self.client.get("/changes?category=major").data.decode()
         self.assertIn('<option value="major" selected>', page)
 
+    def test_feedback_is_one_click_from_every_page(self):
+        for path in ["/", "/watching", "/shelf", "/changes", "/books", "/stats"]:
+            self.assertIn('href="/about#feedback">✎ Send feedback</a>', self.client.get(path).data.decode(), path)
+        about = self.client.get("/about").data.decode()
+        self.assertIn('href="#feedback">Tried it? Tell us what you think', about)
+        self.assertIn('id="feedback"', about)
+
     def test_feedback_reaches_only_the_owner(self):
         self.client.post("/feedback", data={"tried": "Books", "message": "Loved the Frankenstein comparison!"})
         self.assertEqual(self.tw.totals()["feedback"], 1)

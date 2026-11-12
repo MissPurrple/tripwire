@@ -3,11 +3,14 @@
 {% block body_class %}home{% endblock %}
 {% block content %}
 {% set n = numbers or {} %}
-{% set menu = [('1', 'WATCHING', url_for('index'), ((n.watching + n.videos) ~ (' item' if n.watching + n.videos == 1 else ' items')) if numbers else ''),
-               ('2', 'MY SHELF', url_for('shelf_page'), n.shelf ~ ' kept' if numbers else ''),
-               ('3', 'CHANGES', url_for('change_list'), n.waiting ~ ' waiting' if numbers else ''),
-               ('4', 'BOOKS & VIDEOS', url_for('book_list'), (n.books ~ (' book compared' if n.books == 1 else ' books compared')) if numbers else ''),
-               ('5', 'ABOUT', url_for('about'), '')] +
+{# Nothing added yet: the menu says what each place is for, and where to start. After that, it shows the numbers. #}
+{% set fresh = not numbers or n.watching + n.videos + n.shelf + n.waiting + n.books == 0 %}
+{% set menu = ([('S', 'START HERE', url_for('index') ~ '#try-examples', 'see it work with real examples')] if fresh else []) +
+              [('1', 'WATCHING', url_for('index'), 'pages Tripwire checks for you' if fresh else (n.watching + n.videos) ~ (' item' if n.watching + n.videos == 1 else ' items')),
+               ('2', 'MY SHELF', url_for('shelf_page'), 'your own saved copies' if fresh else n.shelf ~ ' kept'),
+               ('3', 'CHANGES', url_for('change_list'), 'what changed: before and after' if fresh else n.waiting ~ ' waiting'),
+               ('4', 'BOOKS & VIDEOS', url_for('book_list'), 'compare editions, check videos' if fresh else n.books ~ (' book compared' if n.books == 1 else ' books compared')),
+               ('5', 'ABOUT', url_for('about'), "who it's for, and why" if fresh else '')] +
               ([] if g.user and not is_guest else
                [('L', 'LOG IN', url_for('login'), ''), ('M', 'MAKE AN ACCOUNT', url_for('signup'), 'to keep what you add')]) %}
 {% if intro %}{% include "_intro.html" %}{% endif %}
@@ -16,22 +19,22 @@
     <div class="bezel">
       <div class="screen" id="screen" {% if intro %}data-typewriter-manual{% endif %}>
         <div class="boot" id="boot" data-typewriter="14">
-          <p class="screen-line dim" data-speed="6">TRIPWIRE BIOS v1.0 &nbsp;·&nbsp; Edge City Buildathon, 2026</p>
-          <p class="screen-line dim" data-speed="6">MEMORY TEST ........ 640K OK</p>
-          <p class="screen-line dim" data-speed="8">LOADING THE RECORD OF THE WORLD ........ OK</p>
+          <p class="screen-line dim bios" data-speed="6">TRIPWIRE BIOS v1.0 &nbsp;·&nbsp; Edge City Buildathon, 2026</p>
+          <p class="screen-line dim bios" data-speed="6">MEMORY TEST ........ 640K OK</p>
+          <p class="screen-line dim bios" data-speed="6">LOADING THE RECORD OF THE WORLD ........ OK</p>
           <p class="screen-line">&nbsp;</p>
           {% if numbers and not is_guest %}
             <p class="screen-line big" data-speed="70">WELCOME BACK.</p>
             <p class="screen-line soft" data-speed="12">Here's what Tripwire is keeping an eye on for you.</p>
           {% else %}
             <p class="screen-line big" data-speed="80">TRIPWIRE</p>
-            <p class="screen-line soft" data-speed="13">Pages can vanish with valuable data. Articles can get rewritten to tell a different narrative &amp; books can be changed without warning.</p>
-            <p class="screen-line soft" data-speed="13">Tripwire watches what you choose to care about, and tracks changes between your saved original copy and the new one.</p>
+            <p class="screen-line soft" data-speed="7">Pages can vanish with valuable data. Articles can get rewritten to tell a different narrative &amp; books can be changed without warning.</p>
+            <p class="screen-line soft" data-speed="7">Tripwire watches what you choose to care about, and tracks changes between your saved original copy and the new one.</p>
           {% endif %}
           <p class="screen-line">&nbsp;</p>
-          <ul class="screen-menu" data-speed="5">
+          <ul class="screen-menu{% if fresh %} with-help{% endif %}" data-speed="5">
             {% for key, label, href, note in menu %}
-              <li class="screen-line"><a href="{{ href }}" data-key="{{ key|lower }}">[{{ key }}] {{ t(label) }}</a>{% if note %}<span class="dots"></span><span class="note">{{ note }}</span>{% endif %}</li>
+              <li class="screen-line{% if key == 'S' %} start-here{% endif %}"><a href="{{ href }}" data-key="{{ key|lower }}">[{{ key }}] {{ t(label) }}</a>{% if note %}<span class="dots"></span><span class="note">{{ note }}</span>{% endif %}</li>
             {% endfor %}
           </ul>
           <p class="screen-line">&nbsp;</p>

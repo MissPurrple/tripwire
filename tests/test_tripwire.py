@@ -557,6 +557,11 @@ class WebAppTests(CheckerTests):
         self.assertIn("[L] LOG IN", page)
         self.assertIn("[M] MAKE AN ACCOUNT", page)
         self.assertIn("[1] WATCHING", page)
+        # nothing added yet: where to start, and what each place is for
+        self.assertIn("[S] START HERE", page)
+        self.assertIn('href="/watching#try-examples"', page)
+        self.assertIn("pages Tripwire checks for you", page)
+        self.assertIn('id="try-examples"', self.client.get("/watching").data.decode())
         self.log_in()
         watch = self.tw.add_watch(self.theme, "Warli")
         self.add_version(2, "The Warlee are an Adivasi people of Maharashtra.")
@@ -566,6 +571,7 @@ class WebAppTests(CheckerTests):
         self.assertIn("[1] WATCHING", page)
         self.assertIn("1 item<", page)
         self.assertIn("1 waiting", page)
+        self.assertNotIn("START HERE", page)  # once there's something to look at, the numbers instead
         self.assertIn('href="/watching"', page)
 
     def test_error_pages_keep_the_site_style(self):

@@ -9,8 +9,11 @@ window.Tripwire = window.Tripwire || {};
   function remember() { try { localStorage.setItem(KEY, "done"); } catch (e) {} }
   function visible(el) { var r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden"; }
   function target(step) {
-    var list = step.target ? document.querySelectorAll(step.target) : [];
-    for (var i = 0; i < list.length; i++) if (visible(list[i])) return list[i];
+    var choices = step.target ? step.target.split(",") : [];   // in the order written, not page order
+    for (var c = 0; c < choices.length; c++) {
+      var list = document.querySelectorAll(choices[c]);
+      for (var i = 0; i < list.length; i++) if (visible(list[i])) return list[i];
+    }
     return null;
   }
 
@@ -31,6 +34,17 @@ window.Tripwire = window.Tripwire || {};
     card.style.left = Math.min(Math.max(12, r.left + r.width / 2 - width / 2), innerWidth - width - 12) + "px";
   }
 
+  // On a new step, scroll (only as far as needed) so the lit-up line is in view with the card clear of it:
+  // on phones the card sits at the bottom of the screen; otherwise it goes underneath the line.
+  function reveal() {
+    var el = target(steps[at]);
+    if (!el) return;
+    var r = el.getBoundingClientRect(), phone = innerWidth < 640;
+    var bottom = r.bottom + card.offsetHeight + (phone ? 40 : 30);
+    if (r.top < 70) scrollBy(0, r.top - 90);
+    else if (bottom > innerHeight) scrollBy(0, Math.min(bottom - innerHeight, r.top - 90));
+  }
+
   function show(n) {
     at = Math.max(0, Math.min(n, steps.length - 1));
     var step = steps[at], last = at === steps.length - 1;
@@ -41,6 +55,7 @@ window.Tripwire = window.Tripwire || {};
     tour.querySelector("[data-tour-end]").hidden = !last;
     tour.querySelector("[data-tour-next]").hidden = last;
     tour.querySelector("[data-tour-back]").hidden = at === 0;
+    reveal();
     place();
     (last ? tour.querySelector("[data-tour-finish] button") : tour.querySelector("[data-tour-next]")).focus();
     if (document.documentElement.classList.contains("a11y-read") && T.speak) T.speak(step.title + ". " + step.text);

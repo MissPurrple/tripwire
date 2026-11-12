@@ -59,7 +59,7 @@ window.Tripwire = window.Tripwire || {};
 
   T.type = function (root, fallbackSpeed) {
     fallbackSpeed = fallbackSpeed || 28;
-    return new Promise(function (resolve) {
+    return root.typed = new Promise(function (resolve) {   // root.typed: others can wait for the last letter
       if (T.calm()) { resolve(); return; }
       // Screen readers get the whole text at once, from a hidden copy, while the letters animate.
       var copy = document.createElement("div");
@@ -201,8 +201,15 @@ window.Tripwire = window.Tripwire || {};
         });
       });
     }
-    if (document.getElementById("intro")) document.addEventListener("tripwire:intro-done", askOnce, { once: true });
-    else askOnce();
+    // One thing at a time: on the home computer, the screen finishes typing what Tripwire is, and
+    // there's a moment to read it, before the question (and then the tour) appears on top.
+    function afterBoot() {
+      var boot = document.getElementById("boot");
+      if (!boot || !boot.typed || T.calm()) { askOnce(); return; }
+      boot.typed.then(function () { setTimeout(askOnce, 2500); });
+    }
+    if (document.getElementById("intro")) document.addEventListener("tripwire:intro-done", afterBoot, { once: true });
+    else afterBoot();
     // Read aloud: click any text to hear it; links and buttons are read when they get keyboard focus.
     document.addEventListener("click", function (event) {
       if (!html.classList.contains("a11y-read")) return;

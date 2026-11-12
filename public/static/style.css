@@ -403,12 +403,20 @@ body.is-loading .loading-bar { opacity: 1; animation: march .5s linear infinite;
 .screen-line { margin: 0; overflow-wrap: anywhere; }
 .screen-line.dim { color: var(--phosphor-dim); }
 .screen-line.soft { color: var(--phosphor-soft); font-family: var(--font-mono); font-size: .95rem; text-shadow: 0 0 4px rgba(124, 242, 156, .35); }
+/* The home computer: what Tripwire is stands out; the start-up lines above it are only decoration */
+.boot .screen-line.bios { font-size: .95rem; opacity: .55; }
+.boot .screen-line.soft { color: #eafff0; font-size: 1.08rem; line-height: 1.45; max-width: 46em; }
+.boot .screen-line.soft + .screen-line.soft { margin-top: 10px; }
 .screen-line.big { font-size: 2.2rem; }
 .screen-line.pending { visibility: hidden; }
 .screen-menu { list-style: none; padding: 0; margin: 0; }
 .screen-menu li { display: flex; align-items: baseline; gap: 6px; }
 .screen-menu .dots { flex: 1; border-bottom: 2px dotted var(--phosphor-dim); opacity: .6; min-width: 20px; }
 .screen-menu .note { color: var(--phosphor-dim); }
+.screen-menu.with-help .note { color: var(--phosphor-soft); font-family: var(--font-mono); font-size: .85rem; text-shadow: none; }
+.screen-menu .start-here { margin-bottom: 8px; }
+.screen-menu .start-here a { background: var(--phosphor); color: var(--screen); text-shadow: none; padding: 0 6px; margin-left: -6px; }
+.screen-menu .start-here a:hover, .screen-menu .start-here a:focus-visible { background: #eafff0; }
 .hint { font-size: 1rem; }
 
 /* ---------------------------------------------------------------- the box computer */
@@ -451,6 +459,12 @@ body.home main { max-width: 860px; }
   .bezel { padding: 10px; }
   .monitor .screen { min-height: 0; font-size: 1.15rem; padding: 16px; }
   .screen-line.big { font-size: 1.7rem; }
+  .boot .screen-line.bios { font-size: .8rem; }
+  .boot .screen-line.soft { font-size: 1rem; }
+  /* phones: what each line is for goes underneath it */
+  .screen-menu.with-help li { flex-wrap: wrap; margin-bottom: 8px; }
+  .screen-menu.with-help .dots { display: none; }
+  .screen-menu.with-help .note { flex-basis: 100%; }
   .keyboard { display: none; }
   .case { width: 100%; height: 48px; padding: 0 14px; }
   .case-label { display: none; }

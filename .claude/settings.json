@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__github__merge_pull_request",
+      "mcp__github__enable_pr_auto_merge",
+      "Bash(git push origin main*)",
+      "Bash(git push -u origin main*)",
+      "Bash(git push origin HEAD:main*)",
+      "Bash(git push origin *:main*)"
+    ]
+  }
+}

@@ -157,4 +157,4 @@ Summaries go out during the daily run: daily ones every day, weekly ones on Mond
 - **A Sesotho voice** for read aloud, and Sesotho-trained text reading for scanned pages.
 
 ## Licence
-Tripwire is free and open source under the [MIT License](LICENSE) (wording from [mit-license.org](https://mit-license.org/)): anyone may use, copy, change and share it, as long as the copyright notice stays with it. The fonts keep their own licence (SIL Open Font License).
+Tripwire is free and open source under the [BSD 3-Clause License](LICENSE) (wording from [opensource.org](https://opensource.org/license/BSD-3-Clause)): anyone may use, copy, change and share it, as long as the copyright notice stays with it, and as long as they don't use Tripwire's name or its contributors' names to promote their own version without permission. The fonts keep their own licence (SIL Open Font License).
